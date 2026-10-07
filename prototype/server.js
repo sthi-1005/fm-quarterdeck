@@ -218,7 +218,7 @@ function explicitLaneBlocks(message, projects) {
     const matches = [...projects.filter((candidate) => candidate.id !== "general"), { id: "general", name: "General" }].filter((candidate) =>
       [candidate.id, candidate.name.toLowerCase(), ...(LANE_LABEL_ALIASES[candidate.id] || [])].includes(name));
     if (matches.length !== 1) return null;
-    blocks.push({ projectId: matches[0].id, text: match[0] });
+    blocks.push({ projectId: matches[0].id, name: match[1], text: match[0] });
     end = match.index + match[0].length;
   }
   return blocks.length && /^(?:\r?\n)*$/.test(message.text.slice(end)) ? blocks : null;
@@ -745,6 +745,8 @@ export async function loadFirstmateHome(home, { includeHistory = true, sessionId
       return blocks?.flatMap((block, index) => block.projectId === projectId ? [{
         ...message,
         text: block.text,
+        // Add display context without changing each block's routing or identity.
+        ...(blocks.length > 1 ? { mixedLaneMessage: { recordId: message.recordId, text: message.text, blocks } } : {}),
         recordId: blocks.length === 1 ? message.recordId : `${message.recordId}:block:${index}`,
         sourceSequence: message.sourceSequence + index / blocks.length,
       }] : []) || [];
