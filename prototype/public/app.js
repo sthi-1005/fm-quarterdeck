@@ -963,20 +963,29 @@ let quotaLowestFirst = false;
 let sidebarQuotaSort = "highest";
 try {
   const saved = localStorage.getItem("fm-agentos-sidebar-quota-sort.v1");
-  if (["highest", "lowest", "runway"].includes(saved)) sidebarQuotaSort = saved;
+  if (["highest", "lowest", "runway", "runway-lowest", "az", "za"].includes(saved)) sidebarQuotaSort = saved;
 } catch { /* Optional browser preference. */ }
 const sidebarSortControl = $("#sidebar-quota-sort");
 const updateSidebarSortLabel = () => {
-  sidebarSortControl?.setAttribute("aria-label", `Sort quota limits: ${sidebarQuotaSort === "runway" ? "runway, best source pace reserve or reset coverage first" : `${sidebarQuotaSort} remaining capacity first`}; unknown and stale last`);
+  sidebarSortControl?.setAttribute("aria-label", `Sort quota limits: ${["az", "za"].includes(sidebarQuotaSort) ? `provider name, ${sidebarQuotaSort === "az" ? "A to Z" : "Z to A"}` : sidebarQuotaSort.startsWith("runway") ? `runway, ${sidebarQuotaSort === "runway" ? "best" : "lowest"} source pace reserve or reset coverage first` : `${sidebarQuotaSort} remaining capacity first`}${["az", "za"].includes(sidebarQuotaSort) ? "" : "; unknown and stale last"}`);
 };
-// Two segments: Left (select again to reverse) and Runway; stored values stay highest/lowest/runway.
+// Preserve legacy values; runway-lowest adds ascending runway without a storage migration.
 let sidebarLeftSort = sidebarQuotaSort === "lowest" ? "lowest" : "highest";
+let sidebarRunwaySort = sidebarQuotaSort === "runway-lowest" ? "runway-lowest" : "runway";
+let sidebarAlphaSort = sidebarQuotaSort === "za" ? "za" : "az";
 const renderSidebarSort = () => {
   updateSidebarSortLabel();
   for (const option of sidebarSortControl?.querySelectorAll("[data-sort]") || []) {
     const runway = option.dataset.sort === "runway";
-    option.setAttribute("aria-pressed", String(runway === (sidebarQuotaSort === "runway")));
-    if (!runway) {
+    const alpha = option.dataset.sort === "az";
+    option.setAttribute("aria-pressed", String(alpha ? ["az", "za"].includes(sidebarQuotaSort) : runway ? sidebarQuotaSort.startsWith("runway") : ["highest", "lowest"].includes(sidebarQuotaSort)));
+    if (alpha) {
+      option.querySelector(".sidebar-quota-sort-direction").textContent = sidebarAlphaSort === "az" ? "↑" : "↓";
+      option.setAttribute("aria-label", `Provider name, ${sidebarAlphaSort === "az" ? "A to Z" : "Z to A"}`);
+    } else if (runway) {
+      option.querySelector(".sidebar-quota-sort-direction").textContent = sidebarRunwaySort === "runway-lowest" ? "↑" : "↓";
+      option.setAttribute("aria-label", `Runway, ${sidebarRunwaySort === "runway" ? "best" : "lowest"} first`);
+    } else {
       option.querySelector(".sidebar-quota-sort-direction").textContent = sidebarLeftSort === "lowest" ? "↑" : "↓";
       option.setAttribute("aria-label", `Remaining capacity, ${sidebarLeftSort} first`);
     }
@@ -986,9 +995,14 @@ renderSidebarSort();
 sidebarSortControl?.addEventListener("click", (event) => {
   const option = event.target.closest("[data-sort]");
   if (!option) return;
-  if (option.dataset.sort === "runway") sidebarQuotaSort = "runway";
-  else {
-    if (sidebarQuotaSort !== "runway") sidebarLeftSort = sidebarLeftSort === "highest" ? "lowest" : "highest";
+  if (option.dataset.sort === "az") {
+    if (["az", "za"].includes(sidebarQuotaSort)) sidebarAlphaSort = sidebarAlphaSort === "az" ? "za" : "az";
+    sidebarQuotaSort = sidebarAlphaSort;
+  } else if (option.dataset.sort === "runway") {
+    if (sidebarQuotaSort.startsWith("runway")) sidebarRunwaySort = sidebarRunwaySort === "runway" ? "runway-lowest" : "runway";
+    sidebarQuotaSort = sidebarRunwaySort;
+  } else {
+    if (["highest", "lowest"].includes(sidebarQuotaSort)) sidebarLeftSort = sidebarLeftSort === "highest" ? "lowest" : "highest";
     sidebarQuotaSort = sidebarLeftSort;
   }
   renderSidebarSort();
@@ -1111,15 +1125,16 @@ function renderQuotaStrip(data, projection = projectQuota(data, { sidebarSort: s
   const freshnessEl = $("#sidebar-quota-freshness");
   if (freshnessEl) {
     if (data.readAt) {
-      const timeStr = new Date(data.readAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      renderQuotaHtml(freshnessEl, escapeHtml(`${data.stale ? "Stale · " : ""}${timeStr}`));
+      const timeStr = new Date(data.readAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      freshnessEl.title = `${data.stale ? "Stale reading" : "Reading"} · ${timeStr}`;
+      renderQuotaHtml(freshnessEl, escapeHtml(timeStr));
     } else {
       // H2 — single Unavailable treatment lives on the quota card, not the eyebrow
       renderQuotaHtml(freshnessEl, "");
     }
   }
 
-  const items = projection.sidebar.map((family) => `<a data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" href="#quota" class="quota-badge">${quotaFamilyBox(family, data.capturedAt === undefined ? data.readAt : data.capturedAt, { compact: true })}${sidebarQuotaSort === "runway" ? `<small class="quota-sort-basis">Runway: ${escapeHtml(family.sortRunway?.basis || "unknown")}</small>` : family.sortRemaining === null && !family.stale ? '<small class="quota-sort-basis">Remaining unknown</small>' : ""}<span class="sr-only">Open Quota page</span></a>`);
+  const items = projection.sidebar.map((family) => `<a data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" href="#quota" class="quota-badge">${quotaFamilyBox(family, data.capturedAt === undefined ? data.readAt : data.capturedAt, { compact: true })}${sidebarQuotaSort.startsWith("runway") ? `<small class="quota-sort-basis">Runway: ${escapeHtml(family.sortRunway?.basis || "unknown")}</small>` : family.sortRemaining === null && !family.stale ? '<small class="quota-sort-basis">Remaining unknown</small>' : ""}<span class="sr-only">Open Quota page</span></a>`);
   const empty = `<a href="#quota" class="quota-badge quota-badge-empty" title="${escapeHtml(data.error || "No linked subscription with known limits")}"><b>Quota</b><span class="quota-badge-percent">${data.error && !data.readAt ? "Unavailable" : "Unknown"}</span></a>`;
   const html = items.join("") || empty;
   const strip = $("#quota-strip");

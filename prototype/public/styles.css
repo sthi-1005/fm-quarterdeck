@@ -1298,34 +1298,33 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .state-chip, .quota-status-pill[data-status="fresh"] { border-color: #b8e4dc; background: #d5f3ee; color: #0a6f60; }
 .quota-signal[data-status="behind"], .quota-signal[data-status="projected_exhaustion"] { background: #fffbeb; color: #805716; }
 .quota-signal[data-status="exhausted_now"] { background: #fff1f2; color: #ab3543; }
-/* Sidebar quota header: caption with its 20px All link and collapse on top;
-   freshness and the 24px Left/Runway sort segments below. */
+/* One-line header: the native title button covers the row behind the sort controls. */
 .sidebar-quota { container: sidebar-quota / inline-size; }
-.sidebar-quota-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title link toggle" "fresh sort sort"; align-items: center; gap: 2px 6px; margin-bottom: var(--space-2); padding: 0 2px 0 6px; }
+.sidebar-quota-head { position: relative; display: flex; align-items: center; gap: 6px; min-height: 28px; margin-bottom: var(--space-2); padding: 0 2px 0 6px; border-radius: 6px; }
+.sidebar-quota-head:has(.sidebar-quota-toggle:hover) { background: #102c38; }
 .sidebar-quota[data-collapsed="true"] .sidebar-quota-head { margin-bottom: 0; }
-.sidebar-quota-heading { display: contents; }
-.sidebar-quota-heading > span { grid-area: title; min-width: 0; overflow: hidden; color: #a8c0cc; font-size: 11px; font-weight: 700; letter-spacing: .09em; line-height: 16px; text-transform: uppercase; white-space: nowrap; text-overflow: ellipsis; }
-.sidebar-quota-freshness { grid-area: fresh; min-width: 0; overflow: hidden; color: #8aa6b3; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
-.sidebar-quota-sort, .sidebar-quota-link, .sidebar-quota-head .sidebar-quota-toggle { box-sizing: border-box; height: 24px; min-height: 24px; border: 1px solid #2a4a58; border-radius: 6px; background-color: #102c38; color: #d7e6ee; font: inherit; font-size: 11px; font-weight: 600; line-height: 1; cursor: pointer; transition: background-color .12s, border-color .12s, color .12s; }
+.sidebar-quota-freshness { pointer-events: none; min-width: 0; overflow: hidden; color: #8aa6b3; font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
+.sidebar-quota-sort, .sidebar-quota-head .sidebar-quota-toggle { box-sizing: border-box; height: 24px; min-height: 24px; border: 1px solid #2a4a58; border-radius: 6px; background-color: #102c38; color: #d7e6ee; font: inherit; font-size: 11px; font-weight: 600; line-height: 1; cursor: pointer; transition: background-color .12s, border-color .12s, color .12s; }
 .sidebar-quota-sort-option { transition: background-color .12s, color .12s; }
-.sidebar-quota-sort { grid-area: sort; justify-self: end; display: inline-flex; padding: 0; overflow: hidden; cursor: default; }
-.sidebar-quota-sort .sidebar-quota-sort-option { display: inline-flex; align-items: center; height: 100%; min-height: 0; padding: 0 6px; border: 0; border-radius: 0; background: transparent; color: #a8c0cc; font-size: 11px; font-weight: 600; line-height: 1; }
+.sidebar-quota-sort { position: relative; z-index: 1; flex: 0 0 auto; margin-left: auto; display: inline-flex; padding: 0; overflow: hidden; cursor: default; }
+.sidebar-quota-sort .sidebar-quota-sort-option { display: inline-flex; align-items: center; height: 100%; min-height: 0; padding: 0 4px; border: 0; border-radius: 0; background: transparent; color: #a8c0cc; font-size: 10px; font-weight: 600; line-height: 1; }
 .sidebar-quota-sort .sidebar-quota-sort-option + .sidebar-quota-sort-option { border-left: 1px solid #2a4a58; }
 .sidebar-quota-sort .sidebar-quota-sort-option[aria-pressed="true"] { background: #1d4b52; color: #e6fbf7; }
 .sidebar-quota-sort .sidebar-quota-sort-option:hover:not([aria-pressed="true"]) { border-color: #2a4a58; background: #1a3a48; color: #9ff0e0; }
 .sidebar-quota-sort .sidebar-quota-sort-option:focus-visible { outline: 2px solid #9ff0e0; outline-offset: -2px; }
-.sidebar-quota-sort-direction { min-width: 8px; margin-left: 3px; font-weight: 400; }
-.sidebar-quota-link { grid-area: link; justify-self: end; display: inline-flex; align-items: center; gap: 3px; height: 20px; min-height: 20px; padding: 0 6px; border-color: transparent; background-color: transparent; color: #9ff0e0; text-decoration: none; white-space: nowrap; }
-.sidebar-quota-link::after { content: "→" / ""; font-weight: 400; }
-.sidebar-quota-head .sidebar-quota-toggle { grid-area: toggle; justify-self: end; display: grid; place-items: center; width: 24px; height: 20px; min-height: 20px; padding: 0; border-color: transparent; background: transparent; color: #a8c0cc; font-size: 0; }
-.sidebar-quota-head .sidebar-quota-toggle::before { content: ""; width: 6px; height: 6px; margin-top: 3px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(-45deg); transition: transform .15s, margin .15s; }
-.sidebar-quota-head .sidebar-quota-toggle[aria-expanded="false"]::before { margin-top: -3px; transform: rotate(135deg); }
-.sidebar-quota-link:hover, .sidebar-quota-head .sidebar-quota-toggle:hover:not(:disabled) { border-color: #3d6474; background-color: #1a3a48; color: #9ff0e0; }
-.sidebar-quota-link:focus-visible, .sidebar-quota-head .sidebar-quota-toggle:focus-visible { outline: 2px solid #9ff0e0; outline-offset: 1px; }
-/* The narrowest pane keeps a stale timestamp whole by shortening Runway to Run. */
-@container sidebar-quota (max-width: 229.98px) { .sidebar-quota-sort-long { display: none; } }
+.sidebar-quota-sort-direction { min-width: 6px; margin-left: 2px; font-weight: 400; }
+.sidebar-quota-head .sidebar-quota-toggle { position: static; flex: 0 0 auto; height: 28px; min-height: 28px; padding: 0; border: 0; background: transparent; color: #a8c0cc; }
+.sidebar-quota-head .sidebar-quota-toggle::after { content: ""; position: absolute; inset: 0; border-radius: 6px; }
+.sidebar-quota-toggle > span { font-size: 11px; font-weight: 700; letter-spacing: .05em; }
+.sidebar-quota-head .sidebar-quota-toggle[aria-expanded="false"] > span { color: #9ff0e0; }
+.sidebar-quota-head .sidebar-quota-toggle:focus-visible { outline: none; }
+.sidebar-quota-head .sidebar-quota-toggle:focus-visible::after { outline: 2px solid #9ff0e0; outline-offset: 1px; }
+.sidebar-quota-head .sidebar-quota-toggle:hover:not(:disabled) { border-color: #3d6474; background-color: #1a3a48; color: #9ff0e0; }
+/* Hide time first; retain full control names and direction at the minimum pane width. */
+@container sidebar-quota (max-width: 219.98px) { .sidebar-quota-freshness { display: none; } }
+@container sidebar-quota (max-width: 189.98px) { .sidebar-quota-head { flex-wrap: wrap; } .sidebar-quota-sort { margin-left: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-quota-sort-option, .sidebar-quota-link, .sidebar-quota-head .sidebar-quota-toggle, .sidebar-quota-head .sidebar-quota-toggle::before { transition: none; }
+  .sidebar-quota-sort-option, .sidebar-quota-head .sidebar-quota-toggle { transition: none; }
 }
 @media (max-width: 720.005px) {
   /* Keep Batch 5's two-row dock, pen, envelope and viewport-bounded review pane. */

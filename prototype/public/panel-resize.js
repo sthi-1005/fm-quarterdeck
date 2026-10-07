@@ -120,8 +120,7 @@ if (typeof document !== "undefined") {
   const applyCollapsed = () => {
     quota.dataset.collapsed = String(collapsed);
     toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} quota limits`);
-    toggle.textContent = collapsed ? "⌄" : "⌃";
+    toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} quota`);
     refreshQuota();
   };
   toggle.addEventListener("click", () => {

@@ -16,6 +16,7 @@ test('sidebar sorts captured remaining both ways, source pace runway differs, st
  assert.deepEqual(order('highest'),['claude','codex','grok','cursor']);
  assert.deepEqual(order('lowest'),['grok','codex','claude','cursor']);
  assert.deepEqual(order('runway'),['codex','claude','cursor','grok']);
+ assert.deepEqual(order('runway-lowest'),['claude','codex','cursor','grok']);
  const result=project({providers},{now,sidebarSort:'runway'}).sidebar;
  assert.equal(result[0].sortRunway.value,49);
  assert.equal(result[0].sortRunway.basis,'source pace');
@@ -23,6 +24,8 @@ test('sidebar sorts captured remaining both ways, source pace runway differs, st
  assert.equal(result[3].sortRunway,null);
  assert.equal(providers[2].windows[0].percentRemaining,100);
  assert.deepEqual(order('source'),['codex','claude','cursor','grok']);
+ assert.deepEqual(order('az'),['claude','codex','cursor','grok']);
+ assert.deepEqual(order('za'),['grok','cursor','codex','claude']);
 });
 
 test('runway fallback needs source runway and unambiguous future reset bounds; no estimates from percentages',()=>{

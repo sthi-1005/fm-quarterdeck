@@ -138,11 +138,15 @@ window.quotaViewModel = (() => {
       });
     }).sort((a, b) => {
       if (sidebarSort === "source") return 0;
-      const left = sidebarSort === "runway" ? a.sortRunway?.value ?? null : a.sortRemaining;
-      const right = sidebarSort === "runway" ? b.sortRunway?.value ?? null : b.sortRemaining;
+      if (["az", "za"].includes(sidebarSort)) {
+        const alphabetical = a.provider.localeCompare(b.provider, "en", { sensitivity: "base" });
+        return sidebarSort === "za" ? -alphabetical : alphabetical;
+      }
+      const left = ["runway", "runway-lowest"].includes(sidebarSort) ? a.sortRunway?.value ?? null : a.sortRemaining;
+      const right = ["runway", "runway-lowest"].includes(sidebarSort) ? b.sortRunway?.value ?? null : b.sortRemaining;
       if (left === null) return right === null ? 0 : 1;
       if (right === null) return -1;
-      return sidebarSort === "lowest" ? left - right : right - left;
+      return ["lowest", "runway-lowest"].includes(sidebarSort) ? left - right : right - left;
     });
     return { detail, inactive, sidebar };
   };
