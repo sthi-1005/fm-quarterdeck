@@ -503,7 +503,7 @@ test("annotation addresses the clicked control, never its enclosing sidebar", as
   const tab = node("button", "", "", nav);
   const tabLabel = node("span", "", "Overview", tab);
   const content = node("article", "", "Card", sidebar);
-  for (const id of ["review-annotation", "review-toggle", "review-panel", "review-panel-toggle", "review-message", "review-count", "review-awaiting", "review-inline-summary", "review-history", "review-history-summary", "review-target", "review-queue", "review-context", "review-send", "review-end", "review-pick", "review-thread", "review-state", "review-close", "review-form-close", "review-form"]) if (!nodes.has(id)) node("button", id);
+  for (const id of ["review-annotation", "review-toggle", "review-panel", "review-panel-toggle", "review-message", "review-count", "review-awaiting", "review-inline-summary", "review-history", "review-history-summary", "review-target", "review-queue", "review-context", "review-send", "review-end", "review-pick", "review-thread", "review-sent", "review-sent-list", "review-sent-summary", "review-sent-count", "review-queued-count", "review-state", "review-close", "review-form-close", "review-form"]) if (!nodes.has(id)) node("button", id);
   const documentListeners = new Map();
   const document = { body: { append() {} }, createElement: () => node("div"), getElementById: (id) => nodes.get(id), querySelector: () => ({ textContent: "" }), addEventListener: (type, fn) => documentListeners.set(type, fn) };
   const sent = [];
@@ -701,6 +701,7 @@ test("review conversation notes: long notes are collapsed by default and expanda
     return elements.get(id);
   }
   const thread = getElement("review-thread");
+  const sentList = getElement("review-sent-list");
   const context = vm.createContext({
     document: {
       body: { append() {} },
@@ -730,20 +731,18 @@ test("review conversation notes: long notes are collapsed by default and expanda
     update();
   `, context);
 
-  // One ordered, collapsed batch owns both notes even before delivery.
-  assert.equal(thread.children.length, 1);
-  const draft = thread.children[0];
-  assert.equal(draft.className, "review-batch");
-  assert.equal(draft.open, false);
-  assert.match(draft.children[0].textContent, /Queued batch · 2 notes/);
-  const card1 = draft.children[1];
+  // Queued notes are listed directly in the always-visible Queued section.
+  assert.equal(thread.children.length, 2);
+  assert.equal(getElement("review-queued-count").textContent, "2");
+  assert.equal(getElement("review-sent-count").textContent, "0");
+  const card1 = thread.children[0];
   const card1Details = card1.children.find((c) => c.className === "review-note-details");
   assert.equal(card1Details, undefined, "Short note must not use details disclosure");
   const card1Text = card1.children.find((c) => c.className === "review-note-text");
   assert.equal(card1Text.textContent, shortText);
 
   // Card 2 (long note): uses details disclosure, collapsed by default
-  const card2 = draft.children[2];
+  const card2 = thread.children[1];
   const card2Header = card2.children.find((c) => c.className === "review-note-header");
   const card2Details = card2.children.find((c) => c.className === "review-note-details");
   assert.ok(card2Details, "Long note must use details disclosure");
@@ -773,8 +772,11 @@ test("review conversation notes: long notes are collapsed by default and expanda
   vm.runInContext('retryBatches = [inFlight]; inFlight = null; update()', context);
   assert.match(thread.children[0].children[0].textContent, /^Retry needed batch/);
   vm.runInContext('sent.push({ id: "batch-1", receiptId: "receipt-1", entries: retryBatches.pop().payload.entries }); update()', context);
-  assert.equal(thread.children.length, 1);
-  const batch = thread.children[0];
+  assert.equal(sentList.children.length, 1);
+  assert.equal(thread.children.length, 0, "sent batches leave the Queued section");
+  assert.equal(getElement("review-sent-count").textContent, "1");
+  assert.equal(getElement("review-queued-count").textContent, "0");
+  const batch = sentList.children[0];
   assert.equal(batch.className, "review-batch");
   assert.equal(batch.open, false);
   assert.match(batch.children[0].textContent, /Accepted durably · Firstmate intake not yet confirmed · 2 notes · receipt receipt-1/);
@@ -783,16 +785,16 @@ test("review conversation notes: long notes are collapsed by default and expanda
   batch.open = true;
   batch.listeners.get("toggle")();
   vm.runInContext('update()', context);
-  assert.equal(thread.children[0].open, true, "Batch stays expanded across rerenders");
-  const sentLong = thread.children[0].children[2];
+  assert.equal(sentList.children[0].open, true, "Batch stays expanded across rerenders");
+  const sentLong = sentList.children[0].children[2];
   const sentDetails = sentLong.children.find((child) => child.className === "review-note-details");
   assert.equal(sentDetails.open, false);
   sentDetails.open = true;
   sentDetails.listeners.get("toggle")();
   vm.runInContext('update()', context);
-  assert.equal(thread.children[0].children[2].children.find((child) => child.className === "review-note-details").open, true);
-  thread.children[0].open = false;
-  thread.children[0].listeners.get("toggle")();
+  assert.equal(sentList.children[0].children[2].children.find((child) => child.className === "review-note-details").open, true);
+  sentList.children[0].open = false;
+  sentList.children[0].listeners.get("toggle")();
   vm.runInContext('update()', context);
-  assert.equal(thread.children[0].open, false, "Entire batch collapses together");
+  assert.equal(sentList.children[0].open, false, "Entire batch collapses together");
 });

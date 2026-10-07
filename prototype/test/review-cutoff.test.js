@@ -4,6 +4,7 @@ import vm from "node:vm";
 import test from "node:test";
 
 const script = await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
+const openSent = (page, open) => { const sent = page.element("review-sent"); sent.open = open; sent.listeners.toggle(); };
 const tick = () => new Promise(setImmediate);
 function harness() {
   const data = new Map();
@@ -193,9 +194,9 @@ test("close and desktop Escape preserve unsent draft, queue, receipt history and
   restored.setDesktop(false);
   restored.element("review-panel-toggle").listeners.click();
   assert.equal(restored.body.style.overflow, "scroll");
-  restored.element("review-history-tab").listeners.click();
+  openSent(restored, true);
   assert.equal(restored.body.style.overflow, "hidden");
-  restored.element("review-conversation-tab").listeners.click();
+  openSent(restored, false);
   assert.equal(restored.body.style.overflow, "scroll");
   prevented = false;
   restored.keydown(escape(restored.element("review-message")));
@@ -214,38 +215,53 @@ test("close and desktop Escape preserve unsent draft, queue, receipt history and
   assert.equal(restored.state().sent.length, 2);
 });
 
-test("phone scroll lock belongs only to Review, across mode switches and closing", () => {
+test("phone scroll lock belongs only to an expanded Sent section, across toggles and closing", () => {
   const p = harness().page();
   p.setDesktop(false);
   p.element("review-panel-toggle").listeners.click();
   assert.equal(p.body.style.overflow, "scroll");
-  p.element("review-history-tab").listeners.click();
+  assert.equal(p.element("review-panel")["data-review-tab"], "conversation");
+  openSent(p, true);
   assert.equal(p.body.style.overflow, "hidden");
-  p.element("review-history-tab").listeners.click();
+  assert.equal(p.element("review-panel")["data-review-tab"], "review");
+  openSent(p, true);
   assert.equal(p.body.style.overflow, "hidden", "reselect does not overwrite prior overflow");
-  p.element("review-annotation-tab").listeners.click();
+  openSent(p, false);
   assert.equal(p.body.style.overflow, "scroll");
-  p.element("review-conversation-tab").listeners.click();
-  assert.equal(p.body.style.overflow, "scroll");
-  p.element("review-history-tab").listeners.click();
+  openSent(p, true);
   p.element("review-close").listeners.click();
   assert.equal(p.body.style.overflow, "scroll");
   p.element("review-panel-toggle").listeners.click();
-  assert.equal(p.body.style.overflow, "hidden", "reopening Review locks again");
+  assert.equal(p.body.style.overflow, "hidden", "reopening with Sent expanded locks again");
   p.setDesktop(true);
   assert.equal(p.body.style.overflow, "scroll", "desktop never inherits the lock");
 });
 
-test("compact review keeps its receipt summary and accessible history in the Review tab", async () => {
+test("review panel has stacked Sent and Queued sections and no tabs, and Close never overlaps header text", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../public/shell-panel.css", import.meta.url), "utf8");
+  const start = html.indexOf('<aside id="review-panel"');
+  const panel = html.slice(start, html.indexOf("</aside>", start));
+  assert.doesNotMatch(panel, /role="tab"|review-tabs|review-annotation-tab|review-annotation-tools|review-history-tab|review-conversation-tab/);
+  assert.match(panel, /<details id="review-sent"(?![^>]*\bopen\b)[^>]*>\s*<summary id="review-sent-summary"[^>]*><span>Sent<\/span> <span id="review-sent-count"/);
+  assert.match(panel, /<section id="review-queued"[^>]*>[\s\S]*Queued <span id="review-queued-count"[\s\S]*id="review-thread"/);
+  assert.ok(panel.indexOf('id="review-sent"') < panel.indexOf('id="review-queued"'), "Sent stacks above Queued");
+  // The header title shrinks and wraps beside Close; the actions never shrink under it.
+  assert.match(css, /\.review-panel header > strong \{[^}]*flex: 1 1 0;[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
+  assert.match(css, /\.review-header-actions \{[^}]*flex: 0 0 auto/);
+  assert.doesNotMatch(css, /header:has\(\.review-tabs\)/);
+});
+
+test("compact review keeps its receipt summary and accessible history in the Sent section", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../public/shell-panel.css", import.meta.url), "utf8");
   const client = await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
-  assert.match(html, /id="review-history-tab"[^>]*aria-controls="review-thread"/);
+  assert.match(html, /id="review-sent-summary" aria-label="Sent batches, 0"/);
   assert.match(html, /id="review-inline-summary" aria-hidden="true"/);
   assert.match(css, /\.mobile-dock \{[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(css, /\[data-review-tab="review"\] #review-thread:not\(\[hidden\]\)/);
+  assert.match(css, /\.review-sent:not\(\[open\]\) > \.review-thread \{ display: none/);
   assert.match(client, /el\("review-inline-summary"\)\.textContent = compactSummary/);
-  assert.match(client, /setReviewTab\("review"\); update\(\); void refreshStatuses\(\)/);
+  assert.match(client, /if \(sentOpen\) void refreshStatuses\(\)/);
 });
 
 test("phone visual viewport keeps composer above keyboard and restores navigation reserve", async () => {
