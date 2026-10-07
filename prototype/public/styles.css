@@ -1064,7 +1064,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .lane-option:has(input:checked) { background: var(--accent-soft); }
 .source-status { padding: 16px 20px 12px; background: #e2ebe5; }
 .source-status button { text-align: left; }
-.sidebar-quota { padding: 12px 20px 16px; background: #e2ebe5; }
+.sidebar-quota { padding: 12px 10px 16px; background: #e2ebe5; }
+.sidebar-quota .sidebar-quota-head { padding: 0 6px; }
+.sidebar-quota-link { white-space: nowrap; }
+/* Cards fill the pane width; a wider (resized) pane flows them into columns. */
+.sidebar-quota .quota-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); align-content: start; scrollbar-width: thin; }
 .conversation-head { min-height: 52px; padding: 6px clamp(16px, 3vw, 40px); background: #fafcf9; border-color: #cddbd2; }
 .conversation-head-identity { flex-wrap: nowrap; gap: 0 8px; overflow: hidden; }
 .conversation-identity { margin-left: -8px; min-height: 40px; }
