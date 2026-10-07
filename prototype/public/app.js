@@ -1275,8 +1275,10 @@ function renderQuota(data) {
   const date = (value) => value ? `<time datetime="${escapeHtml(value)}" title="${escapeHtml(value)}">${escapeHtml(new Date(value).toLocaleString([], { dateStyle: "full", timeStyle: "long" }))}</time>` : "Reset unknown";
   const pace = (value) => value && value.status !== "unknown" ? ` · Pace: ${escapeHtml(quotaName(value.status))}${typeof value.reservePercentPoints === "number" ? ` (${formatQuotaReserve(value.reservePercentPoints)})` : ""}` : " · Pace unknown";
 
+  const unsupported = data.unsupportedProviders > 0 ? `<p data-quota-key="unsupported" class="quota-unsupported">${data.unsupportedProviders} provider ${data.unsupportedProviders === 1 ? "entry" : "entries"} not shown because the format is unsupported.</p>` : "";
   if (!providers.length) {
-    renderQuotaHtml(container, data.error ? `<p class="quota-empty"><b>Quota unavailable</b><br>${escapeHtml(data.error)}. No limits are known.</p>` : '<p class="quota-empty">No subscriptions reported. Remaining capacity is unknown.</p>');
+    const empty = data.error ? `<p class="quota-empty"><b>Quota unavailable</b><br>${escapeHtml(data.error)}. No limits are known.</p>` : '<p class="quota-empty">No subscriptions reported. Remaining capacity is unknown.</p>';
+    renderQuotaHtml(container, empty + unsupported);
     return;
   }
 
@@ -1288,10 +1290,10 @@ function renderQuota(data) {
     ${provider.scopes.length ? `<div data-quota-key="scopes" class="quota-group"><h3 class="quota-group-heading">Effective Scopes</h3>
       <table class="quota-scopes"><thead><tr><th scope="col">Scope</th><th scope="col">Effective</th><th scope="col">Bounded by</th><th scope="col">Limit</th><th scope="col">Runway</th></tr></thead><tbody>
       ${provider.scopes.map(s => `<tr data-quota-key="${escapeHtml(s.scope)}" class="quota-scope"><td><h3>${escapeHtml(quotaPageScopeName(s.scope))}</h3></td>
-        <td>${quotaPercent(s.percentRemaining)}<br>${provider.stale ? "Effective availability unknown" : escapeHtml(quotaName(s.status))}${pace(s.pace)}</td>
-        <td><span class="sr-only">Reported bounds: </span>${s.boundedBy?.length ? escapeHtml(s.boundedBy.map(quotaName).join(", ")) : "Unknown"}</td>
-        <td><span class="sr-only">Source-reported limits: </span>${s.limitingWindowIds?.length ? escapeHtml(s.limitingWindowIds.map(quotaName).join(", ")) : "Unknown"}</td>
-        <td>Runway: ${escapeHtml(quotaName(s.runway?.status))}${quotaDuration(s.runway?.seconds) ? ` · ${quotaDuration(s.runway.seconds)}` : ""}${s.runway?.exhaustedAt ? ` · Projected exhaustion: ${date(s.runway.exhaustedAt)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>Effective scope unavailable or unknown.</p>"}
+        <td data-label="Effective">${quotaPercent(s.percentRemaining)}<br>${provider.stale ? "Effective availability unknown" : escapeHtml(quotaName(s.status))}${pace(s.pace)}</td>
+        <td data-label="Bounded by"><span class="sr-only">Reported bounds: </span>${s.boundedBy?.length ? escapeHtml(s.boundedBy.map(quotaName).join(", ")) : "Unknown"}</td>
+        <td data-label="Limit"><span class="sr-only">Source-reported limits: </span>${s.limitingWindowIds?.length ? escapeHtml(s.limitingWindowIds.map(quotaName).join(", ")) : "Unknown"}</td>
+        <td data-label="Runway">Runway: ${escapeHtml(quotaName(s.runway?.status))}${quotaDuration(s.runway?.seconds) ? ` · ${quotaDuration(s.runway.seconds)}` : ""}${s.runway?.exhaustedAt ? ` · Projected exhaustion: ${date(s.runway.exhaustedAt)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>Effective scope unavailable or unknown.</p>"}
     ${provider.windows.length ? `<div data-quota-key="windows" class="quota-group"><h3 class="quota-group-heading">Quota Windows</h3>
       ${provider.windows.map(w => `<section data-quota-key="${escapeHtml(w.id)}" class="quota-window${w.isLimiting ? " quota-window-limiting" : ""}">
         <div class="quota-row-head"><h3 title="${escapeHtml(w.label)} (${escapeHtml(w.kind || "unknown")})" aria-label="${escapeHtml(w.label)} (${escapeHtml(w.kind || "unknown")})">${escapeHtml(quotaWindowLabel(w.label))} <small>(${escapeHtml(quotaWindowLabel(w.kind))})</small></h3><span class="quota-head-percent">${quotaPercent(w.percentRemaining)}</span></div>
@@ -1331,7 +1333,6 @@ function renderQuota(data) {
       </div>
     </div>` : "";
 
-  const unsupported = data.unsupportedProviders > 0 ? `<p data-quota-key="unsupported" class="quota-unsupported">${data.unsupportedProviders} provider ${data.unsupportedProviders === 1 ? "entry" : "entries"} not shown because the format is unsupported.</p>` : "";
   renderQuotaHtml(container, activeHtml + unconfiguredHtml + unsupported || '<p class="quota-empty">No active subscriptions reported. Remaining capacity is unknown.</p>');
 }
 

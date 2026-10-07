@@ -774,6 +774,13 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   #quota-view .quota-legend { display: none; }
   .quota-family-page .quota-family-row { grid-template-columns: minmax(0, 1fr) 3.2rem; grid-template-areas: "label value" "meter meter" "meta meta"; }
   .quota-family-page .quota-family-meter { margin: 6px 0; }
+  /* Keep table semantics/column headers, but avoid five tiny text columns. */
+  .quota-scopes, .quota-scopes tbody { display: block; }
+  .quota-scopes thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .quota-scopes .quota-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 10px; margin-top: 8px; }
+  .quota-scopes td { border: 0; }
+  .quota-scopes td:first-child { grid-column: 1 / -1; }
+  .quota-scopes td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
 }
 @media (pointer: coarse) { .quota-controls button, .quota-more > summary, .quota-summary-tile a { min-height: 44px; } }
 @media (prefers-reduced-motion: no-preference) {

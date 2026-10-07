@@ -1352,6 +1352,8 @@ test("quota page summarizes source evidence, renders unsupported counts and supp
   const tightest = app.node("#quota-summary").querySelector('[data-quota-key="tightest"]');
   assert.match(tightest.textContent, /—.*unknown \(stale\)/);
   assert.doesNotMatch(tightest.textContent, /\d+%/);
+  app.run('renderQuota({ providers: [], unsupportedProviders: 2 })');
+  assert.match(app.node("#quota-providers").textContent, /No subscriptions reported.*2 provider entries not shown/);
 });
 
 test("page sort has one bidirectional key each and shares every stored mode with the sidebar", () => {
