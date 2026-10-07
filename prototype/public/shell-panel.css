@@ -130,8 +130,6 @@
   .mobile-review-sheet #review-target { margin: 4px 0 6px; font-size: 11px; max-height: 32px; overflow: auto; }
   .mobile-review-sheet .review-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .mobile-review-sheet .review-actions button { min-height: 44px; padding: 4px; font-size: 12px; border-radius: 8px; white-space: nowrap; }
-  .mobile-review-sheet #review-queue { font-size: 0; }
-  .mobile-review-sheet #review-queue::after { content: "Queue"; font-size: 12px; }
   .mobile-review-sheet #review-end { grid-column: auto; background: var(--surface); color: var(--accent); }
   .mobile-review-sheet #review-state { margin: 4px 0 0; font-size: 11px; max-height: 32px; overflow-y: auto; }
   .mobile-review-sheet #review-state:empty { display: none; }
@@ -197,7 +195,7 @@
 @media (min-width: 721px) {
   .workspace { position: relative; grid-template-columns: var(--shell-nav-width, var(--nav-width)) minmax(0, 1fr) var(--rail-width); }
   .workspace:not([data-view="conversations"]) { grid-template-columns: var(--shell-nav-width, var(--nav-width)) minmax(0, 1fr); }
-  #shell-panel-resize:not([hidden]) { position: absolute; z-index: 35; display: block; left: calc(var(--shell-nav-width, var(--nav-width)) - 24px); top: 64px; bottom: 78px; width: 24px; background: transparent; cursor: col-resize; touch-action: none; }
+  #shell-panel-resize:not([hidden]) { position: absolute; z-index: 35; display: block; left: calc(var(--shell-nav-width, var(--nav-width)) - 24px); top: 64px; bottom: 84px; width: 24px; background: transparent; cursor: col-resize; touch-action: none; }
   #shell-panel-resize:not([hidden])::before { content: ""; position: absolute; top: 0; bottom: 0; right: 1px; width: 4px; border-radius: 4px; background: #398779; }
   #shell-panel-resize:not([hidden])::after { content: "‹"; position: absolute; top: 50%; right: 4px; color: #0b7767; font-size: 18px; }
   #shell-panel-resize:not([hidden]):hover::before, #shell-panel-resize:not([hidden]):focus-visible::before { background: #0d9f8a; width: 6px; }

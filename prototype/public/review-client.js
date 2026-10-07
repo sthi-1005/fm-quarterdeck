@@ -265,7 +265,7 @@ function update() {
   el("review-target").hidden = !selected && Boolean(phoneReview?.matches);
   updateSelectionAction();
   const queueLabel = selected ? "Queue annotation" : "Queue message";
-  el("review-queue").textContent = "Queue\n(Enter)";
+  el("review-queue").textContent = "Queue";
   el("review-queue").setAttribute("aria-label", `${queueLabel} (Enter)`);
   el("review-context").textContent = `Version ${config.version.slice(0, 12)} · ${config.delivery === "lavish" ? `Lavish session ${config.sessionId}` : config.intakeReady ? "Firstmate inbox intake" : "Local receipt · Firstmate intake unavailable"}`;
   const sendable = queue.length || retryBatches.length || (activeReviewTab !== "review" && el("review-message").value.trim());

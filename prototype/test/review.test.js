@@ -464,7 +464,7 @@ test("native review stays available with panel hidden and click precedence toggl
   assert.match(script, /entry\.region/);
   assert.match(html, /Enter: queue · Shift\+Enter: new line · Ctrl\/Cmd\+Enter: send/);
   assert.match(html, /Queue message \(Enter\)/);
-  assert.match(html, /Send batch \(Ctrl\/Cmd\+Enter\)/);
+  assert.match(html, /data-hint="Ctrl\/Cmd\+Enter">Send batch/);
 });
 
 // Minimal DOM with real ancestry and event listeners: catches a control being
