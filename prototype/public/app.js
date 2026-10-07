@@ -969,11 +969,29 @@ const sidebarSortControl = $("#sidebar-quota-sort");
 const updateSidebarSortLabel = () => {
   sidebarSortControl?.setAttribute("aria-label", `Sort quota limits: ${sidebarQuotaSort === "runway" ? "runway, best source pace reserve or reset coverage first" : `${sidebarQuotaSort} remaining capacity first`}; unknown and stale last`);
 };
-if (sidebarSortControl) sidebarSortControl.value = sidebarQuotaSort;
-updateSidebarSortLabel();
-sidebarSortControl?.addEventListener("change", () => {
-  sidebarQuotaSort = sidebarSortControl.value;
+// Two segments: Left (select again to reverse) and Runway; stored values stay highest/lowest/runway.
+let sidebarLeftSort = sidebarQuotaSort === "lowest" ? "lowest" : "highest";
+const renderSidebarSort = () => {
   updateSidebarSortLabel();
+  for (const option of sidebarSortControl?.querySelectorAll("[data-sort]") || []) {
+    const runway = option.dataset.sort === "runway";
+    option.setAttribute("aria-pressed", String(runway === (sidebarQuotaSort === "runway")));
+    if (!runway) {
+      option.querySelector(".sidebar-quota-sort-direction").textContent = sidebarLeftSort === "lowest" ? "↑" : "↓";
+      option.setAttribute("aria-label", `Remaining capacity, ${sidebarLeftSort} first`);
+    }
+  }
+};
+renderSidebarSort();
+sidebarSortControl?.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-sort]");
+  if (!option) return;
+  if (option.dataset.sort === "runway") sidebarQuotaSort = "runway";
+  else {
+    if (sidebarQuotaSort !== "runway") sidebarLeftSort = sidebarLeftSort === "highest" ? "lowest" : "highest";
+    sidebarQuotaSort = sidebarLeftSort;
+  }
+  renderSidebarSort();
   try { localStorage.setItem("fm-agentos-sidebar-quota-sort.v1", sidebarQuotaSort); } catch { /* In-memory preference works. */ }
   if (quotaReading) renderQuota(quotaReading);
 });

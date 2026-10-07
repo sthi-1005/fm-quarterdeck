@@ -1364,6 +1364,13 @@ test("tiny quota strip reuses page reading and retains source pace/runway in acc
   assert.ok(html.indexOf('<section id="sidebar-quota"') < html.indexOf('<footer class="source-status"'));
   assert.match(css, /\.sidebar-quota \{ display: none; \}/);
   assert.match(css, /\.primary-nav \{[^}]+grid-template-rows: 48px 48px/);
+  // Header: caption, All and collapse, then freshness and the Left/Runway segments.
+  assert.match(css, /\.sidebar-quota-head \{ display: grid;[^}]+grid-template-areas: "title link toggle" "fresh sort sort";/);
+  assert.match(css, /@container sidebar-quota \(max-width: 229\.98px\) \{ \.sidebar-quota-sort-long \{ display: none; \} \}/);
+  assert.match(css, /\.sidebar-quota-sort, \.sidebar-quota-link, \.sidebar-quota-head \.sidebar-quota-toggle \{[^}]+height: 24px;/);
+  assert.match(css, /\.sidebar-quota-link \{ grid-area: link; justify-self: end;[^}]+height: 20px;/);
+  assert.match(html, /<div id="sidebar-quota-sort" class="sidebar-quota-sort" role="group" aria-label="Sort quota limits">/);
+  assert.match(html, /data-sort="left" aria-pressed="true"[^>]*>Left<span class="sidebar-quota-sort-direction" aria-hidden="true">↓<\/span><\/button><button type="button" class="sidebar-quota-sort-option" data-sort="runway" aria-pressed="false" aria-label="Runway"[^>]*>Run<span class="sidebar-quota-sort-long">way<\/span>/);
 
   const app = ui();
   const statuses = ["ahead", "on_pace", "behind", "mixed", "through_reset", "projected_exhaustion", "exhausted_now", "unknown"];

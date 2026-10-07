@@ -42,9 +42,9 @@
               <span>Quota limits</span>
               <small id="sidebar-quota-freshness" class="sidebar-quota-freshness"></small>
             </div>
-            <select id="sidebar-quota-sort" class="sidebar-quota-sort" aria-label="Sort quota limits" title="Runway: source pace reserve, or source runway coverage relative to reset; unknown and stale last">
-              <option value="highest">Left ↓</option><option value="lowest">Left ↑</option><option value="runway">Runway</option>
-            </select>
+            <div id="sidebar-quota-sort" class="sidebar-quota-sort" role="group" aria-label="Sort quota limits">
+              <button type="button" class="sidebar-quota-sort-option" data-sort="left" aria-pressed="true" title="Captured remaining percentage · select again to reverse; unknown and stale last">Left<span class="sidebar-quota-sort-direction" aria-hidden="true">↓</span></button><button type="button" class="sidebar-quota-sort-option" data-sort="runway" aria-pressed="false" aria-label="Runway" title="Runway: source pace reserve, or source runway coverage relative to reset; unknown and stale last">Run<span class="sidebar-quota-sort-long">way</span></button>
+            </div>
             <a href="#quota" class="sidebar-quota-link" title="Open full Quota page">All</a>
             <button id="sidebar-quota-toggle" class="sidebar-quota-toggle" type="button" aria-label="Collapse quota limits" aria-expanded="true" aria-controls="quota-strip">⌃</button>
           </div>
