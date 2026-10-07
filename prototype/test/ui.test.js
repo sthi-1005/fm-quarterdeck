@@ -1359,7 +1359,7 @@ test("tiny quota strip reuses page reading and retains source pace/runway in acc
   assert.match(css, /\.quota-divider \{[^}]+width: 100%; height: 16px; cursor: ns-resize;/);
   assert.match(css, /\.review-divider \{[^}]+width: 16px; cursor: ew-resize;/);
   assert.match(css, /@media \(max-width: 720\.01px\) \{ \.panel-divider \{ display: none; \} \}/);
-  assert.match(css, /\.sidebar-quota \{[^}]+flex: 0 0 auto; height: var\(--quota-height, 220px\)/);
+  assert.match(css, /\.sidebar-quota \{[^}]+flex: 0 1 auto; height: var\(--quota-height, auto\)/);
   assert.doesNotMatch(css, /\.quota-strip \{[^}]+resize: vertical;/);
   assert.ok(html.indexOf('<section id="sidebar-quota"') < html.indexOf('<footer class="source-status"'));
   assert.match(css, /\.sidebar-quota \{ display: none; \}/);
@@ -2267,8 +2267,8 @@ test("quota freshness preserves in-card and compact interactions and captured ma
     const assertInteraction = () => {
       assert.equal(cards.querySelector('details[data-provider="codex"]'), card, interaction);
       assert.equal(card.querySelector("summary"), summary, interaction);
-      assert.equal(strip.querySelector("a"), link, interaction);
-      assert.equal(mobile.querySelector(".mobile-quota-sheet-row"), row, interaction);
+      assert.ok([...strip.querySelectorAll("a")].includes(link), interaction);
+      assert.ok([...mobile.querySelectorAll(".mobile-quota-sheet-row")].includes(row), interaction);
       if (interaction.endsWith("focus")) assert.equal(app.run("document.activeElement"), focused, interaction);
       else {
         assert.equal(selection.anchorNode, selectedText, interaction);

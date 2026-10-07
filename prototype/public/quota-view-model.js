@@ -71,7 +71,27 @@ window.quotaViewModel = (() => {
       typeof window.pace.timeRemainingPercent !== "number" || Math.abs(remaining - window.pace.timeRemainingPercent) > 0.001)) return null;
     return Math.max(0, Math.min(100, remaining));
   };
-  const project = (reading, { hideInactive = false, lowestFirst = false, now = Date.now() } = {}) => {
+  // Runway ordering uses source pace reserve (remaining minus time remaining).
+  // When pace is absent, source runway coverage of the bounded reset interval
+  // supplies the same signed margin. Never extrapolate consumption ourselves.
+  const runwayMargin = (scope, windows, now) => {
+    if (windows.some((w) => w.resetsAt && Date.parse(w.resetsAt) <= now)) return null;
+    if (scope?.pace?.status && scope.pace.status !== "unknown" && Number.isFinite(scope.pace.reservePercentPoints)) {
+      return { value: scope.pace.reservePercentPoints, basis: "source pace" };
+    }
+    if (windows.length && windows.every((w) => w.pace?.status && w.pace.status !== "unknown" && Number.isFinite(w.pace.reservePercentPoints))) {
+      return { value: Math.min(...windows.map((w) => w.pace.reservePercentPoints)), basis: "source pace" };
+    }
+    const runway = scope?.runway;
+    const bounded = (scope?.boundedBy || []).map((id) => windows.find((w) => w.id === id));
+    if (!bounded.length || bounded.some((w) => !w || !Number.isFinite(Date.parse(w.resetsAt)) || Date.parse(w.resetsAt) <= now)) return null;
+    if (runway?.status === "through_reset") return { value: 0, basis: "source runway through reset" };
+    if (runway?.status === "exhausted_now") return { value: -100, basis: "source runway exhausted" };
+    if (runway?.status !== "projected_exhaustion" || !Number.isFinite(runway.seconds) || runway.seconds < 0) return null;
+    const resetSeconds = Math.min(...bounded.map((w) => (Date.parse(w.resetsAt) - now) / 1000));
+    return { value: (Math.min(1, runway.seconds / resetSeconds) - 1) * 100, basis: "source runway / reset coverage" };
+  };
+  const project = (reading, { hideInactive = false, lowestFirst = false, sidebarSort = "highest", now = Date.now() } = {}) => {
     const maxAgeMs = Number.isFinite(reading.maxAgeMs) && reading.maxAgeMs > 0 ? reading.maxAgeMs : 300000;
     const timedReading = { ...reading, now };
     const providers = (reading.providers || []).map((provider) => {
@@ -105,8 +125,24 @@ window.quotaViewModel = (() => {
       const limits = source.windows?.length ? source.windows : source.scopes || [];
       if (!limits.some((limit) => valid(limit.percentRemaining))) return [];
       const families = provider.windows.length ? groups(provider) : provider.scopes.filter((_, scopeIndex) => valid(source.scopes[scopeIndex].percentRemaining)).map((scope) => ({ name: provider.provider, provider: provider.provider, scope: scope.scope, windows: [{ ...scope, label: scope.scope }] }));
-      return families.map((family) => ({ ...family, status: provider.status, stale: provider.stale, staleLabel: provider.staleLabel, reusedLabel: provider.reusedLabel,
-        windows: family.windows.map((window) => ({ ...window, stale: provider.stale })) }));
+      return families.map((family) => {
+        const scopes = family.scope ? provider.scopes.filter((scope) => scope.scope === family.scope)
+          : provider.scopes.filter((scope) => scope.boundedBy?.length && scope.boundedBy.every((id) => family.windows.some((w) => w.id === id)));
+        const margins = scopes.length ? scopes.map((scope) => runwayMargin(scope, family.windows, now)) : [runwayMargin(null, family.windows, now)];
+        const runway = !provider.stale && margins.every(Boolean) ? margins.reduce((a, b) => a.value <= b.value ? a : b) : null;
+        const percentages = family.windows.map((w) => w.percentRemaining);
+        const capacity = !provider.stale && percentages.length && percentages.every(valid) ? Math.min(...percentages) : null;
+        return { ...family, status: provider.status, stale: provider.stale, staleLabel: provider.staleLabel, reusedLabel: provider.reusedLabel,
+          sortRemaining: capacity, sortRunway: runway,
+          windows: family.windows.map((window) => ({ ...window, stale: provider.stale })) };
+      });
+    }).sort((a, b) => {
+      if (sidebarSort === "source") return 0;
+      const left = sidebarSort === "runway" ? a.sortRunway?.value ?? null : a.sortRemaining;
+      const right = sidebarSort === "runway" ? b.sortRunway?.value ?? null : b.sortRemaining;
+      if (left === null) return right === null ? 0 : 1;
+      if (right === null) return -1;
+      return sidebarSort === "lowest" ? left - right : right - left;
     });
     return { detail, inactive, sidebar };
   };

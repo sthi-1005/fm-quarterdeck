@@ -960,6 +960,23 @@ let quotaReading = null;
 let quotaAgeTimer = null;
 let quotaHideInactive = false;
 let quotaLowestFirst = false;
+let sidebarQuotaSort = "highest";
+try {
+  const saved = localStorage.getItem("fm-agentos-sidebar-quota-sort.v1");
+  if (["highest", "lowest", "runway"].includes(saved)) sidebarQuotaSort = saved;
+} catch { /* Optional browser preference. */ }
+const sidebarSortControl = $("#sidebar-quota-sort");
+const updateSidebarSortLabel = () => {
+  sidebarSortControl?.setAttribute("aria-label", `Sort quota limits: ${sidebarQuotaSort === "runway" ? "runway, best source pace reserve or reset coverage first" : `${sidebarQuotaSort} remaining capacity first`}; unknown and stale last`);
+};
+if (sidebarSortControl) sidebarSortControl.value = sidebarQuotaSort;
+updateSidebarSortLabel();
+sidebarSortControl?.addEventListener("change", () => {
+  sidebarQuotaSort = sidebarSortControl.value;
+  updateSidebarSortLabel();
+  try { localStorage.setItem("fm-agentos-sidebar-quota-sort.v1", sidebarQuotaSort); } catch { /* In-memory preference works. */ }
+  if (quotaReading) renderQuota(quotaReading);
+});
 const quotaOpen = new Map();
 
 function renderQuotaHtml(container, html) {
@@ -1072,7 +1089,7 @@ function quotaFamilyBox(family, readAt, { compact = false } = {}) {
       </div>`;
     }).join("")}</div>`;
 }
-function renderQuotaStrip(data, projection = projectQuota(data)) {
+function renderQuotaStrip(data, projection = projectQuota(data, { sidebarSort: sidebarQuotaSort })) {
   const freshnessEl = $("#sidebar-quota-freshness");
   if (freshnessEl) {
     if (data.readAt) {
@@ -1084,14 +1101,15 @@ function renderQuotaStrip(data, projection = projectQuota(data)) {
     }
   }
 
-  const items = projection.sidebar.map((family) => `<a data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" href="#quota" class="quota-badge">${quotaFamilyBox(family, data.capturedAt === undefined ? data.readAt : data.capturedAt, { compact: true })}<span class="sr-only">Open Quota page</span></a>`);
+  const items = projection.sidebar.map((family) => `<a data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" href="#quota" class="quota-badge">${quotaFamilyBox(family, data.capturedAt === undefined ? data.readAt : data.capturedAt, { compact: true })}${sidebarQuotaSort === "runway" ? `<small class="quota-sort-basis">Runway: ${escapeHtml(family.sortRunway?.basis || "unknown")}</small>` : family.sortRemaining === null && !family.stale ? '<small class="quota-sort-basis">Remaining unknown</small>' : ""}<span class="sr-only">Open Quota page</span></a>`);
   const empty = `<a href="#quota" class="quota-badge quota-badge-empty" title="${escapeHtml(data.error || "No linked subscription with known limits")}"><b>Quota</b><span class="quota-badge-percent">${data.error && !data.readAt ? "Unavailable" : "Unknown"}</span></a>`;
   const html = items.join("") || empty;
   const strip = $("#quota-strip");
   if (strip) renderQuotaHtml(strip, html);
   const sheet = $("#mobile-quota-sheet-content");
   const dockQuota = document.querySelector(".mobile-dock-quota");
-  const families = projection.sidebar.slice(0, 4);
+  // Keep the phone's existing four-row source window stable across stale ticks.
+  const families = projectQuota(data, { sidebarSort: "source" }).sidebar.slice(0, 4);
   const rows = families.map((family) => `<div data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" class="mobile-quota-sheet-row">${quotaFamilyBox(family, data.capturedAt === undefined ? data.readAt : data.capturedAt, { compact: true })}</div>`).join("");
   if (sheet) {
     if (rows) {
@@ -1144,7 +1162,7 @@ function renderQuota(data) {
     quotaAgeTimer = window.setInterval(() => { if (quotaReading) renderQuota(quotaReading); }, 15000);
   }
   const providers = data.providers || [];
-  const projection = projectQuota(data, { hideInactive: quotaHideInactive, lowestFirst: quotaLowestFirst, now: Date.now() });
+  const projection = projectQuota(data, { hideInactive: quotaHideInactive, lowestFirst: quotaLowestFirst, sidebarSort: sidebarQuotaSort, now: Date.now() });
   renderQuotaStrip(data, projection);
 
   const container = $("#quota-providers");

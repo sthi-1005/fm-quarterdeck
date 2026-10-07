@@ -80,7 +80,8 @@ export function sanitizeQuota(raw) {
 
 export function createQuotaReader({ run, execute = exec, now = Date.now, ttlMs = 60000, maxAge = process.env.FM_QUOTA_MAX_AGE } = {}) {
   const age = quotaMaxAge(maxAge || DEFAULT_MAX_AGE);
-  run ||= () => execute("quota-axi", ["--full", "--json", "--no-credential-refresh", "--max-age", age.value], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
+  run ||= (timeout) => execute("quota-axi", ["--full", "--json", "--no-credential-refresh", "--max-age", age.value], { timeout, maxBuffer: 1024 * 1024, windowsHide: true });
+  let firstRead = true;
   let last = null;
   let current = null;
   let nextReadAt = 0;
@@ -89,11 +90,13 @@ export function createQuotaReader({ run, execute = exec, now = Date.now, ttlMs =
   return async () => {
     if (pending) return pending;
     if (now() < nextReadAt && current) return { ...current, ageMs: current.readAt ? Math.max(0, now() - Date.parse(current.readAt)) : null };
+    const timeout = firstRead ? 15000 : 6000;
+    firstRead = false;
     pending = (async () => {
       try {
         // Bound injected runners too; real execFile has its own kill timeout.
         let timer;
-        const result = await Promise.race([Promise.resolve().then(run), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 6500); })]).finally(() => clearTimeout(timer));
+        const result = await Promise.race([Promise.resolve().then(() => run(timeout)), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), timeout + 500); })]).finally(() => clearTimeout(timer));
         const raw = JSON.parse(typeof result === "string" ? result : result.stdout);
         const providers = sanitizeQuota(raw);
         // Reject a wholly unsupported response before replacing the last good
@@ -108,7 +111,7 @@ export function createQuotaReader({ run, execute = exec, now = Date.now, ttlMs =
         current = { ...last, ageMs: 0 };
         return current;
       } catch (error) {
-        nextReadAt = now() + interval;
+        nextReadAt = now() + Math.min(interval, 5000);
         const reason = error?.code === "ENOENT" ? "quota-axi is not installed" : error?.message === "timeout" || error?.killed ? "Quota read timed out" : error instanceof SyntaxError || error?.message === "schema" ? "Quota response invalid" : "Quota read failed";
         current = last ? { ...last, stale: true, error: `Quota refresh unavailable: ${reason}`, ageMs: Math.max(0, now() - Date.parse(last.readAt)) } : { providers: [], readAt: null, ageMs: null, maxAgeMs: age.ms, stale: false, error: `Quota unavailable: ${reason}` };
         return current;

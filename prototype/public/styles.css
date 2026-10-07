@@ -85,15 +85,21 @@ input[type="search"]::-webkit-search-results-decoration {
 .review-awaiting[hidden] { display: none; }
 .review-shortcuts { display: block; color: var(--muted); }
 .review-highlight { position: fixed; z-index: 40; pointer-events: none; outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
-.sidebar-quota { position: relative; flex: 0 0 auto; height: var(--quota-height, 220px); min-height: 120px; max-height: 60%; margin-top: auto; border-top: 1px solid var(--line); padding: var(--space-2); background: var(--sidebar); display: flex; flex-direction: column; }
+.sidebar-quota { position: relative; flex: 0 1 auto; height: var(--quota-height, auto); min-height: 0; max-height: var(--quota-maximum, 60%); margin-top: auto; border-top: 1px solid var(--line); padding: var(--space-2); background: var(--sidebar); display: flex; flex-direction: column; }
 .sidebar-quota-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: var(--space-2); padding: 0 4px; }
-.sidebar-quota-heading { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: wrap; }
+.sidebar-quota-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; margin-right: auto; }
+.sidebar-quota-sort { width: 76px; flex: 0 0 76px; min-height: 28px; padding: 2px; font-size: 11px; }
+.sidebar-quota-head .sidebar-quota-toggle { flex: 0 0 24px; width: 24px; min-height: 28px; padding: 0; font-size: 14px; }
+.sidebar-quota[data-collapsed="true"] { height: auto !important; }
+.sidebar-quota[data-collapsed="true"] .quota-strip, .sidebar-quota[data-collapsed="true"] .quota-divider { display: none; }
+.sidebar-quota[data-collapsed="true"] .sidebar-quota-head { margin-bottom: 0; }
+.quota-sort-basis { color: var(--muted); font-size: 10px; }
 .sidebar-quota-head span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .sidebar-quota-freshness { font-size: 10px; color: var(--muted); font-weight: 500; overflow-wrap: anywhere; }
 .sidebar-quota-link { font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 500; }
 .sidebar-quota-link:hover { text-decoration: underline; }
 .quota-strip { display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px; min-height: 0; overflow: auto; }
-.quota-badge { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); text-decoration: none; transition: border-color .15s ease, background-color .15s ease; }
+.quota-badge { display: flex; flex: 0 0 auto; flex-direction: column; gap: 2px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); text-decoration: none; transition: border-color .15s ease, background-color .15s ease; }
 .quota-badge:hover, .quota-badge:focus-visible { border-color: var(--accent); background: var(--surface-soft); }
 .quota-badge-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
 .quota-badge-limiting { font-size: 9px; color: var(--amber); margin-left: auto; }
