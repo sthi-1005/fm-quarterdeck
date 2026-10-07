@@ -43,7 +43,7 @@ window.quotaViewModel = (() => {
   // Abbreviate only an explicit source label's period suffix for compact cards.
   // This is presentation, never duration evidence or a grouping decision. If
   // abbreviating would collide with another row, retain the original labels.
-  const windowLabel = (label) => label.replace(/\b(?:week|weekly)\b/gi, "7d");
+  const windowLabel = (label) => String(label ?? "").replace(/\b(?:week|weekly)\b/gi, "7d");
   const windowLabels = (family) => {
     const labels = family.windows.map((window) => window.label || window.scope || "Unknown");
     if (family.provider === "grok") {
