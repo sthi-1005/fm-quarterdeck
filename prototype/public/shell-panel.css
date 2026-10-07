@@ -203,6 +203,8 @@
   #shell-panel-resize:not([hidden]):hover::before, #shell-panel-resize:not([hidden]):focus-visible::before { background: #0d9f8a; width: 6px; }
   #shell-panel-resize:not([hidden]):focus-visible { outline: 2px solid #0d9f8a; outline-offset: -2px; }
   .workspace:has(#shell-panel-resize:not([hidden])) .lane-list { padding-right: 24px; }
+  /* Quota cards reclaim the handle gutter; the strip stacks above the handle's hit area but leaves its visible bar clear. */
+  .workspace:has(#shell-panel-resize:not([hidden])) .sidebar-quota { margin-right: -24px; }
   .workspace[data-shell-panel-collapsed="true"] #shell-panel-resize:not([hidden]) { left: 0; cursor: pointer; }
   .workspace[data-shell-panel-collapsed="true"] #shell-panel-resize:not([hidden])::before { left: 1px; right: auto; }
   .workspace[data-shell-panel-collapsed="true"] #shell-panel-resize:not([hidden])::after { content: "›"; left: 7px; right: auto; }
