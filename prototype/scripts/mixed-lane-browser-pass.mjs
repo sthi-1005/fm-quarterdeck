@@ -14,7 +14,7 @@ const config = path.join(scratch, "claude"), directory = claudeProjectDirectory(
 await mkdir(directory, { recursive: true });
 await writeFile(path.join(scratch, "state/.lock-session"), "primary-fixture\n");
 await writeFile(path.join(scratch, "data/projects.md"), "- Alpha - Synthetic selected lane\n- Beta - Synthetic context lane\n");
-const text = ["General", "Alpha-UI", "Beta-Installer"].map((name) => `[fm-lane ${name}]\n${name} context **update**.\nSecond context line.\n[end ${name}]`).join("\n\n");
+const text = ["General", "Alpha-UI", "Beta-Installer-Long-Context-Theme"].map((name) => `[fm-lane ${name}]\n${name} context **update**.\nSecond context line.\n[end ${name}]`).join("\n\n");
 await writeFile(path.join(directory, "primary-fixture.jsonl"), JSON.stringify({ type: "assistant", uuid: "fixture-reply", sessionId: "primary-fixture", timestamp: "2030-01-01T12:00:00Z", message: { role: "assistant", model: "fixture-model", content: [{ type: "text", text }] } }) + "\n");
 const server = createServer({}, {
   lanesReader: async (_, options) => loadFirstmateHome(scratch, { ...options, claudeConfigDir: config }),
@@ -42,7 +42,7 @@ try {
     assert.deepEqual(await state(), [
       { name: "General", expanded: "false", hidden: true },
       { name: "Alpha-UI", expanded: "true", hidden: false },
-      { name: "Beta-Installer", expanded: "false", hidden: true },
+      { name: "Beta-Installer-Long-Context-Theme", expanded: "false", hidden: true },
     ]);
     assert.equal(await evaluate("[...document.querySelectorAll('.mixed-lane-toggle')].every(b => b.textContent.includes('[fm-lane '))"), true, "the visible marker label is the toggle");
     assert.equal(await evaluate("[...document.querySelectorAll('.mixed-lane-content')].some(b => b.textContent.includes('[fm-lane '))"), false, "no duplicated marker beneath a separate button");
@@ -63,6 +63,7 @@ try {
     await evaluate("document.querySelector('#message-format-toggle').click(); document.querySelectorAll('.mixed-lane-toggle')[2].click()");
     assert.equal((await state())[2].hidden, true);
     assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+    assert.equal(await evaluate("[...document.querySelectorAll('.mixed-lane-heading, .message-content')].some(n => n.scrollWidth > n.clientWidth + 1)"), false, "long lane labels do not overflow the phone message");
     // No local preference is introduced; All defaults to every section expanded.
     await selectAll();
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-content[hidden]').length"), 0);
