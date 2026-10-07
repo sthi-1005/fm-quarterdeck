@@ -154,6 +154,9 @@ try {
       await evaluate("document.querySelector('#review-panel-toggle').click(); document.querySelector('#review-annotation-tab').click(); document.querySelector('#review-select-location').click()");
       await until("document.querySelector('#review-panel').hasAttribute('data-picking')");
     }
+    // Opening annotation/panel schedules composer autofocus. Let that finish
+    // before moving focus to search, rather than racing it across CDP calls.
+    if (state !== "idle") await until("document.activeElement.id === 'review-message'");
     await evaluate("window.syntheticSearchEscapes = []; document.querySelector('#review-message').value = 'Synthetic search-focus draft'; document.querySelector('#review-message').dispatchEvent(new Event('input', { bubbles: true }))");
     const reviewState = `({ annotationHidden: document.querySelector('#review-annotation').hidden,
       picking: document.querySelector('#review-panel').hasAttribute('data-picking'),
