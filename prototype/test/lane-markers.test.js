@@ -72,17 +72,19 @@ test("Claude primary multi-block theme labels resolve to registered parents, lon
   const home = path.join(scratch, "home"), config = path.join(scratch, "claude");
   await mkdir(path.join(home, "data"), { recursive: true });
   await mkdir(path.join(home, "state"));
-  await writeFile(path.join(home, "data/projects.md"), "- Example-Store - Synthetic parent\n- Example-Store-Tools - Synthetic nested registered parent\n- fm-quarterdeck - Public alias\n");
+  await writeFile(path.join(home, "data/projects.md"), "- Example-Store - Synthetic parent\n- Example-Store-Tools - Synthetic nested registered parent\n- fm-quarterdeck - Current product\n- fm-AgentOS - Historical product\n");
   await writeFile(path.join(home, "state/.lock-session"), "primary-fixture\n");
   const directory = claudeProjectDirectory(config, home);
   await mkdir(directory, { recursive: true });
   const block = (name) => `[fm-lane ${name}]\nSynthetic ${name} update.\n[end ${name}]`;
-  const text = [block("General"), block("Example-Store-UI"), block("Example-Store-Tools-CLI"), block("Quarterdeck-UI")].join("\n\n");
+  const text = [block("General"), block("Example-Store-UI"), block("Example-Store-Tools-CLI"), block("fm-quarterdeck-UI")].join("\n\n");
   const exact = [block("Example-Store-Tools"), block("General")].join("\n\n");
   const unknown = [block("Unregistered-UI"), block("General")].join("\n\n");
-  const single = block("Example-Store-UI");
+  const single = "[fm-lane Example-Store-UI]\nExample-Store-Tools is mentioned here only as context.\n[end Example-Store-UI]";
+  const productSingle = "[fm-lane fm-quarterdeck-UI]\nExample-Store is mentioned here only as context.\n[end fm-quarterdeck-UI]";
+  const ambiguousAlias = [block("Quarterdeck-UI"), block("General")].join("\n\n");
   const malformed = text.replace("[end Example-Store-UI]", "[end Wrong]");
-  await writeFile(path.join(directory, "primary-fixture.jsonl"), [text, exact, unknown, single, malformed].map((text, index) => JSON.stringify({
+  await writeFile(path.join(directory, "primary-fixture.jsonl"), [text, exact, unknown, single, malformed, productSingle, ambiguousAlias].map((text, index) => JSON.stringify({
     type: "assistant", uuid: `fixture-${index}`, sessionId: "primary-fixture", timestamp: `2030-01-01T12:00:0${index}Z`,
     message: { role: "assistant", model: "fixture-model", content: [{ type: "text", text }] },
   })).join("\n") + "\n");
@@ -103,7 +105,13 @@ test("Claude primary multi-block theme labels resolve to registered parents, lon
   assert.equal(messages("example-store-tools").find((m) => m.mixedLaneMessage?.text === exact).text, block("Example-Store-Tools"), "exact registered label wins over a shorter parent");
   assert.ok(messages("general").some((m) => m.text === unknown && !m.mixedLaneMessage), "unknown parents retain conservative fallback");
   assert.ok(messages("general").some((m) => m.text === malformed && !m.mixedLaneMessage), "malformed blocks remain ordinary text");
-  assert.ok(messages("example-store").some((m) => m.text === single && !m.mixedLaneMessage), "single-lane theme replies retain legacy behavior");
+  assert.ok(messages("example-store").some((m) => m.text === single && !m.mixedLaneMessage), "single-lane themes route to their declared parent without acquiring disclosures");
+  assert.ok(!messages("example-store-tools").some((m) => m.text === single), "body mentions cannot override a single-lane theme envelope");
+  assert.ok(!messages("general").some((m) => m.text === single || m.text === productSingle), "valid single theme blocks do not leak to General");
+  assert.ok(messages("fm-quarterdeck").some((m) => m.text === productSingle), "the current registered product ID outranks historical aliases");
+  assert.ok(!messages("example-store").some((m) => m.text === productSingle), "an unrelated mentioned project cannot receive the current product's single-theme reply");
+  assert.ok(!messages("fm-agentos").some((m) => m.text === productSingle || m.mixedLaneMessage?.text === text), "historical aliases cannot claim the current registered product ID");
+  assert.ok(messages("general").some((m) => m.text === ambiguousAlias && !m.mixedLaneMessage), "genuinely shared aliases remain ambiguous rather than guessed");
 });
 
 test("explicit transcript lane wins over text, file name and General; lane filter excludes the turn", async (t) => {
