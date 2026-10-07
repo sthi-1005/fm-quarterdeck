@@ -207,21 +207,33 @@ const LANE_LABEL_ALIASES = { "fm-quarterdeck": PRODUCT_LANE_ALIASES, "fm-agentos
 function explicitLaneBlocks(message, projects) {
   if (!message.transcriptSessionId || message.role !== "firstmate" || !["conversation", "branch"].includes(message.kind)) return null;
   const blocks = [];
+  let hasThemedLabel = false;
   const marker = /^\[fm-lane ([^\]\r\n]+)\]\r?\n[\s\S]+?\r?\n\[end ([^\]\r\n]+)\](?=\r?\n|$)/gm;
   let end = 0;
   for (const match of message.text.matchAll(marker)) {
     if (!/^(?:\r?\n)*$/.test(message.text.slice(end, match.index))) return null;
     const name = match[1].toLowerCase();
     if (name !== match[2].toLowerCase()) return null;
-    // Stock Firstmate may use the short display names for these registered lanes.
-    // Resolve only known aliases; never infer ownership from arbitrary body text.
-    const matches = [...projects.filter((candidate) => candidate.id !== "general"), { id: "general", name: "General" }].filter((candidate) =>
-      [candidate.id, candidate.name.toLowerCase(), ...(LANE_LABEL_ALIASES[candidate.id] || [])].includes(name));
+    // A lane label can include a voyage/theme suffix (Example-Store-UI).
+    // Exact registered names win; otherwise use the longest registered parent
+    // followed by a hyphen. Never infer ownership from arbitrary body prose.
+    const candidates = [...projects.filter((candidate) => candidate.id !== "general"), { id: "general", name: "General" }];
+    const labels = (candidate) => [candidate.id, candidate.name.toLowerCase(), ...(LANE_LABEL_ALIASES[candidate.id] || [])];
+    let matches = candidates.filter((candidate) => labels(candidate).includes(name));
+    if (!matches.length) {
+      hasThemedLabel = true;
+      const parents = candidates.map((candidate) => ({ candidate, length: Math.max(0, ...labels(candidate)
+        .filter((label) => name.startsWith(`${label}-`) && name.length > label.length + 1).map((label) => label.length)) }));
+      const longest = Math.max(0, ...parents.map(({ length }) => length));
+      matches = longest ? parents.filter(({ length }) => length === longest).map(({ candidate }) => candidate) : [];
+    }
     if (matches.length !== 1) return null;
     blocks.push({ projectId: matches[0].id, name: match[1], text: match[0] });
     end = match.index + match[0].length;
   }
-  return blocks.length && /^(?:\r?\n)*$/.test(message.text.slice(end)) ? blocks : null;
+  // Keep legacy single-lane theme routing unchanged; only mixed replies need
+  // registered-parent resolution to expose their dynamic sections.
+  return blocks.length && !(blocks.length === 1 && hasThemedLabel) && /^(?:\r?\n)*$/.test(message.text.slice(end)) ? blocks : null;
 }
 
 function parseProjects(markdown) {

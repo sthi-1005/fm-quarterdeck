@@ -612,8 +612,8 @@ test("a selected sibling lane renders only its projected block, not the unchecke
 
 test("mixed lane replies preserve context with selected sections expanded and unchecked sections collapsed", () => {
   const app = ui();
-  const blocks = ["general", "alpha", "beta"].map((projectId) => ({ projectId, name: projectId,
-    text: `[fm-lane ${projectId}]\n${projectId} context <img src=x>\nSecond line\n[end ${projectId}]` }));
+  const blocks = ["general", "alpha", "beta"].map((projectId) => ({ projectId, name: `${projectId}-UI`,
+    text: `[fm-lane ${projectId}-UI]\n${projectId} context <img src=x>\nSecond line\n[end ${projectId}-UI]` }));
   const mixedLaneMessage = { recordId: "original:1", text: blocks.map(({ text }) => text).join("\n\n"), blocks };
   seed(app, blocks.map((block, index) => lane(block.projectId, [record({ recordId: `original:1:block:${index}`, text: block.text, mixedLaneMessage })])));
   app.run('allLanesSelected = false; selectedLaneIds = new Set(["alpha"]); renderFeed()');
@@ -621,7 +621,8 @@ test("mixed lane replies preserve context with selected sections expanded and un
   assert.equal((html.match(/<article /g) || []).length, 1);
   assert.equal((html.match(/aria-expanded="false"/g) || []).length, 2);
   assert.equal((html.match(/aria-expanded="true"/g) || []).length, 1);
-  assert.match(html, /<strong>alpha<\/strong>/);
+  assert.match(html, /\[fm-lane <strong>alpha-UI<\/strong>\]<\/button>/);
+  assert.equal((html.match(/\[fm-lane /g) || []).length, 3, "each marker is the toggle, not repeated in its body");
   assert.match(html, /2 lines/);
   assert.doesNotMatch(html, /<img /);
   assert.match(html, /&lt;img src=x&gt;/);

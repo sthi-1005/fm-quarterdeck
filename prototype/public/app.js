@@ -299,9 +299,9 @@ function renderMixedLaneContent(message) {
     const body = block.text.replace(/^\[fm-lane [^\]\r\n]+\]\r?\n/, "").replace(/\r?\n\[end [^\]\r\n]+\]$/, "");
     const preview = body.replace(/\s+/g, " ").trim().slice(0, 80);
     const lines = body.split(/\r?\n/).length;
-    const content = messageFormat === "markdown" ? renderMarkdown(block.text) : escapeHtml(block.text);
+    const content = messageFormat === "markdown" ? renderMarkdown(body) : escapeHtml(body);
     const id = `mixed-lane-${reviewId(key)}`;
-    return `<section class="mixed-lane-section"><button type="button" class="mixed-lane-toggle" data-mixed-lane-key="${escapeHtml(key)}" aria-expanded="${expanded}" aria-controls="${id}"><span class="mixed-lane-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span><strong>${escapeHtml(block.name)}</strong><span class="mixed-lane-preview">${escapeHtml(preview)}</span><small>${lines} ${lines === 1 ? "line" : "lines"}</small></button><div id="${id}" class="mixed-lane-content"${expanded ? "" : " hidden"}>${highlightSearchMatches(content, transcriptQuery)}</div></section>`;
+    return `<section class="mixed-lane-section"><div class="mixed-lane-heading"><button type="button" class="mixed-lane-toggle" data-mixed-lane-key="${escapeHtml(key)}" aria-expanded="${expanded}" aria-controls="${id}"><span class="mixed-lane-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>[fm-lane <strong>${escapeHtml(block.name)}</strong>]</button><span class="mixed-lane-summary"${expanded ? " hidden" : ""}><span class="mixed-lane-preview">${escapeHtml(preview)}</span><small>${lines} ${lines === 1 ? "line" : "lines"}</small></span></div><div id="${id}" class="mixed-lane-content"${expanded ? "" : " hidden"}>${highlightSearchMatches(content, transcriptQuery)}</div></section>`;
   }).join("");
 }
 
@@ -1942,6 +1942,7 @@ $("#messages").addEventListener("click", (event) => {
     mixedLaneExpansion.set(toggle.dataset.mixedLaneKey, expanded);
     toggle.setAttribute("aria-expanded", String(expanded));
     toggle.querySelector(".mixed-lane-chevron").textContent = expanded ? "▾" : "▸";
+    toggle.parentElement.querySelector(".mixed-lane-summary").hidden = expanded;
     document.getElementById(toggle.getAttribute("aria-controls")).hidden = !expanded;
   }
   if (event.target?.id === "search-empty-clear" || event.target?.closest?.("#search-empty-clear")) {

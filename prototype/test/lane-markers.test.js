@@ -6,6 +6,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { createServer } from "../server.js";
 import { readConversationTranscript } from "../transcript.js";
+import { claudeProjectDirectory } from "../claude-transcript.js";
 
 const mixed = "[fm-lane Example Store]\nSynthetic store update.\n\nSynthetic PR: https://github.com/example/store/pull/7\n[end Example Store]\n\n[fm-lane fm-quarterdeck]\nSynthetic Quarterdeck update.\n[end fm-quarterdeck]";
 const wrapped = "[fm-lane Example Store]\nSynthetic launch update.\n\nAnother **Markdown** paragraph.\n\nSynthetic PR: https://github.com/example/store/pull/42\n[end Example Store]";
@@ -63,6 +64,46 @@ test("canonical fm-lanes examples survive transcript ingestion and safe render p
   assert.match(vm.runInContext("renderMarkdown(block)", context), /&lt;img src=x onerror=alert\(1\)&gt;/);
   const original = await readConversationTranscript(home, ({ text, ...rest }) => ({ text, ...rest }));
   assert.ok(original.messages.some((message) => message.text === example.trimEnd()));
+});
+
+test("Claude primary multi-block theme labels resolve to registered parents, longest first", async (t) => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), "fm-claude-themed-lanes-"));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const home = path.join(scratch, "home"), config = path.join(scratch, "claude");
+  await mkdir(path.join(home, "data"), { recursive: true });
+  await mkdir(path.join(home, "state"));
+  await writeFile(path.join(home, "data/projects.md"), "- Example-Store - Synthetic parent\n- Example-Store-Tools - Synthetic nested registered parent\n- fm-quarterdeck - Public alias\n");
+  await writeFile(path.join(home, "state/.lock-session"), "primary-fixture\n");
+  const directory = claudeProjectDirectory(config, home);
+  await mkdir(directory, { recursive: true });
+  const block = (name) => `[fm-lane ${name}]\nSynthetic ${name} update.\n[end ${name}]`;
+  const text = [block("General"), block("Example-Store-UI"), block("Example-Store-Tools-CLI"), block("Quarterdeck-UI")].join("\n\n");
+  const exact = [block("Example-Store-Tools"), block("General")].join("\n\n");
+  const unknown = [block("Unregistered-UI"), block("General")].join("\n\n");
+  const single = block("Example-Store-UI");
+  const malformed = text.replace("[end Example-Store-UI]", "[end Wrong]");
+  await writeFile(path.join(directory, "primary-fixture.jsonl"), [text, exact, unknown, single, malformed].map((text, index) => JSON.stringify({
+    type: "assistant", uuid: `fixture-${index}`, sessionId: "primary-fixture", timestamp: `2030-01-01T12:00:0${index}Z`,
+    message: { role: "assistant", model: "fixture-model", content: [{ type: "text", text }] },
+  })).join("\n") + "\n");
+  const server = createServer({ FM_HOME: home, CLAUDE_CONFIG_DIR: config });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/lanes`);
+  assert.equal(response.status, 200);
+  const { lanes } = await response.json();
+  const messages = (id) => lanes.find((lane) => lane.id === id).messages;
+  const parent = messages("example-store").find((m) => m.mixedLaneMessage?.text === text);
+  assert.ok(parent, "the primary Claude reply has display context after parent-fleet filtering");
+  assert.equal(parent.transcriptOrigin, "main Claude");
+  assert.match(parent.mixedLaneMessage.recordId, /^claude-main-session\/primary-fixture.jsonl@\d+:0$/);
+  assert.deepEqual(parent.mixedLaneMessage.blocks.map(({ projectId }) => projectId), ["general", "example-store", "example-store-tools", "fm-quarterdeck"]);
+  assert.equal(parent.text, block("Example-Store-UI"));
+  assert.equal(messages("example-store-tools").find((m) => m.mixedLaneMessage?.text === text).text, block("Example-Store-Tools-CLI"));
+  assert.equal(messages("example-store-tools").find((m) => m.mixedLaneMessage?.text === exact).text, block("Example-Store-Tools"), "exact registered label wins over a shorter parent");
+  assert.ok(messages("general").some((m) => m.text === unknown && !m.mixedLaneMessage), "unknown parents retain conservative fallback");
+  assert.ok(messages("general").some((m) => m.text === malformed && !m.mixedLaneMessage), "malformed blocks remain ordinary text");
+  assert.ok(messages("example-store").some((m) => m.text === single && !m.mixedLaneMessage), "single-lane theme replies retain legacy behavior");
 });
 
 test("explicit transcript lane wins over text, file name and General; lane filter excludes the turn", async (t) => {

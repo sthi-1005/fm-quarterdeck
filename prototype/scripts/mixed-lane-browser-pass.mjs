@@ -5,15 +5,19 @@ import os from "node:os";
 import path from "node:path";
 import { createServer, loadFirstmateHome } from "../server.js";
 import { openBrowser } from "./browser-harness.mjs";
+import { claudeProjectDirectory } from "../claude-transcript.js";
 
 const scratch = await mkdtemp(path.join(os.tmpdir(), "quarterdeck-mixed-lanes-"));
 await mkdir(path.join(scratch, "data"));
-await mkdir(path.join(scratch, "state/main-session"), { recursive: true });
+await mkdir(path.join(scratch, "state"));
+const config = path.join(scratch, "claude"), directory = claudeProjectDirectory(config, scratch);
+await mkdir(directory, { recursive: true });
+await writeFile(path.join(scratch, "state/.lock-session"), "primary-fixture\n");
 await writeFile(path.join(scratch, "data/projects.md"), "- Alpha - Synthetic selected lane\n- Beta - Synthetic context lane\n");
-const text = ["General", "Alpha", "Beta"].map((name) => `[fm-lane ${name}]\n${name} context **update**.\nSecond context line.\n[end ${name}]`).join("\n\n");
-await writeFile(path.join(scratch, "state/main-session/session.jsonl"), JSON.stringify({ type: "message", timestamp: "2030-01-01T12:00:00Z", message: { role: "assistant", content: [{ type: "text", text }] } }) + "\n");
+const text = ["General", "Alpha-UI", "Beta-Installer"].map((name) => `[fm-lane ${name}]\n${name} context **update**.\nSecond context line.\n[end ${name}]`).join("\n\n");
+await writeFile(path.join(directory, "primary-fixture.jsonl"), JSON.stringify({ type: "assistant", uuid: "fixture-reply", sessionId: "primary-fixture", timestamp: "2030-01-01T12:00:00Z", message: { role: "assistant", model: "fixture-model", content: [{ type: "text", text }] } }) + "\n");
 const server = createServer({}, {
-  lanesReader: async (_, options) => loadFirstmateHome(scratch, options),
+  lanesReader: async (_, options) => loadFirstmateHome(scratch, { ...options, claudeConfigDir: config }),
   quotaReader: async () => ({ providers: [], error: "Offline fixture", stale: false }),
   costReader: async () => ({ azure: { state: "unavailable" }, github: { state: "unavailable" } }),
 });
@@ -31,13 +35,20 @@ try {
     await selectAll();
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-toggle[aria-expanded=true]').length"), 3);
     assert.equal(await evaluate("document.querySelectorAll('article.message').length"), 1, "one original reply, not duplicate projections");
-    await evaluate("while(true) { const input=[...document.querySelectorAll('#lane-filter-rows input[data-filter-lane]')].find(i => i.checked !== (i.dataset.filterLane === 'alpha')); if(!input) break; input.click(); }");
+    // The visible fleet name is a solo selector; do not bypass it with globals.
+    await evaluate("document.querySelector('.lane-option[data-lane-id=alpha] .lane-option-copy').click()");
+    assert.equal(await evaluate("location.hash"), "#lanes/alpha");
     const state = () => evaluate("[...document.querySelectorAll('.mixed-lane-toggle')].map(b => ({name:b.querySelector('strong').textContent, expanded:b.getAttribute('aria-expanded'), hidden:document.getElementById(b.getAttribute('aria-controls')).hidden}))");
     assert.deepEqual(await state(), [
       { name: "General", expanded: "false", hidden: true },
-      { name: "Alpha", expanded: "true", hidden: false },
-      { name: "Beta", expanded: "false", hidden: true },
+      { name: "Alpha-UI", expanded: "true", hidden: false },
+      { name: "Beta-Installer", expanded: "false", hidden: true },
     ]);
+    assert.equal(await evaluate("[...document.querySelectorAll('.mixed-lane-toggle')].every(b => b.textContent.includes('[fm-lane '))"), true, "the visible marker label is the toggle");
+    assert.equal(await evaluate("[...document.querySelectorAll('.mixed-lane-content')].some(b => b.textContent.includes('[fm-lane '))"), false, "no duplicated marker beneath a separate button");
+    // Direct hierarchy/task links route through the same parent fleet selection.
+    await command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/#lanes/alpha` });
+    await until("document.querySelectorAll('.mixed-lane-toggle[aria-expanded=false]').length === 2");
     await evaluate("document.querySelector('.mixed-lane-toggle').focus()");
     await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
     await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
