@@ -133,12 +133,16 @@ export async function openBrowser() {
 
 // Reading controls use the same nodes in the desktop header and phone options.
 export async function openReadingControls(browser) {
-  if (!await browser.evaluate("innerWidth<=720")) return;
+  if (!await browser.evaluate("innerWidth<=720")) {
+    await browser.until("!!document.querySelector('#header-reading-options')");
+    await browser.evaluate("if(!document.querySelector('#header-reading-options-toggle').hidden&&!document.querySelector('#header-reading-options').open)document.querySelector('#header-reading-options-toggle').click()");
+    return;
+  }
   await browser.until("!!document.querySelector('#mobile-chat-options')");
   await browser.evaluate("if(!document.querySelector('#mobile-chat-options').open)document.querySelector('#conversation-filter-shortcut').click()");
   await browser.until("document.querySelector('#mobile-chat-options').open && document.querySelector('#message-compact-toggle').getBoundingClientRect().height>0");
 }
 export async function closeReadingControls(browser) {
-  await browser.evaluate("if(document.querySelector('#mobile-chat-options')?.open)document.querySelector('#mobile-chat-options .mobile-sheet-close').click()");
+  await browser.evaluate("if(document.querySelector('#header-reading-options')?.open)document.querySelector('#header-reading-options header button').click();if(document.querySelector('#mobile-chat-options')?.open)document.querySelector('#mobile-chat-options .mobile-sheet-close').click()");
   await browser.until("!document.querySelector('#mobile-chat-options')?.open");
 }

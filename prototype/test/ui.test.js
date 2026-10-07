@@ -541,18 +541,6 @@ test("compact mode shows timestamp/sender/kind/preview per message or lane block
   assert.match(app.run("compactMetadata({author:'Unknown',kind:'tools',occurredAt:'invalid',time:'Time unknown'})"), /Time unknown/);
 });
 
-test("header focus reveals even partially clipped controls without moving the feed", () => {
-  const app=ui(), row=app.node('.conversation-header-controls'), feed=app.node('#messages');
-  row.scrollLeft=0;
-  row.getBoundingClientRect=()=>({left:100,right:400});
-  const before=feed.scrollTop;
-  row.dispatchEvent({type:'focusin',target:{getBoundingClientRect:()=>({left:300,right:402})}});
-  assert.equal(row.scrollLeft,2);
-  row.dispatchEvent({type:'focusin',target:{getBoundingClientRect:()=>({left:98,right:200})}});
-  assert.equal(row.scrollLeft,0);
-  assert.equal(feed.scrollTop,before);
-});
-
 test("compact expansion marks exactly its message until an outside click, and survives refresh", () => {
   const app=ui(), feed=app.node('#messages'), target=app.node('#boxed-message');
   seed(app,[lane('alpha',[record({recordId:'boxed'})])]);
@@ -1292,7 +1280,7 @@ test("desktop filter panels collapse independently without changing filter selec
   const header=element('header',['conversation-head']);
   const tracks=element('div',['conversation-header-controls'],{},header);
   assert.equal(computed(parseCss(css),tracks,1600).display,'grid');
-  assert.equal(computed(parseCss(css),tracks,1600)['overflow-x'],'auto');
+  assert.equal(computed(parseCss(css),tracks,1600).overflow,'visible');
   const app = ui({ compact: false });
   app.run('selectedMessageTypes = new Set(["captain"]); selectedLaneIds = new Set(["general"]);');
   app.node("#lane-panel-toggle").dispatchEvent({ type: "click" });

@@ -208,6 +208,46 @@ function moveControl(node, destination, before = null) {
   }
   destination.insertBefore(node, before);
 }
+// The shell owns both responsive placements: never duplicate reading state.
+const readingToggle = document.querySelector('#header-reading-options-toggle');
+const readingSheet = document.createElement('dialog');
+readingSheet.id = 'header-reading-options';
+readingSheet.className = 'header-reading-options';
+readingSheet.setAttribute('aria-labelledby', 'header-reading-options-title');
+readingSheet.innerHTML = '<header><h2 id="header-reading-options-title">Reading & paging</h2><button type="button" aria-label="Close reading options">Close ×</button></header><div class="reading-options-body"></div>';
+document.body.append(readingSheet);
+const readingBody = readingSheet.querySelector('.reading-options-body');
+function syncReadingLayout() {
+  const row = document.querySelector('.conversation-header-controls');
+  const header = document.querySelector('.conversation-head');
+  const overflow = desktop.matches && header.clientWidth > 0 && header.clientWidth < 950;
+  row.dataset.readingOverflow = String(overflow);
+  readingToggle.hidden = !overflow;
+  if (!overflow && readingSheet.open) readingSheet.close();
+  if (!desktop.matches) return; // Phone placements belong to chatTools below.
+  for (const selector of ['.feed-jump-controls', '.feed-pagination']) {
+    const node = document.querySelector(selector);
+    if (overflow) moveControl(node, readingBody);
+    else {
+      const anchor = placements.get(node);
+      if (anchor) { anchor.replaceWith(node); placements.delete(node); }
+    }
+  }
+}
+readingToggle.addEventListener('click', () => {
+  syncReadingLayout();
+  if (readingSheet.open) readingSheet.close();
+  else { readingSheet.showModal(); readingToggle.setAttribute('aria-expanded', 'true'); }
+});
+readingSheet.querySelector('header button').addEventListener('click', () => readingSheet.close());
+readingBody.addEventListener('click', event => {
+  if (event.target.closest('#jump-to-last-viewed, #jump-to-latest, #transcript-older, #transcript-newer')) readingSheet.close();
+}, true);
+readingSheet.addEventListener('click', event => { if (event.target === readingSheet) readingSheet.close(); });
+readingSheet.addEventListener('close', () => {
+  readingToggle.setAttribute('aria-expanded', 'false');
+  if (desktop.matches && !readingToggle.hidden && document.activeElement === document.body) readingToggle.focus();
+});
 function openMobileTools() {
   if (!toolsSheet.open) toolsSheet.showModal();
   toggle.setAttribute("aria-expanded", "true");
@@ -323,8 +363,10 @@ function syncMobileControls() {
     footer.append(document.querySelector("#review-panel-toggle"));
     toggle.setAttribute("aria-controls", "review-sidebar-region");
     syncPanel();
+    syncReadingLayout();
     return;
   }
+  syncReadingLayout();
   moveControl(document.querySelector(".primary-nav"), toolsBody);
   moveControl(document.querySelector(".source-status"), toolsBody);
   moveControl(document.querySelector("#refresh"), document.querySelector(".product-identity"));
@@ -412,6 +454,7 @@ window.addEventListener("resize", () => {
   }
 });
 syncMobileControls();
+if (window.ResizeObserver) new ResizeObserver(syncReadingLayout).observe(document.querySelector('.conversation-head'));
 
 for (const selector of ["#transcript-details", "#kind-filter-menu"]) {
   const details = document.querySelector(selector);

@@ -118,12 +118,6 @@ function syncExpandedMessageTarget() {
   if (expandedMessageTarget && (expandedMessageTarget.scope !== renderedReadingScope || compactViews.has(renderedReadingScope))) clearExpandedMessageTarget();
   for (const node of $("#messages").querySelectorAll("article.message")) node.classList?.toggle("compact-expansion-target", Boolean(expandedMessageTarget && node.dataset.recordKey === expandedMessageTarget.key));
 }
-// Capture runs before compact-line activation, so its own click cannot clear
-// the newly assigned target. Clicking within the boxed message keeps it.
-document.addEventListener("click", (event) => {
-  const article = event.target?.closest?.("article.message");
-  if (expandedMessageTarget && article?.dataset.recordKey !== expandedMessageTarget.key) clearExpandedMessageTarget();
-}, true);
 const expandedFullViews = new Set();
 const fullDetailChoices = new Map();
 function messageRecordKey(message) { return message.recordId || reviewId([message.source, message.occurredAt, message.text].join("\n")); }
@@ -2083,14 +2077,6 @@ $("#lane-filter-toggle").addEventListener("click", () => {
   setLaneFiltersExpanded($("#lane-filter-toggle").getAttribute("aria-expanded") !== "true");
   if (phoneChatFilters?.matches && $("#lane-filter-toggle").getAttribute("aria-expanded") === "true") $(mobileFilterTab === "lanes" ? "#mobile-lanes-tab" : "#mobile-kinds-tab").focus();
 });
-// Native focus need not scroll a nearly-visible button by its final few pixels.
-// Expose the whole focused control without scrolling the message pane/popovers.
-$(".conversation-header-controls").addEventListener("focusin", (event) => {
-  if (!event.target?.getBoundingClientRect) return;
-  const row = $(".conversation-header-controls"), bounds = row.getBoundingClientRect(), rect = event.target.getBoundingClientRect();
-  const delta = rect.left < bounds.left ? rect.left - bounds.left : rect.right > bounds.right ? rect.right - bounds.right : 0;
-  if (delta) row.scrollLeft = Number(row.scrollLeft || 0) + delta;
-});
 const laneShortcut = $("#conversation-filter-shortcut");
 let shortcutPreviewTimer;
 function previewLaneShortcut() {
@@ -2297,6 +2283,12 @@ function clearSearch() {
 }
 $("#transcript-search-clear").addEventListener("click", clearSearch);
 $("#message-compact-toggle")?.addEventListener("click", () => changeCompactMode(!compactViews.has(renderedReadingScope)));
+// Capture runs before compact-line activation, so its own click cannot clear
+// the newly assigned target. Clicking within the boxed message keeps it.
+document.addEventListener("click", (event) => {
+  const article = event.target?.closest?.("article.message");
+  if (expandedMessageTarget && article?.dataset.recordKey !== expandedMessageTarget.key) clearExpandedMessageTarget();
+}, true);
 $("#messages").addEventListener("toggle", (event) => {
   const article = event.target?.closest?.("article.message");
   if (article && event.target.tagName === "DETAILS") fullDetailChoices.set(JSON.stringify([renderedReadingScope, article.dataset.recordKey]), event.target.open);

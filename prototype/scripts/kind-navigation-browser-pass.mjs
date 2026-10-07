@@ -71,7 +71,11 @@ try {
     await openReadingControls(browser);
     await evaluate("document.querySelector('#message-compact-toggle').click()");
     await closeReadingControls(browser);
-    await position(439);
+    // Compact tail rows cannot be placed at the top when fewer than one
+    // viewport remains. Use a reachable cursor, then exercise the last target
+    // after the first kind jump has expanded the full records.
+    await position(411);
+    await jump("captain", 1, 420);
     await jump("captain", 1, 440);
     assert.equal(await evaluate("document.querySelector('button[data-kind-jump=captain][data-kind-step=\"1\"]').disabled"), true, "no later captain message exists");
     await jump("captain", -1, 420);

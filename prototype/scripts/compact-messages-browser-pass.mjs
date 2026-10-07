@@ -149,12 +149,45 @@ try {
       const centers=await evaluate("[...document.querySelectorAll('.conversation-head-identity,.transcript-search,.message-font-size,.feed-jump-controls,.feed-pagination,.conversation-head-actions')].filter(n=>n.closest('.conversation-head')).map(n=>{const r=n.getBoundingClientRect();return r.top+r.height/2})");
       assert.ok(Math.max(...centers)-Math.min(...centers)<8,'all controls occupy one desktop header row');
       await command('Emulation.setDeviceMetricsOverride',{width:800,height,deviceScaleFactor:1,mobile:false});
-      for(const id of ['message-compact-toggle','jump-to-last-viewed','jump-to-latest']) {
-        if(await evaluate(`document.querySelector('#${id}').disabled`))continue;
-        await evaluate(`document.querySelector('#${id}').focus()`);
-        assert.ok(await evaluate(`(() => {const a=document.querySelector('#${id}').getBoundingClientRect(),b=document.querySelector('.conversation-header-controls').getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;})()`),'native keyboard focus exposes narrow-header reading controls');
+      await until("!document.querySelector('#header-reading-options-toggle').hidden && !!document.querySelector('.feed-jump-controls').closest('#header-reading-options')");
+      await evaluate("document.querySelector('#conversation-filter-shortcut').focus()");
+      // Prime native keyboard modality; programmatic focus after a pointer action
+      // does not promise :focus-visible. Shift+Tab/Tab returns to the title.
+      for(const modifiers of [8,0]) {
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,modifiers});
+        await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9,modifiers});
       }
-      assert.equal(await evaluate("!!document.querySelector('#transcript-details').closest('.conversation-header-controls')"),false,'source popup stays outside the scroller');
+      const seen=[];
+      for(let i=0;i<12;i++) {
+        const active=await evaluate("(() => {const n=document.activeElement,r=n.getBoundingClientRect(),s=getComputedStyle(n);return {id:n.id,inHeader:!!n.closest('.conversation-head'),left:r.left,right:r.right,top:r.top,outline:s.outlineStyle};})()");
+        if(!active.inHeader)break;
+        assert.ok(active.left>=0&&active.right<=800&&active.outline!=='none',JSON.stringify(active));
+        seen.push(active);
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+      }
+      assert.deepEqual(seen.map(n=>n.id).filter(Boolean),['conversation-filter-shortcut','transcript-search','font-size-decrease','font-size-increase','header-reading-options-toggle','context-toggle']);
+      assert.ok(seen.every((n,i)=>!i||n.left>=seen[i-1].left),'header tab order matches visual left-to-right order');
+      assert.equal(await evaluate("document.querySelectorAll('[tabindex]').length===document.querySelectorAll('[tabindex=\"0\"],[tabindex=\"-1\"]').length"),true,'no positive tabindex');
+      await evaluate("document.querySelector('#header-reading-options-toggle').focus()");
+      await enter();
+      await until("document.querySelector('#header-reading-options').open");
+      assert.equal(await evaluate("document.querySelector('#header-reading-options-toggle').getAttribute('aria-expanded')"),'true');
+      assert.equal(await evaluate("!!document.querySelector('.feed-pagination').closest('#header-reading-options')"),true);
+      const popupOrder=await evaluate("[...document.querySelector('#header-reading-options').querySelectorAll('button:not(:disabled)')].map(n=>n.id||'close')");
+      for(const id of popupOrder) {
+        assert.equal(await evaluate("document.activeElement.id||'close'"),id);
+        assert.ok(await evaluate("(() => {const a=document.activeElement.getBoundingClientRect(),b=document.querySelector('#header-reading-options').getBoundingClientRect();return a.left>=b.left&&a.right<=b.right&&getComputedStyle(document.activeElement).outlineStyle!=='none';})()"));
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+        await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+      }
+      assert.equal(await evaluate("document.activeElement.id||'close'"),popupOrder[0],'native modal traps focus');
+      await screenshot('compact-narrow-options-800x900.png');
+      await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await until("!document.querySelector('#header-reading-options').open && document.querySelector('#header-reading-options-toggle').getAttribute('aria-expanded')==='false'");
+      assert.equal(await evaluate('document.activeElement.id'),'header-reading-options-toggle');
+      assert.equal(await evaluate("!!document.querySelector('#transcript-details').closest('.conversation-header-controls')"),false,'source popup stays outside header tracks');
       await evaluate("document.querySelector('#transcript-details summary').click()");
       assert.ok(await evaluate("document.querySelector('.transcript-coverage-popover').getBoundingClientRect().height>0"));
       await screenshot('compact-narrow-header-800x900.png');
@@ -163,7 +196,7 @@ try {
       await openReadingControls(browser);
       await evaluate("document.querySelector('#message-compact-toggle').dataset.syntheticIdentity='same-node'");
       await command('Emulation.setDeviceMetricsOverride',{width:800,height,deviceScaleFactor:1,mobile:false});
-      await until("!!document.querySelector('#message-compact-toggle').closest('.conversation-head')");
+      await until("!!document.querySelector('#message-compact-toggle').closest('#header-reading-options')");
       assert.equal(await evaluate("document.querySelector('#message-compact-toggle').dataset.syntheticIdentity"),'same-node');
       assert.equal(await evaluate("document.querySelector('#mobile-chat-options').open"),false);
       await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
