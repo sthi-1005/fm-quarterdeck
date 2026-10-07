@@ -1432,7 +1432,8 @@ test("compact desktop and phone quota previews keep both horizons, reset ticker,
   for (const id of ["#quota-strip", "#mobile-quota-sheet-content"]) {
     const preview = app.node(id).innerHTML;
     assert.match(preview, />5h/);
-    assert.match(preview, />weekly/);
+    assert.match(preview, />7d/);
+    assert.match(preview, /title="Gemini weekly"/);
     assert.match(preview, /24%/);
     assert.match(preview, /70%/);
     assert.match(preview, / · <span class="quota-reset-full">[0-9]+[dhm]/);
