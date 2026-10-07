@@ -2,12 +2,27 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { quotaAcceptanceReading } from "../scripts/quota-acceptance-fixture.mjs";
 const window = {};
 vm.runInNewContext(await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8"), { window });
 const { project, summarize, paceBand } = window.quotaViewModel;
 const now = Date.parse("2030-01-01T00:00:00Z");
 const scope = (percentRemaining, status = "through_reset") => ({ scope: "all", percentRemaining, boundedBy: ["w"], limitingWindowIds: ["w"], runway: { status, seconds: 600, exhaustedAt: "2030-01-01T00:10:00Z" } });
 const provider = (name, percent, extra = {}) => ({ provider: name, status: "fresh", scopes: [scope(percent)], windows: [{ id: "w", label: "week", percentRemaining: percent, resetsAt: "2030-01-02T00:00:00Z", pace: { status: "behind", reservePercentPoints: percent - 50 } }], ...extra });
+test("screenshot fixtures retain all sanitized providers and distinct stale/exhaustion states", () => {
+  const normal = quotaAcceptanceReading();
+  assert.equal(normal.providers.length, 18);
+  assert.equal(normal.providers.filter(p => p.windows.length).length, 3);
+  assert.equal(normal.providers.filter(p => p.status === "error").length, 1);
+  assert.equal(normal.providers.filter(p => p.status === "auth_required").length, 13);
+  assert.equal(normal.providers.find(p => p.provider === "grok").windows[0].durationSeconds, 604800);
+  assert.equal(quotaAcceptanceReading("provider-stale").providers[0].stale, true);
+  assert.equal(quotaAcceptanceReading("whole-stale").stale, true);
+  const statuses = quotaAcceptanceReading("exhaustion").providers.flatMap(p => p.scopes.map(s => s.runway.status));
+  assert.ok(statuses.includes("projected_exhaustion")); assert.ok(statuses.includes("exhausted_now"));
+  assert.equal(quotaAcceptanceReading("unavailable").readAt, null);
+});
+
 test("summary selects valid fresh scope evidence, counts unknown and reports stable ties", () => {
   const result = summarize(project({ providers: [provider("grok", 6), provider("codex", 98), provider("claude", 6), provider("agy", 1, { stale: true }), provider("partial", 0, { status: "partial" }), provider("invalid", 101)] }, { now, sortMode: "source" }), now);
   assert.equal(result.tightest.provider, "grok");

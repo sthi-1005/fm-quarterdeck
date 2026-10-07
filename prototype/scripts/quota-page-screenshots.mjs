@@ -37,6 +37,15 @@ try {
         const name = `after-${state}-${width}.png`;
         await writeFile(path.join(output, name), Buffer.from(image.data, "base64"));
         evidence.push({ name, width, height, state, ...geometry });
+        if (!["loading", "unavailable"].includes(state)) {
+          for (const [section, selector] of [["cards", "#quota-providers article"], ["tray", ".quota-unconfigured-tray"]]) {
+            await browser.evaluate(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: "start" })`);
+            const sectionImage = await browser.command("Page.captureScreenshot", { format: "png" });
+            const sectionName = `after-${state}-${width}-${section}.png`;
+            await writeFile(path.join(output, sectionName), Buffer.from(sectionImage.data, "base64"));
+            evidence.push({ name: sectionName, width, height, state, section, ...geometry });
+          }
+        }
       }
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }

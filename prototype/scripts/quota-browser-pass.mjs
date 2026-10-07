@@ -258,7 +258,7 @@ try {
   assert.ok(desktopQuotaView.pacingNotes >= 1, "pacing notes comparing consumption to elapsed-time pacing rendered");
   assert.ok(desktopQuotaView.unconfigured >= 2, "inactive providers grouped into unconfigured tray");
   assert.ok(desktopQuotaView.accordions.some(a => a.provider === "grok" && a.summary.includes("Credits") && a.summary.includes("Build")), "both constrained provider windows remain visible in the summary");
-  assert.ok(desktopQuotaView.accordions.some(a => a.provider === "grok" && a.summary.includes("limit 7d")), "only the source-named binding window is called limiting");
+  assert.ok(desktopQuotaView.accordions.some(a => a.provider === "grok" && a.summary.includes("limit Credits")), "only the source-named binding window is called limiting");
   assert.equal(await evalJs('document.querySelectorAll(".quota-family-identity .provider-name").length'), 0, "provider name is not repeated in the monogram badge");
   assert.equal(await evalJs('document.querySelector("#quota-view [data-provider=agy] h2").textContent'), "AGY");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family").length'), 2, "full page separates proven AGY scopes");

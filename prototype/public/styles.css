@@ -739,6 +739,10 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .quota-family-band[data-kind="deficit"] { background: #c47c12; }
 .quota-family-meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
 .quota-family-meta .quota-signal { font-weight: 650; }
+.quota-family-page .quota-signal[data-status="behind"] { color: var(--accent); background: var(--accent-soft); }
+.quota-family-page .quota-signal[data-status="ahead"] { color: var(--amber); background: #fdf3e7; }
+/* Solid reserve bands keep non-text contrast; alpha on white falls below 3:1. */
+.quota-summary-tile strong { margin-right: 4px; }
 .quota-limit-tag { display: inline-block; margin-left: 4px; font-size: 10px; letter-spacing: .04em; color: var(--amber); border: 1px solid #e6c48f; background: #fdf3e7; border-radius: 4px; padding: 0 4px; }
 .quota-card-stale .quota-family-fill { background: var(--accent); background-image: repeating-linear-gradient(135deg, transparent 0 4px, #ffffff18 4px 7px); }
 .quota-card-stale .quota-effective { color: var(--muted); }

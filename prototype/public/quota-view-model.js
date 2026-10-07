@@ -169,10 +169,14 @@ window.quotaViewModel = (() => {
     let unknown = 0;
     for (const provider of projection.detail || []) {
       const fresh = !provider.stale && provider.status === "fresh";
+      const labelFor = (window) => {
+        const family = groups(provider).find(f => f.windows.includes(window));
+        return family ? windowLabels(family)[family.windows.indexOf(window)] : windowLabel(window.label);
+      };
       for (const scope of provider.scopes || []) {
         if (fresh && valid(scope.percentRemaining)) {
           const limit = (scope.limitingWindowIds || []).map((id) => provider.windows.find((w) => w.id === id)).find(Boolean) || null;
-          known.push({ provider: provider.provider, scope: scope.scope, percentRemaining: scope.percentRemaining, limit });
+          known.push({ provider: provider.provider, scope: scope.scope, percentRemaining: scope.percentRemaining, limit, limitLabel: limit ? labelFor(limit) : null });
         } else unknown++;
         runway.total++;
         const status = fresh && ["through_reset", "projected_exhaustion", "exhausted_now"].includes(scope.runway?.status) ? scope.runway.status : "unknown";
@@ -183,7 +187,7 @@ window.quotaViewModel = (() => {
       // reset timestamps. Individually stale providers are otherwise excluded.
       if (fresh || projection.wholeStale) for (const window of provider.windows || []) {
         const time = Date.parse(window.resetsAt);
-        if (Number.isFinite(time) && time > now) resets.push({ provider: provider.provider, window, time, captured: projection.wholeStale });
+        if (Number.isFinite(time) && time > now) resets.push({ provider: provider.provider, window, label: labelFor(window), time, captured: projection.wholeStale });
       }
     }
     const winner = (direction) => {

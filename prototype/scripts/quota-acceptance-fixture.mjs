@@ -7,7 +7,8 @@ const scope = (scope, percent, ids, runway = "through_reset", reserve = null) =>
   pace: { status: reserve === null ? "unknown" : reserve < 0 ? "ahead" : "behind", worstReservePercentPoints: reserve },
   runway: { status: runway, usableRunwaySeconds: runway === "projected_exhaustion" ? 600 : null, projectedExhaustedAt: runway === "projected_exhaustion" ? "2026-09-25T05:00:00.000Z" : null } });
 const provider = (provider, scopes, windows) => ({ provider, state: { status: "fresh", stale: false, authStatus: "usable", refreshedAt: quotaCaptureTime, reused: true }, quotaSemantics: { status: "known", effectiveAvailability: scopes }, windows });
-const weekly = (id, label, percent, reserve) => ({ id, label, kind: "weekly", percentRemaining: percent, startsAt: "2026-09-23T22:52:52.000Z", resetsAt: "2026-09-30T22:52:52.000Z", pace: { status: reserve === null ? "unknown" : reserve < 0 ? "ahead" : "behind", reservePercentPoints: reserve } });
+const weekly = (id, label, percent, reserve) => ({ id, label, kind: "weekly", percentRemaining: percent, startsAt: "2026-09-23T22:52:52.000Z", resetsAt: "2026-09-30T22:52:52.000Z", pace: { status: reserve === null ? "unknown" : reserve < 0 ? "ahead" : "behind", reservePercentPoints: reserve, cycleBasis: "starts_at_resets_at", cycleSeconds: 604800 } });
+const inactive = (provider, status) => ({ provider, state: { status }, quotaSemantics: { status: "unknown", effectiveAvailability: [] }, windows: [] });
 export function quotaAcceptanceReading(state = "normal") {
   if (state === "unavailable") return { providers: [], readAt: null, stale: false, error: "quota-axi is not installed" };
   const raw = { schemaVersion: 5, providers: [
@@ -19,9 +20,9 @@ export function quotaAcceptanceReading(state = "normal") {
       { id: "claude_gpt_5h", label: "Claude/GPT 5-hour", kind: "session", percentRemaining: 100, resetsAt: "2026-09-25T09:51:35.000Z", pace: { status: "unknown" } },
       { id: "claude_gpt_weekly", label: "Claude/GPT weekly", kind: "weekly", percentRemaining: 100, resetsAt: "2026-10-02T04:51:35.000Z", pace: { status: "unknown" } }
     ]),
-    { provider: "cursor", state: { status: "error" }, windows: [] },
-    { provider: "copilot", state: { status: "fresh" }, windows: [] },
-    ...["claude", "commandcode", "kimi", "zai", "alibaba", "opencode_go", "minimax", "mimo", "deepseek", "openrouter", "elevenlabs", "devin", "muse"].map(provider => ({ provider, state: { status: "auth_required" }, windows: [] }))
+    inactive("cursor", "error"),
+    inactive("copilot", "fresh"),
+    ...["claude", "commandcode", "kimi", "zai", "alibaba", "opencode-go", "minimax", "mimo", "deepseek", "openrouter", "elevenlabs", "devin", "muse"].map(provider => inactive(provider, "auth_required"))
   ] };
   if (state === "provider-stale") raw.providers[0].state.stale = true;
   if (state === "exhaustion") {
