@@ -25,12 +25,21 @@ pickNotice.hidden = true;
 pickNotice.setAttribute?.("role", "status");
 pickNotice.innerHTML = '<span>Tap a place to attach your message</span><button type="button">Cancel</button>';
 document.body.append(pickNotice);
+// Phone width keeps Message/Review tabs; desktop shows Sent over Queued with no tabs.
+function reviewHistoryTab() { return Boolean(phoneReview?.matches) && activeReviewTab === "review"; }
 function setReviewTab(tab) {
   activeReviewTab = tab;
   const annotation = tab === "annotation";
-  el("review-select-location")?.setAttribute("aria-pressed", String(annotation && Boolean(phoneReview?.matches)));
-  el("review-panel").setAttribute("data-review-tab", annotation ? "annotation" : sentOpen ? "review" : "conversation");
+  const phone = Boolean(phoneReview?.matches);
+  for (const [id, value] of [["review-conversation-tab", "conversation"], ["review-annotation-tab", "annotation"], ["review-history-tab", "review"]]) {
+    const selectedTab = tab === value && !(phone && value === "annotation");
+    el(id)?.setAttribute("aria-selected", String(selectedTab));
+    el(id)?.setAttribute("tabindex", selectedTab ? "0" : "-1");
+  }
+  el("review-select-location")?.setAttribute("aria-pressed", String(annotation && phone));
+  el("review-panel").setAttribute("data-review-tab", phone ? tab : annotation ? "annotation" : sentOpen ? "review" : "conversation");
   syncReviewScrollLock();
+  el("review-phone-thread").hidden = !phone || tab !== "review";
 }
 function endPicking() {
   pickingRegion = false;
@@ -179,7 +188,7 @@ function syncReviewViewport() {
   root.style.setProperty("--review-nav-space", window.innerHeight - height - (viewport?.offsetTop || 0) > 120 ? "0px" : "calc(72px + env(safe-area-inset-bottom, 0px))");
 }
 function syncReviewScrollLock() {
-  const lock = Boolean(phoneReview?.matches && !el("review-panel").hidden && sentOpen && activeReviewTab !== "annotation");
+  const lock = Boolean(phoneReview?.matches && !el("review-panel").hidden && activeReviewTab === "review");
   if (lock && bodyOverflowBeforeReview === null) {
     bodyOverflowBeforeReview = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -263,15 +272,17 @@ function update() {
   el("review-queue").textContent = "Queue";
   el("review-queue").setAttribute("aria-label", `${queueLabel} (Enter)`);
   el("review-context").textContent = `Version ${config.version.slice(0, 12)} · ${config.delivery === "lavish" ? `Lavish session ${config.sessionId}` : config.intakeReady ? "Firstmate inbox intake" : "Local receipt · Firstmate intake unavailable"}`;
-  const sendable = queue.length || retryBatches.length || el("review-message").value.trim();
+  const sendable = queue.length || retryBatches.length || (!reviewHistoryTab() && el("review-message").value.trim());
   el("review-send").disabled = !sendable || pending || !config.ready;
   el("review-end").disabled = pending || !config.ready || !sendable;
   el("review-queue").disabled = false;
   el("review-pick").hidden = !hovered || Boolean(desktopComposer?.matches);
   const thread = el("review-thread");
   const sentList = el("review-sent-list");
+  const phoneThread = el("review-phone-thread");
   thread.replaceChildren();
   sentList.replaceChildren();
+  phoneThread.replaceChildren();
   el("review-sent-count").textContent = String(sent.length);
   el("review-sent-summary").setAttribute("aria-label", `Sent batches, ${sent.length}`);
   el("review-queued-count").textContent = String(queuedCount);
@@ -338,7 +349,7 @@ function update() {
     }
     return card;
   }
-  for (const batch of sent) {
+  function renderSentBatch(batch) {
     const details = document.createElement("details");
     details.className = "review-batch";
     details.open = openBatches.has(batch.id);
@@ -366,12 +377,23 @@ function update() {
       details.append(retry);
     }
     details.addEventListener("toggle", () => { if (details.open) openBatches.add(batch.id); else openBatches.delete(batch.id); });
-    sentList.append(details);
+    return details;
   }
-  // Queued notes are always listed; their count lives in the section heading.
-  for (const [index, entry] of queue.entries()) thread.append(renderNote(entry, `queued:${index}`, index));
-  for (const [captured, title] of [[inFlight, "Sending"], ...retryBatches.map((batch) => [batch, "Retry needed"])]) {
-    if (!captured) continue;
+  function renderQueuedBatch() {
+    const details = document.createElement("details");
+    details.className = "review-batch";
+    details.open = openBatches.has(batchId || "draft");
+    const summary = document.createElement("summary");
+    summary.textContent = `Queued batch · ${queue.length} ${queue.length === 1 ? "note" : "notes"}`;
+    details.append(summary);
+    for (const [index, entry] of queue.entries()) details.append(renderNote(entry, `queued:${index}`, index));
+    details.addEventListener("toggle", () => {
+      const key = batchId || "draft";
+      if (details.open) openBatches.add(key); else openBatches.delete(key);
+    });
+    return details;
+  }
+  function renderCaptured(captured, title) {
     const details = document.createElement("details");
     details.className = "review-batch";
     details.open = openBatches.has(captured.id);
@@ -407,8 +429,17 @@ function update() {
       }
     }
     details.addEventListener("toggle", () => { if (details.open) openBatches.add(captured.id); else openBatches.delete(captured.id); });
-    thread.append(details);
+    return details;
   }
+  const capturedBatches = [[inFlight, "Sending"], ...retryBatches.map((batch) => [batch, "Retry needed"])].filter(([captured]) => captured);
+  // Desktop: Sent list over an always-listed queue (count lives in the section heading).
+  for (const batch of sent) sentList.append(renderSentBatch(batch));
+  for (const [index, entry] of queue.entries()) thread.append(renderNote(entry, `queued:${index}`, index));
+  for (const [captured, title] of capturedBatches) thread.append(renderCaptured(captured, title));
+  // Phone: the Review tab lists sent batches, the queued batch, then in-flight/retry batches.
+  for (const batch of sent) phoneThread.append(renderSentBatch(batch));
+  if (queue.length) phoneThread.append(renderQueuedBatch());
+  for (const [captured, title] of capturedBatches) phoneThread.append(renderCaptured(captured, title));
 }
 function selectRegion(node, point) {
   const next = regionFor(node);
@@ -514,6 +545,11 @@ function placeComposer() {
   resizeMessage();
 }
 function placeSelectionAction() {
+  const action = el("review-select-location");
+  const destination = phoneReview?.matches ? document.querySelector(".review-header-actions") : document.querySelector(".review-section-head");
+  if (action && destination?.insertBefore && action.parentElement !== destination) {
+    if (phoneReview?.matches) destination.insertBefore(action, destination.firstChild); else destination.append(action);
+  }
   setReviewTab(activeReviewTab);
   updateSelectionAction();
 }
@@ -544,6 +580,28 @@ el("review-close").addEventListener("click", () => {
   } else closeReview();
 });
 el("review-form-close").addEventListener("click", closeReview);
+el("review-conversation-tab")?.addEventListener("click", () => {
+  endPicking();
+  returnToArmed = false;
+  selected = null;
+  selectedNode = null;
+  setReviewTab("conversation");
+  positionHighlight();
+  update();
+});
+el("review-annotation-tab")?.addEventListener("click", () => { if (phoneReview?.matches) document.activeElement?.blur?.(); setReviewTab("annotation"); update(); });
+el("review-history-tab")?.addEventListener("click", () => { setReviewTab("review"); update(); void refreshStatuses(); });
+const reviewTabIds = ["review-conversation-tab", "review-annotation-tab", "review-history-tab"];
+for (const id of reviewTabIds) {
+  el(id)?.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const tabs = reviewTabIds.filter((tabId) => tabId !== "review-annotation-tab");
+    const next = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs.at(-1)
+      : tabs[(tabs.indexOf(id) + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+    el(next).click(); el(next).focus();
+  });
+}
 el("review-sent")?.addEventListener("toggle", () => {
   sentOpen = el("review-sent").open;
   setReviewTab(activeReviewTab);
@@ -615,7 +673,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (el("review-panel").hidden || !(el("review-panel").contains(event.target) || el("desktop-review-footer")?.contains(event.target))) return;
-  if (!window.matchMedia("(min-width: 721px)").matches && sentOpen && activeReviewTab !== "annotation") return;
+  if (!window.matchMedia("(min-width: 721px)").matches && activeReviewTab === "review") return;
   event.preventDefault();
   closeReview();
 });
@@ -688,7 +746,7 @@ function enqueue() {
 el("review-form").addEventListener("submit", (event) => { event.preventDefault(); enqueue(); });
 async function send(end) {
   if (pending || !config.ready) return;
-  if (el("review-message").value.trim() && (!queue.length || end) && !enqueue()) return;
+  if (!reviewHistoryTab() && el("review-message").value.trim() && (!queue.length || end) && !enqueue()) return;
   if (!queue.length && retryBatches.length && !end) { await submitBatch(retryBatches[0]); return; }
   if (!queue.length && (!end || !retryBatches.length)) return;
   // Capture the entire persisted board at the action cutoff, before any await.
