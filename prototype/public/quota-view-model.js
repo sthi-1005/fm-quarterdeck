@@ -169,8 +169,9 @@ window.quotaViewModel = (() => {
     let unknown = 0;
     for (const provider of projection.detail || []) {
       const fresh = !provider.stale && provider.status === "fresh";
+      const familyFor = (window) => groups(provider).find(f => f.windows.includes(window));
       const labelFor = (window) => {
-        const family = groups(provider).find(f => f.windows.includes(window));
+        const family = familyFor(window);
         return family ? windowLabels(family)[family.windows.indexOf(window)] : windowLabel(window.label);
       };
       for (const scope of provider.scopes || []) {
@@ -187,7 +188,7 @@ window.quotaViewModel = (() => {
       // reset timestamps. Individually stale providers are otherwise excluded.
       if (fresh || projection.wholeStale) for (const window of provider.windows || []) {
         const time = Date.parse(window.resetsAt);
-        if (Number.isFinite(time) && time > now) resets.push({ provider: provider.provider, window, label: labelFor(window), time, captured: projection.wholeStale });
+        if (Number.isFinite(time) && time > now) resets.push({ provider: provider.provider, scope: familyFor(window)?.scope || null, window, label: labelFor(window), time, captured: projection.wholeStale });
       }
     }
     const winner = (direction) => {

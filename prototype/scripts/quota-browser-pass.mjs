@@ -251,7 +251,9 @@ try {
   assert.ok(await evalJs('document.querySelector(".quota-summary [data-quota-key=tightest]").textContent.includes("12%") && document.querySelector(".quota-summary [data-quota-key=tightest] [data-quota-target=grok]") !== null'), "tightest uses Grok effective 12%");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view .quota-family-band").length'), 3, "bands require both source marker and reserve");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family-band").length'), 0, "AGY marker-only evidence never gets a band");
-  await evalJs('document.querySelector(".quota-summary [data-quota-key=tightest] a").click()');
+  await evalJs('document.querySelector(".quota-summary [data-quota-key=tightest] a").focus()');
+  await cmd("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+  await cmd("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   assert.equal(await evalJs('document.activeElement.closest("article")?.dataset.provider'), "grok", "summary activation focuses provider heading");
   assert.equal(await evalJs('document.activeElement.tagName'), "H2");
   assert.ok(desktopQuotaView.limitingBadges >= 1, "limiting window badges rendered");
@@ -286,8 +288,13 @@ try {
     assert.equal(await evalJs('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")'), mode);
     assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), String(mode === "runway"));
   }
+  await evalJs("window.quotaReloadPending = true");
   await cmd("Page.reload");
-  await wait(250);
+  for (let i = 0; i < 100; i++) {
+    if (await evalJs('!window.quotaReloadPending && document.readyState === "complete" && document.querySelector("#quota-providers article")')) break;
+    await wait(50);
+  }
+  assert.equal(await evalJs('!window.quotaReloadPending && document.readyState === "complete"'), true, "checks the replaced document after reload");
   assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), "true", "shared preference persists across reload");
   await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=left]").click(); if (localStorage.getItem("fm-agentos-sidebar-quota-sort.v1") !== "lowest") document.querySelector("#sidebar-quota-sort [data-sort=left]").click()');
   assert.equal(await evalJs('document.querySelector("#quota-sort-lowest").getAttribute("aria-pressed")'), "true", "sidebar changes page control");
@@ -325,6 +332,9 @@ try {
     const fit = await evalJs(`(() => ({ overflow: document.documentElement.scrollWidth > innerWidth,
       rows: [...document.querySelectorAll("#quota-view .quota-family-row")].every(row => row.scrollWidth <= row.clientWidth + 1 && row.querySelector(".quota-family-meter").getBoundingClientRect().width >= 20) }))()`);
     assert.ok(fit.rows && !fit.overflow, `${width}px quota rows fit without clipping: ${JSON.stringify(fit)}`);
+    await evalJs('document.querySelector(".quota-summary [data-quota-key=tightest] a").click()');
+    assert.equal(await evalJs('document.activeElement.tagName'), "H2");
+    assert.ok(await evalJs('document.activeElement.getBoundingClientRect().top >= document.querySelector(".product-identity").getBoundingClientRect().bottom'), `${width}px target heading stays below the fixed phone header`);
   }
   await cmd("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   const mobileViewCheck = await evalJs(`(() => {
