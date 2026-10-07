@@ -215,6 +215,30 @@ test("close and desktop Escape preserve unsent draft, queue, receipt history and
   assert.equal(restored.state().sent.length, 2);
 });
 
+test("one phone Annotate activation switches mode and arms page selection", () => {
+  for (const tab of ["conversation", "review"]) {
+    const p = harness().page();
+    p.setDesktop(false);
+    p.element("review-panel-toggle").click();
+    if (tab === "review") p.element("review-history-tab").click();
+    p.element("review-message").value = "Keep this draft";
+    p.element("review-select-location").click();
+    assert.equal(vm.runInContext("activeReviewTab", p.context), "annotation", tab);
+    assert.equal(vm.runInContext("pickingRegion", p.context), true, tab);
+    assert.equal(p.element("review-select-location").textContent, "Select on page", tab);
+    assert.equal(p.element("review-panel")["data-picking"], "", tab);
+    assert.equal(p.body.style.overflow, "scroll", tab);
+    assert.equal(p.element("review-message").value, "Keep this draft", tab);
+    p.element("review-select-location").click();
+    assert.equal(vm.runInContext("pickingRegion", p.context), false, "next activation cancels");
+  }
+  const desktop = harness().page();
+  desktop.element("review-panel-toggle").click();
+  desktop.element("review-select-location").click();
+  assert.equal(vm.runInContext("activeReviewTab", desktop.context), "conversation", "desktop tab unchanged");
+  assert.equal(vm.runInContext("pickingRegion", desktop.context), true);
+});
+
 test("phone scroll lock belongs only to Review, across mode switches and closing", () => {
   const p = harness().page();
   p.setDesktop(false);

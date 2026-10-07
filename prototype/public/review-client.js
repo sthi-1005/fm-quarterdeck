@@ -624,9 +624,8 @@ function updateSelectionAction() {
 el("review-select-location")?.addEventListener("click", () => {
   if (phoneReview?.matches && activeReviewTab !== "annotation") {
     document.activeElement?.blur?.();
-    setReviewTab("annotation"); update();
-    el("review-select-location").focus();
-    return;
+    // Switching the phone pane must not consume the activation that arms selection.
+    setReviewTab("annotation");
   }
   if (selected) { selected = null; selectedNode = null; positionHighlight(); }
   else if (pickingRegion) { endPicking(); update(); return; }
