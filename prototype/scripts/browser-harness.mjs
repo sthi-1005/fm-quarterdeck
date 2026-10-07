@@ -130,3 +130,15 @@ export async function openBrowser() {
     return { command, evaluate, until, close, onEvent: (fn) => listeners.add(fn) };
   } catch (error) { await close(); throw error; }
 }
+
+// Reading controls use the same nodes in the desktop header and phone options.
+export async function openReadingControls(browser) {
+  if (!await browser.evaluate("innerWidth<=720")) return;
+  await browser.until("!!document.querySelector('#mobile-chat-options')");
+  await browser.evaluate("if(!document.querySelector('#mobile-chat-options').open)document.querySelector('#conversation-filter-shortcut').click()");
+  await browser.until("document.querySelector('#mobile-chat-options').open && document.querySelector('#message-compact-toggle').getBoundingClientRect().height>0");
+}
+export async function closeReadingControls(browser) {
+  await browser.evaluate("if(document.querySelector('#mobile-chat-options')?.open)document.querySelector('#mobile-chat-options .mobile-sheet-close').click()");
+  await browser.until("!document.querySelector('#mobile-chat-options')?.open");
+}

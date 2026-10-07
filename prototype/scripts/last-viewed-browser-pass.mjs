@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createServer, loadFirstmateHome } from "../server.js";
-import { openBrowser } from "./browser-harness.mjs";
+import { openBrowser, openReadingControls } from "./browser-harness.mjs";
 
 const scratch = await mkdtemp(path.join(os.tmpdir(), "quarterdeck-last-viewed-"));
 await mkdir(path.join(scratch, "data"));
@@ -66,6 +66,9 @@ try {
     await evaluate("document.querySelector('#refresh').click()");
     await until("!document.querySelector('#refresh').disabled");
     assert.equal(await evaluate("document.querySelector('#messages').scrollTop"), latestTop, "refresh does not disturb current position");
+    await openReadingControls(browser);
+    const readingGeometry = await evaluate("[...document.querySelectorAll('.feed-jump-controls button')].map(n=>{const r=n.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height}})");
+    for(const rect of readingGeometry)assert.ok(rect.left>=0&&rect.right<=width&&rect.height>=44);
     await evaluate("document.querySelector('#jump-to-last-viewed').focus()");
     await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
     await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
@@ -84,9 +87,7 @@ try {
     assert.equal(geometry.highlighted, true);
     assert.deepEqual(geometry.expanded, ["false", "true", "false"], "lane disclosure defaults are unchanged");
     assert.equal(geometry.overflow, false);
-    for (const rect of geometry.buttons) {
-      assert.ok(rect.left >= geometry.feed.left && rect.right <= geometry.feed.right && rect.bottom <= geometry.feed.bottom, JSON.stringify(geometry));
-    }
+    assert.equal(await evaluate("!!document.querySelector('.feed-jump-controls').closest(innerWidth<=720?'#mobile-chat-options':'.conversation-head')"),true);
     assert.equal(await shown(), false, "checkpoint is disabled at the returned message, not hidden");
     if (process.env.SCREENSHOT_DIR) {
       await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
@@ -94,16 +95,19 @@ try {
       await writeFile(path.join(process.env.SCREENSHOT_DIR, `last-viewed-${width}x${height}.png`), Buffer.from(data, "base64"));
     }
     await until("!document.querySelector('.last-viewed-highlight')");
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#jump-to-latest').click()");
     assert.ok(await evaluate("Math.abs(document.querySelector('#messages').scrollHeight - document.querySelector('#messages').scrollTop - document.querySelector('#messages').clientHeight) < 2"), "Jump to latest reaches the newest page bottom");
     await until("!document.querySelector('#jump-to-last-viewed').disabled");
     assert.match(await evaluate("document.querySelector('#transcript-page').textContent"), /401–451 of 451/, "latest selects the newest loaded page");
     assert.equal(await shown(), true, "earlier checkpoint is available after the scroll event");
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#jump-to-last-viewed').click()");
     await evaluate("window.dispatchEvent(new Event('blur'))");
     const beforeReload = await checkpoint();
     await command("Page.reload");
     await until("document.querySelector('#jump-to-last-viewed') && !document.querySelector('#jump-to-last-viewed').disabled");
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#jump-to-last-viewed').click()");
     assert.equal(await evaluate("document.activeElement.dataset.recordKey"), beforeReload.key, "reload restores the departure checkpoint from local storage");
     await evaluate("document.querySelector('#transcript-search').value='update 30:'; document.querySelector('#transcript-search').dispatchEvent(new Event('input', {bubbles:true}))");

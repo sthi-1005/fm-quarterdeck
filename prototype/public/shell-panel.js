@@ -168,7 +168,7 @@ document.body.append(chatSheet);
 const chatTools = chatSheet.querySelector(".mobile-chat-body");
 chatTools.className = "mobile-chat-body mobile-chat-tools";
 chatTools.addEventListener("click", (event) => {
-  if (event.target.closest("#context-toggle")) chatSheet.close();
+  if (event.target.closest("#context-toggle, #jump-to-last-viewed, #jump-to-latest")) chatSheet.close();
 }, true);
 const chatButton = mobileDock.querySelector('[data-mobile-view="conversations"]');
 const shortcutButton = () => document.querySelector("#conversation-filter-shortcut");
@@ -178,6 +178,7 @@ function openChatOptions() {
   // Rehome the same nodes immediately before opening, never duplicate their state.
   moveControl(document.querySelector(".conversation-head-actions"), chatTools);
   moveControl(document.querySelector(".feed-pagination"), chatTools);
+  moveControl(document.querySelector(".feed-jump-controls"), chatTools);
   if (!chatSheet.open) {
     chatSheet.showModal();
     shortcutButton()?.setAttribute("aria-expanded", "true");
@@ -338,6 +339,7 @@ function syncMobileControls() {
   document.querySelector("#review-send").textContent = "Send batch";
   moveControl(document.querySelector(".conversation-head-actions"), chatTools);
   moveControl(document.querySelector(".feed-pagination"), chatTools);
+  moveControl(document.querySelector(".feed-jump-controls"), chatTools);
   moveControl(document.querySelector(".preview-chat-control"), chatTools);
   toggle.setAttribute("aria-controls", "mobile-tools");
   toggle.setAttribute("aria-label", "Open workspace tools");

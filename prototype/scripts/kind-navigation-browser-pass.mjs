@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createServer, loadFirstmateHome } from "../server.js";
-import { openBrowser } from "./browser-harness.mjs";
+import { openBrowser, openReadingControls, closeReadingControls } from "./browser-harness.mjs";
 
 const scratch = await mkdtemp(path.join(os.tmpdir(), "quarterdeck-kinds-"));
 await mkdir(path.join(scratch, "data"));
@@ -67,7 +67,10 @@ try {
     await browser.command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 720 });
     await browser.command("Page.navigate", { url });
     await until("document.querySelectorAll('article.message').length>0");
-    await evaluate("while(true){const n=[...document.querySelectorAll('#lane-filter-rows input')].find(n=>n.checked!==(n.dataset.filterLane==='alpha'));if(!n)break;n.click();} document.querySelector('#message-type-filters input[value=tools]').click(); document.querySelector('#message-compact-toggle').click()");
+    await evaluate("while(true){const n=[...document.querySelectorAll('#lane-filter-rows input')].find(n=>n.checked!==(n.dataset.filterLane==='alpha'));if(!n)break;n.click();} document.querySelector('#message-type-filters input[value=tools]').click()");
+    await openReadingControls(browser);
+    await evaluate("document.querySelector('#message-compact-toggle').click()");
+    await closeReadingControls(browser);
     await position(439);
     await jump("captain", 1, 440);
     assert.equal(await evaluate("document.querySelector('button[data-kind-jump=captain][data-kind-step=\"1\"]').disabled"), true, "no later captain message exists");
@@ -95,7 +98,9 @@ try {
       assert.ok(control.width >= (width < 720 ? 44 : 24) && control.height >= (width < 720 ? 44 : 24), JSON.stringify(control));
     }
     await screenshot(`kind-controls-full-${width}x${height}.png`);
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#message-compact-toggle').click()");
+    await closeReadingControls(browser);
     await screenshot(`kind-controls-compact-${width}x${height}.png`);
     assert.equal(await evaluate("document.documentElement.scrollWidth>innerWidth"), false);
     await browser.close(); browser = null;

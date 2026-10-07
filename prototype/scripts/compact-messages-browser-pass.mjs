@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createServer, loadFirstmateHome } from "../server.js";
-import { openBrowser } from "./browser-harness.mjs";
+import { openBrowser, openReadingControls, closeReadingControls } from "./browser-harness.mjs";
 const scratch = await mkdtemp(path.join(os.tmpdir(), "quarterdeck-compact-"));
 await mkdir(path.join(scratch, "data"));
 await mkdir(path.join(scratch, "state/main-session"), { recursive: true });
@@ -50,12 +50,17 @@ try {
     await evaluate("document.querySelector('#message-type-filters input[value=tools]').click()");
     assert.match(await evaluate("document.querySelector('#transcript-page').textContent"),/401–451 of 451/);
     assert.equal(await evaluate("document.querySelector('#jump-to-last-viewed').disabled"),true);
-    assert.ok(await evaluate("document.querySelector('#reading-position-help').getBoundingClientRect().height>0"),"first-use hint explains the disabled reading checkpoint");
+    assert.match(await evaluate("document.querySelector('#jump-to-last-viewed').title"),/saved when you leave/);
+    await openReadingControls(browser);
+    assert.equal(await evaluate("!!document.querySelector('.feed-jump-controls').closest(innerWidth<=720?'#mobile-chat-options':'.conversation-head')"),true,"controls belong to the main header / phone options, not a separate feed bar");
     const toolbar = await evaluate(`[...document.querySelectorAll('.feed-jump-controls button')].map(n=>{const r=n.getBoundingClientRect();return {id:n.id,height:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right,visible:!!r.width};})`);
     for (const control of toolbar) {
       assert.ok(control.visible && control.height>=44 && control.left>=0 && control.right<=width && control.bottom<height,JSON.stringify(toolbar));
     }
+    await screenshot(`compact-options-full-${width}x${height}.png`);
+    await closeReadingControls(browser);
     await screenshot(`compact-full-${width}x${height}.png`);
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#message-compact-toggle').focus()");
     await enter();
     assert.equal(await evaluate("document.querySelector('#message-compact-toggle').getAttribute('aria-pressed')"),"true");
@@ -63,6 +68,9 @@ try {
     assert.equal(await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).transitionDuration"),"0s","pressed label must not flash white-on-white during a background fade");
     assert.notEqual(await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).color"),await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).backgroundColor"));
     assert.equal(await evaluate("document.querySelectorAll('.message-day').length"),0,"date grouping is removed");
+    await screenshot(`compact-options-active-${width}x${height}.png`);
+    await closeReadingControls(browser);
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('article.captain .message-compact-line')).backgroundColor"),await evaluate("getComputedStyle(document.querySelector('article:not(.captain) .message-compact-line')).backgroundColor"),"captain lines have a distinct background");
     const lines = await evaluate(`[...document.querySelectorAll('.message-compact-line')].map(n=>({height:n.getBoundingClientRect().height,wrap:getComputedStyle(n).whiteSpace,time:n.querySelector('time')?.textContent,sender:n.querySelector('.compact-sender')?.textContent,kind:n.querySelector('.compact-kind')?.textContent,preview:n.querySelector('.compact-line-preview')?.textContent}))`);
     assert.equal(lines.length,53,"50 single-message lines plus three lane-block lines");
     for (const line of lines) {
@@ -78,13 +86,26 @@ try {
     await enter();
     assert.equal(await evaluate("document.querySelector('#messages').classList.contains('is-compact')"),false);
     assert.equal(await evaluate("document.activeElement.dataset.recordKey"),plain.key);
+    assert.equal(await evaluate("document.activeElement.classList.contains('compact-expansion-target')"),true);
+    assert.equal(await evaluate("getComputedStyle(document.activeElement).outlineWidth"),'3px');
+    await evaluate("new Promise(resolve=>setTimeout(resolve,1900))");
+    assert.equal(await evaluate("document.querySelectorAll('.compact-expansion-target').length"),1,"the expansion box is not a timed highlight");
+    await evaluate("document.activeElement.click()");
+    assert.equal(await evaluate("document.querySelectorAll('.compact-expansion-target').length"),1,"clicking inside the selected message retains its box");
+    await evaluate("document.querySelector('.conversation-head').click()");
+    assert.equal(await evaluate("document.querySelectorAll('.compact-expansion-target').length"),0,"the next outside click clears the box");
     assert.ok(Math.abs(await evaluate("document.activeElement.getBoundingClientRect().top-document.querySelector('#messages').getBoundingClientRect().top")-plain.offset)<2,"ordinary compact line stays anchored when all messages expand");
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-toggle[aria-expanded=false]').length"),0);
     assert.equal(await evaluate("document.querySelectorAll('.kind-tools details:not([open])').length"),0,"tools expand too");
     // Toolbar mode changes preserve manual lane choices; line activation expands all.
-    await evaluate("document.querySelector('.mixed-lane-toggle').click(); document.querySelector('#message-compact-toggle').click(); document.querySelector('#message-compact-toggle').click()");
+    await evaluate("document.querySelector('.mixed-lane-toggle').click()");
+    await openReadingControls(browser);
+    await evaluate("document.querySelector('#message-compact-toggle').click(); document.querySelector('#message-compact-toggle').click()");
+    await closeReadingControls(browser);
     assert.equal(await evaluate("document.querySelector('.mixed-lane-toggle').getAttribute('aria-expanded')"),"false");
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#message-compact-toggle').click()");
+    await closeReadingControls(browser);
     await evaluate(`(() => {
       const feed=document.querySelector('#messages'), line=feed.querySelector('[data-record-index="260"] .mixed-lane-section:last-child .mixed-lane-toggle');
       feed.scrollTop+=line.getBoundingClientRect().top-feed.getBoundingClientRect().top-100;line.focus({preventScroll:true});
@@ -92,16 +113,23 @@ try {
     const mixed = await evaluate("({key:document.activeElement.dataset.mixedLaneKey,offset:document.activeElement.getBoundingClientRect().top-document.querySelector('#messages').getBoundingClientRect().top})");
     await enter();
     assert.equal(await evaluate("document.activeElement.dataset.mixedLaneKey"),mixed.key);
+    assert.equal(await evaluate("document.activeElement.closest('article').classList.contains('compact-expansion-target')"),true);
+    await screenshot(`compact-expanded-box-${width}x${height}.png`);
     assert.notEqual(await evaluate("document.activeElement.getAttribute('tabindex')"),"-1","restored native lane button remains in keyboard tab order");
     assert.ok(Math.abs(await evaluate("document.activeElement.getBoundingClientRect().top-document.querySelector('#messages').getBoundingClientRect().top")-mixed.offset)<2,"clicked lane line stays anchored when all messages expand");
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-toggle[aria-expanded=false]').length"),0);
-    await evaluate("document.querySelector('#message-compact-toggle').click(); window.dispatchEvent(new Event('blur'))");
+    await openReadingControls(browser);
+    await evaluate("document.querySelector('#message-compact-toggle').click()");
+    await closeReadingControls(browser);
+    await evaluate("window.dispatchEvent(new Event('blur'))");
     const saved = await evaluate("JSON.parse(localStorage.getItem('fm-agentos-last-viewed.v1')).at(-1)[1]");
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#jump-to-latest').click()");
     await until("!document.querySelector('#jump-to-last-viewed').disabled");
     assert.equal(await evaluate("document.querySelector('#messages').classList.contains('is-compact')"),true);
     assert.match(await evaluate("document.querySelector('#transcript-page').textContent"),/401–451 of 451/);
     await screenshot(`compact-active-${width}x${height}.png`);
+    await openReadingControls(browser);
     await evaluate("document.querySelector('#jump-to-last-viewed').focus()"); await enter();
     assert.equal(await evaluate("document.activeElement.dataset.recordKey"),saved);
     assert.equal(await evaluate("document.querySelector('#messages').classList.contains('is-compact')"),true);
@@ -117,7 +145,34 @@ try {
     await evaluate("document.querySelector('#transcript-search-clear').click()");
     assert.equal(await evaluate("document.querySelector('#messages').classList.contains('is-compact')"),true);
     assert.equal(await evaluate("document.documentElement.scrollWidth>innerWidth"),false);
-    console.log(`${width}x${height}: visible touch toolbar/full and active screenshots; one line per message/lane; plain and lane keyboard expand-all anchoring; inner choices, tools, paging, both jumps, persistence and filters passed`);
+    if(width>720) {
+      const centers=await evaluate("[...document.querySelectorAll('.conversation-head-identity,.transcript-search,.message-font-size,.feed-jump-controls,.feed-pagination,.conversation-head-actions')].filter(n=>n.closest('.conversation-head')).map(n=>{const r=n.getBoundingClientRect();return r.top+r.height/2})");
+      assert.ok(Math.max(...centers)-Math.min(...centers)<8,'all controls occupy one desktop header row');
+      await command('Emulation.setDeviceMetricsOverride',{width:800,height,deviceScaleFactor:1,mobile:false});
+      for(const id of ['message-compact-toggle','jump-to-last-viewed','jump-to-latest']) {
+        if(await evaluate(`document.querySelector('#${id}').disabled`))continue;
+        await evaluate(`document.querySelector('#${id}').focus()`);
+        assert.ok(await evaluate(`(() => {const a=document.querySelector('#${id}').getBoundingClientRect(),b=document.querySelector('.conversation-header-controls').getBoundingClientRect();return a.left>=b.left-1&&a.right<=b.right+1;})()`),'native keyboard focus exposes narrow-header reading controls');
+      }
+      assert.equal(await evaluate("!!document.querySelector('#transcript-details').closest('.conversation-header-controls')"),false,'source popup stays outside the scroller');
+      await evaluate("document.querySelector('#transcript-details summary').click()");
+      assert.ok(await evaluate("document.querySelector('.transcript-coverage-popover').getBoundingClientRect().height>0"));
+      await screenshot('compact-narrow-header-800x900.png');
+      assert.equal(await evaluate('document.documentElement.scrollWidth>innerWidth'),false);
+    } else {
+      await openReadingControls(browser);
+      await evaluate("document.querySelector('#message-compact-toggle').dataset.syntheticIdentity='same-node'");
+      await command('Emulation.setDeviceMetricsOverride',{width:800,height,deviceScaleFactor:1,mobile:false});
+      await until("!!document.querySelector('#message-compact-toggle').closest('.conversation-head')");
+      assert.equal(await evaluate("document.querySelector('#message-compact-toggle').dataset.syntheticIdentity"),'same-node');
+      assert.equal(await evaluate("document.querySelector('#mobile-chat-options').open"),false);
+      await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true});
+      await openReadingControls(browser);
+      assert.equal(await evaluate("document.querySelector('#message-compact-toggle').dataset.syntheticIdentity"),'same-node');
+      assert.equal(await evaluate("document.querySelectorAll('#message-compact-toggle').length"),1);
+      await closeReadingControls(browser);
+    }
+    console.log(`${width}x${height}: consolidated header/phone options; caption color; persistent click-dismissed expansion box; anchored keyboard expand-all; both jumps, native resize/focus, persistence and filters passed`);
     await browser.close();browser=null;
   }
 } finally {

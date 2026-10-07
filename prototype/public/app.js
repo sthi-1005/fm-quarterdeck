@@ -109,6 +109,21 @@ try {
   if (Array.isArray(saved)) for (const scope of saved.slice(-60)) if (typeof scope === "string" && scope.length <= 4000) compactViews.add(scope);
 } catch { /* Compact mode remains usable in this tab without browser storage. */ }
 let pendingMessageAnchor = null;
+let expandedMessageTarget = null;
+function clearExpandedMessageTarget() {
+  expandedMessageTarget = null;
+  for (const node of $("#messages").querySelectorAll(".compact-expansion-target")) node.classList.remove("compact-expansion-target");
+}
+function syncExpandedMessageTarget() {
+  if (expandedMessageTarget && (expandedMessageTarget.scope !== renderedReadingScope || compactViews.has(renderedReadingScope))) clearExpandedMessageTarget();
+  for (const node of $("#messages").querySelectorAll("article.message")) node.classList?.toggle("compact-expansion-target", Boolean(expandedMessageTarget && node.dataset.recordKey === expandedMessageTarget.key));
+}
+// Capture runs before compact-line activation, so its own click cannot clear
+// the newly assigned target. Clicking within the boxed message keeps it.
+document.addEventListener("click", (event) => {
+  const article = event.target?.closest?.("article.message");
+  if (expandedMessageTarget && article?.dataset.recordKey !== expandedMessageTarget.key) clearExpandedMessageTarget();
+}, true);
 const expandedFullViews = new Set();
 const fullDetailChoices = new Map();
 function messageRecordKey(message) { return message.recordId || reviewId([message.source, message.occurredAt, message.text].join("\n")); }
@@ -145,9 +160,13 @@ function changeCompactMode(compact, clickedLine = null) {
   if (compact) compactViews.add(renderedReadingScope);
   while (compactViews.size > 60) compactViews.delete(compactViews.values().next().value);
   try { localStorage.setItem(COMPACT_VIEWS_KEY, JSON.stringify([...compactViews])); } catch {}
-  if (!compact && clickedLine) expandFullRecords(messagesForSelection(), true);
+  if (!compact && clickedLine) {
+    expandFullRecords(messagesForSelection(), true);
+    if (target) expandedMessageTarget = { scope: renderedReadingScope, key: target.dataset.recordKey };
+  }
   renderFeed();
   pendingMessageAnchor = null;
+  if (!compact && clickedLine) $("#sr-announcer").textContent = "Expanded all messages. The selected message is outlined until you click elsewhere.";
 }
 function updateLatestControl(atBottom) {
   const button = $("#jump-to-latest");
@@ -826,6 +845,7 @@ function renderFeed() {
   lastViewedIndex = bookmark ? messages.findIndex((message) => recordKey(message) === bookmark) : -1;
   updateLastViewedControl();
   updateKindNavigation();
+  syncExpandedMessageTarget();
 
   const announcer = $("#sr-announcer");
   if (announcer) {
@@ -905,6 +925,7 @@ function renderLanes(data) {
 }
 
 function renderLanesError(message) {
+  clearExpandedMessageTarget();
   lanes = [];
   lanesLoadError = message;
   kindRecordIndices.clear();
@@ -1873,7 +1894,7 @@ function setContextDrawer(open) {
 }
 
 function showView(view, closedLaneId = null, { updateRoute = true } = {}) {
-  if (view !== "conversations") { captureLastViewed(); pendingKindJump = null; }
+  if (view !== "conversations") { captureLastViewed(); pendingKindJump = null; clearExpandedMessageTarget(); }
   feedLaneOverrideId = closedLaneId;
   document.querySelector(".workspace").dataset.view = view;
   const pageTitles = { overview: "Fleet at a glance", work: "Work split", conversations: "Fleet Chats", closed: "Closed fleets", expenses: "Expenses", quota: "Quota", preferences: "Preferences" };
@@ -2030,7 +2051,7 @@ function syncConversationFilterLayout() {
   if (phoneChatFilters?.matches) menu?.setAttribute("open", "");
   setMobileFilterTab(mobileFilterTab);
   const actions = $(".feed-actions");
-  const actionDestination = roomyChatHeader?.matches ? $(".conversation-head") : $(".conversation-feed");
+  const actionDestination = roomyChatHeader?.matches ? $(".conversation-header-controls") : $(".conversation-feed");
   if (actionDestination?.insertBefore && actions?.parentElement !== actionDestination) {
     const before = $(roomyChatHeader?.matches ? ".conversation-head-actions" : "#sr-announcer");
     actionDestination.insertBefore(actions, before?.parentElement === actionDestination ? before : null);
@@ -2061,6 +2082,14 @@ $("#kind-panel-toggle").addEventListener("click", () => { setDesktopPanelExpande
 $("#lane-filter-toggle").addEventListener("click", () => {
   setLaneFiltersExpanded($("#lane-filter-toggle").getAttribute("aria-expanded") !== "true");
   if (phoneChatFilters?.matches && $("#lane-filter-toggle").getAttribute("aria-expanded") === "true") $(mobileFilterTab === "lanes" ? "#mobile-lanes-tab" : "#mobile-kinds-tab").focus();
+});
+// Native focus need not scroll a nearly-visible button by its final few pixels.
+// Expose the whole focused control without scrolling the message pane/popovers.
+$(".conversation-header-controls").addEventListener("focusin", (event) => {
+  if (!event.target?.getBoundingClientRect) return;
+  const row = $(".conversation-header-controls"), bounds = row.getBoundingClientRect(), rect = event.target.getBoundingClientRect();
+  const delta = rect.left < bounds.left ? rect.left - bounds.left : rect.right > bounds.right ? rect.right - bounds.right : 0;
+  if (delta) row.scrollLeft = Number(row.scrollLeft || 0) + delta;
 });
 const laneShortcut = $("#conversation-filter-shortcut");
 let shortcutPreviewTimer;

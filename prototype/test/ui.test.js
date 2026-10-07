@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { quotaDom } from "./helpers/quota-dom.js";
 import { createHash } from "node:crypto";
+import { parseCss, computed, element } from './helpers/css-model.mjs';
 
 const script = `${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/app.js", import.meta.url), "utf8")}`;
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
@@ -538,6 +539,36 @@ test("compact mode shows timestamp/sender/kind/preview per message or lane block
   assert.doesNotMatch(html, /message-day/);
   assert.equal(app.node('#message-compact-toggle').getAttribute('aria-pressed'), 'true');
   assert.match(app.run("compactMetadata({author:'Unknown',kind:'tools',occurredAt:'invalid',time:'Time unknown'})"), /Time unknown/);
+});
+
+test("header focus reveals even partially clipped controls without moving the feed", () => {
+  const app=ui(), row=app.node('.conversation-header-controls'), feed=app.node('#messages');
+  row.scrollLeft=0;
+  row.getBoundingClientRect=()=>({left:100,right:400});
+  const before=feed.scrollTop;
+  row.dispatchEvent({type:'focusin',target:{getBoundingClientRect:()=>({left:300,right:402})}});
+  assert.equal(row.scrollLeft,2);
+  row.dispatchEvent({type:'focusin',target:{getBoundingClientRect:()=>({left:98,right:200})}});
+  assert.equal(row.scrollLeft,0);
+  assert.equal(feed.scrollTop,before);
+});
+
+test("compact expansion marks exactly its message until an outside click, and survives refresh", () => {
+  const app=ui(), feed=app.node('#messages'), target=app.node('#boxed-message');
+  seed(app,[lane('alpha',[record({recordId:'boxed'})])]);
+  target.dataset={recordKey:'boxed',recordIndex:'0'};
+  target.closest=()=>target;
+  feed.querySelectorAll=selector=>selector==='article.message' || selector==='.compact-expansion-target' && target.classList.contains('compact-expansion-target')?[target]:[];
+  app.run('renderFeed(); changeCompactMode(true)');
+  app.node('#messages').dispatchEvent({type:'click',target:{closest:selector=>selector==='button.message-compact-line'?{dataset:{},closest:()=>target,getBoundingClientRect:()=>({top:0})}:null}});
+  assert.equal(target.classList.contains('compact-expansion-target'),true);
+  app.run('renderFeed()');
+  assert.equal(target.classList.contains('compact-expansion-target'),true);
+  app.run('document.dispatchEvent({type:"click",target:document.querySelector("#boxed-message")})');
+  assert.equal(target.classList.contains('compact-expansion-target'),true);
+  app.run('document.dispatchEvent({type:"click",target:{closest:()=>null}})');
+  assert.equal(target.classList.contains('compact-expansion-target'),false);
+  assert.equal(app.run('expandedMessageTarget'),null);
 });
 
 test("compact choices persist through reload, filters and pages without changing record counts", () => {
@@ -1258,7 +1289,10 @@ test("desktop filter panels collapse independently without changing filter selec
   assert.match(css, /#lane-options\[data-collapsed="true"\] \.lane-rail-item/);
   assert.match(css, /#conversation-kind-panel\[data-collapsed="true"\]:is\(:hover, :focus-within\) \.kind-filter-menu/);
   assert.match(css, /#conversation-kind-panel\[data-collapsed="true"\] \.message-kind-label[\s\S]*?\.message-types-actions \{ display: none/);
-  assert.match(css, /@media \(min-width: 721px\) \{[\s\S]*?\.conversation-head:has\(> \.feed-actions\)/);
+  const header=element('header',['conversation-head']);
+  const tracks=element('div',['conversation-header-controls'],{},header);
+  assert.equal(computed(parseCss(css),tracks,1600).display,'grid');
+  assert.equal(computed(parseCss(css),tracks,1600)['overflow-x'],'auto');
   const app = ui({ compact: false });
   app.run('selectedMessageTypes = new Set(["captain"]); selectedLaneIds = new Set(["general"]);');
   app.node("#lane-panel-toggle").dispatchEvent({ type: "click" });

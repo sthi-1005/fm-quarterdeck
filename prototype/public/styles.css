@@ -401,7 +401,8 @@ input[type="search"]::-webkit-search-results-decoration {
 .transcript-popover-head strong { color: var(--text); font-size: var(--text-ui); }
 .transcript-coverage-popover ul { margin: var(--space-2) 0 0; padding-left: var(--space-3); }
 .transcript-coverage-popover li + li { margin-top: var(--space-1); }
-.feed-jump-controls { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.conversation-header-controls { display: contents; }
+.feed-jump-controls { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; background: transparent; }
 .reading-position-help { flex-basis: 100%; color: var(--muted); font-size: 11px; line-height: 1.3; }
 /* Keep inverse labels legible: a background-only fade briefly paints white on white. */
 .feed-jump-controls .jump-to-latest { transition: none; }
@@ -422,6 +423,9 @@ input[type="search"]::-webkit-search-results-decoration {
 .compact-kind { flex: none; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; color: var(--muted); text-transform: capitalize; }
 .compact-line-preview { flex: 1; min-width: 3ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .message.last-viewed-highlight { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--surface); }
+.message.compact-expansion-target { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: 8px; }
+.messages.is-compact .message.captain .message-compact-line { background: #fff0d8; border-color: #a96912; border-inline-start-width: 4px; color: #64390b; }
+.messages.is-compact .message.captain :is(.compact-kind, .compact-line-preview) { color: #69480c; }
 .jump-to-latest { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; gap: var(--space-1); padding: 6px 12px; border: 1px solid var(--accent); border-radius: 999px; background: var(--surface); color: var(--accent); font-size: var(--text-small); font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); cursor: pointer; transition: transform .12s ease, background-color .12s ease; }
 .jump-to-latest:not(:disabled):hover { background: var(--accent); color: white; }
 .jump-to-latest.hidden { display: none !important; }
@@ -1004,25 +1008,29 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   #lane-options[data-collapsed="true"][data-shortcut-preview="true"] .lane-filter-heading > span { display: none; }
 }
 @media (min-width: 721px) {
-  /* H3 — always ONE header row on desktop; never wrap controls under identity */
-  .conversation-head:has(> .feed-actions) {
+  /* One header row; its inner tracks scroll at narrow desktop widths.
+     Diagnostics stay outside that scroller so their popover is not clipped. */
+  .conversation-head:has(> .conversation-header-controls) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+  }
+  .conversation-header-controls {
     display: grid;
     grid-auto-flow: column;
-    grid-template-columns:
-      minmax(0, 1.35fr)
-      minmax(0, 1fr)
-      auto
-      minmax(0, auto)
-      auto;
-    grid-template-areas: "identity search font pagination actions";
+    grid-template-columns: minmax(80px, 1.1fr) minmax(90px, 1fr) auto auto auto;
+    grid-template-areas: "identity search font reading pagination";
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
     align-items: center;
     column-gap: 10px;
     row-gap: 0;
-    min-height: 52px;
-    max-height: none;
-    padding: 6px 16px;
+    padding: 0 0 2px;
   }
-  .conversation-head:has(> .feed-actions) .conversation-head-identity {
+  .conversation-header-controls .conversation-head-identity {
     grid-area: identity;
     display: flex;
     flex-wrap: nowrap;
@@ -1032,24 +1040,26 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     overflow: hidden;
     gap: 6px;
   }
-  .conversation-head:has(> .feed-actions) .conversation-identity {
+  .conversation-header-controls .conversation-identity {
     flex: 1 1 auto;
     min-width: 0;
     max-width: none;
     overflow: hidden;
   }
-  .conversation-head:has(> .feed-actions) .conversation-identity-copy {
+  .conversation-header-controls .conversation-identity-copy {
     min-width: 0;
   }
-  .conversation-head:has(> .feed-actions) .conversation-identity strong {
+  .conversation-header-controls .conversation-identity strong {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .conversation-head:has(> .feed-actions) .task-filter-chip { display: none !important; }
+  .conversation-header-controls .task-filter-chip { display: none !important; }
+  .conversation-header-controls .feed-jump-controls { grid-area: reading; flex-wrap: nowrap; white-space: nowrap; }
+  .conversation-header-controls .reading-position-help { display: none; }
   /* Flatten feed-actions so search / A± / pagination become sibling tracks */
-  .conversation-head > .feed-actions {
+  .conversation-header-controls > .feed-actions {
     display: contents;
     min-width: 0;
     min-height: 0;
@@ -1058,21 +1068,21 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     border: 0;
     background: transparent;
   }
-  .conversation-head > .feed-actions .feed-actions-label,
-  .conversation-head > .feed-actions .kind-filter-menu,
-  .conversation-head > .feed-actions .bulk-toggle { display: none !important; }
-  .conversation-head > .feed-actions .transcript-search {
+  .conversation-header-controls > .feed-actions .feed-actions-label,
+  .conversation-header-controls > .feed-actions .kind-filter-menu,
+  .conversation-header-controls > .feed-actions .bulk-toggle { display: none !important; }
+  .conversation-header-controls > .feed-actions .transcript-search {
     grid-area: search;
     min-width: 0;
     max-width: none;
     width: auto;
     overflow: hidden;
   }
-  .conversation-head > .feed-actions .message-font-size {
+  .conversation-header-controls > .feed-actions .message-font-size {
     grid-area: font;
     flex: 0 0 auto;
   }
-  .conversation-head > .feed-actions .feed-pagination {
+  .conversation-header-controls > .feed-actions .feed-pagination {
     grid-area: pagination;
     margin-left: 0;
     min-width: 0;
@@ -1080,22 +1090,21 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     border-left: 1px solid var(--line-strong);
     overflow: hidden;
   }
-  .conversation-head:has(> .feed-actions) .conversation-head-actions {
-    grid-area: actions;
+  .conversation-head:has(> .conversation-header-controls) .conversation-head-actions {
     flex: 0 0 auto;
     align-self: center;
     margin: 0;
   }
-  .conversation-head > .feed-actions input[type="search"] {
+  .conversation-header-controls > .feed-actions input[type="search"] {
     min-height: 36px;
     width: 100%;
     min-width: 0;
   }
-  .conversation-head > .feed-actions .message-font-size button {
+  .conversation-header-controls > .feed-actions .message-font-size button {
     min-height: 34px;
     min-width: 36px;
   }
-  .conversation-head > .feed-actions .feed-pagination button {
+  .conversation-header-controls > .feed-actions .feed-pagination button {
     flex: 0 0 auto;
     min-height: 34px;
   }
@@ -1104,17 +1113,17 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     container-type: inline-size;
     container-name: lane-chat;
   }
-  .conversation-head > .feed-actions .feed-pagination span {
+  .conversation-header-controls > .feed-actions .feed-pagination span {
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  @container lane-chat (max-width: 980px) {
-    .conversation-head > .feed-actions .feed-pagination span {
+  @container lane-chat (max-width: 1280px) {
+    .conversation-header-controls > .feed-actions .feed-pagination span {
       font-size: 0;
     }
-    .conversation-head > .feed-actions .feed-pagination span::after {
+    .conversation-header-controls > .feed-actions .feed-pagination span::after {
       content: attr(data-short);
       font-size: var(--text-small);
       color: var(--muted);
