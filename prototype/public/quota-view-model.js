@@ -33,7 +33,8 @@ window.quotaViewModel = (() => {
       // Grok reports credits plus independently measured product windows. Its
       // overlapping scope bounds do not establish a shared allowance; keep all
       // source windows as separate rows in one provider card, never merge data.
-      const scope = provider.provider === "grok" ? null : names.length === 1 ? names[0] : null;
+      // Claude's account and model windows likewise share a visual card only.
+      const scope = ["grok", "claude"].includes(provider.provider) ? null : names.length === 1 ? names[0] : null;
       const key = scope ? `scope:${scope}` : "provider";
       if (!result.has(key)) result.set(key, { name: scope ? `${provider.provider} · ${scope.replaceAll("_", " ")}` : provider.provider, provider: provider.provider, scope, windows: [] });
       result.get(key).windows.push(window);

@@ -938,6 +938,7 @@ async function fetchJson(url) {
 }
 
 function quotaName(value) {
+  if (value === "agy") return "AGY";
   return String(value || "Unknown").replaceAll(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 function quotaDuration(seconds) {
@@ -1051,11 +1052,11 @@ function compactQuotaReset(iso, now = Date.now(), shortened = false) {
 }
 function quotaFamilyBox(family, readAt, { compact = false } = {}) {
   const windows = family.windows || [];
-  const heading = escapeHtml(family.name);
+  const heading = escapeHtml(family.provider === "agy" ? family.name.replace(/^agy\b/, "AGY") : family.name);
   const labels = quotaWindowLabels(family);
   const mark = providerLogoHtml(family.provider, { mono: compact, size: compact ? 16 : 20 });
   return `<div data-quota-key="${escapeHtml(JSON.stringify([family.provider, family.scope]))}" class="quota-family${compact ? " quota-family-side" : ""}${windows.some(w => w.isLimiting) ? " quota-summary-window-limiting" : ""}" aria-label="${heading} quota windows">
-    <div class="quota-family-title"><span class="quota-family-identity">${mark}<span class="provider-name">${escapeHtml(family.provider)}</span></span><b>${heading}</b>${family.stale ? `<span data-quota-key="freshness" class="quota-staleness"><i class="quota-stale-marker" aria-hidden="true">!</i>${escapeHtml(family.staleLabel || "stale · age unknown")}</span>` : family.reusedLabel ? `<span data-quota-key="freshness" class="quota-reused">${escapeHtml(family.reusedLabel)}</span>` : family.status && family.status !== "fresh" ? `<span data-quota-key="freshness" class="quota-status-pill" data-status="${escapeHtml(family.status)}">${escapeHtml(quotaName(family.status))}</span>` : ""}</div>
+    <div class="quota-family-title"><span class="quota-family-identity">${mark}</span><b class="provider-name">${heading}</b>${family.stale ? `<span data-quota-key="freshness" class="quota-staleness" title="${escapeHtml(family.staleLabel || "stale · age unknown")}" aria-label="${escapeHtml(family.staleLabel || "stale · age unknown")}"><i class="quota-stale-marker" aria-hidden="true">!</i><span class="quota-age">${escapeHtml((family.staleLabel || "stale · age unknown").replace(" · ", " "))}</span></span>` : family.reusedLabel ? `<span data-quota-key="freshness" class="quota-reused" title="${escapeHtml(family.reusedLabel)}" aria-label="${escapeHtml(family.reusedLabel)}"><span class="quota-age">${escapeHtml(family.reusedLabel)}</span></span>` : family.status && family.status !== "fresh" ? `<span data-quota-key="freshness" class="quota-status-pill" data-status="${escapeHtml(family.status)}">${escapeHtml(quotaName(family.status))}</span>` : ""}</div>
     ${windows.map((w, index) => {
       const name = escapeHtml(labels[index]);
       const known = validQuotaPercent(w.percentRemaining);
@@ -1176,8 +1177,8 @@ function renderQuota(data) {
         <summary class="quota-accordion-summary">
           <div class="quota-summary-heading">
             ${providerLogoHtml(provider.provider, { mono: false, size: 22 })}
-            <h2>${escapeHtml(provider.provider)}</h2>
-            ${provider.stale ? `<span data-quota-key="freshness" class="quota-staleness"><i class="quota-stale-marker" aria-hidden="true">!</i>${escapeHtml(provider.staleLabel || "stale · age unknown")}</span>` : provider.reusedLabel ? `<span data-quota-key="freshness" class="quota-reused">${escapeHtml(provider.reusedLabel)}</span>` : provider.status !== "fresh" ? `<span data-quota-key="freshness" class="quota-status-pill" data-status="${escapeHtml(provider.status)}">${escapeHtml(quotaName(provider.status))}</span>` : ""}
+            <h2>${escapeHtml(provider.provider === "agy" ? "AGY" : provider.provider)}</h2>
+            ${provider.stale ? `<span data-quota-key="freshness" class="quota-staleness" title="${escapeHtml(provider.staleLabel || "stale · age unknown")}" aria-label="${escapeHtml(provider.staleLabel || "stale · age unknown")}"><i class="quota-stale-marker" aria-hidden="true">!</i><span class="quota-age">${escapeHtml((provider.staleLabel || "stale · age unknown").replace(" · ", " "))}</span></span>` : provider.reusedLabel ? `<span data-quota-key="freshness" class="quota-reused" title="${escapeHtml(provider.reusedLabel)}" aria-label="${escapeHtml(provider.reusedLabel)}"><span class="quota-age">${escapeHtml(provider.reusedLabel)}</span></span>` : provider.status !== "fresh" ? `<span data-quota-key="freshness" class="quota-status-pill" data-status="${escapeHtml(provider.status)}">${escapeHtml(quotaName(provider.status))}</span>` : ""}
           </div>
           <div class="quota-summary-constraint"><span class="quota-critical-label">${escapeHtml(critical.label)}</span> ${escapeHtml(critical.text)}</div>
           <div class="quota-summary-windows" aria-label="Reported quota windows; filled bars show percent remaining, not percent used or elapsed time">
@@ -1235,7 +1236,7 @@ function renderQuota(data) {
       <div class="quota-unconfigured-grid">
         ${unconfiguredProviders.map((provider) => `
           <div data-quota-key="${escapeHtml(provider.provider)}" class="quota-card quota-card-compact" data-review-id="quota:${reviewId(provider.provider)}">
-            <h2 class="quota-card-heading">${providerLogoHtml(provider.provider, { mono: false, size: 20 })}<span>${escapeHtml(provider.provider)}</span></h2>
+            <h2 class="quota-card-heading">${providerLogoHtml(provider.provider, { mono: false, size: 20 })}<span>${escapeHtml(provider.provider === "agy" ? "AGY" : provider.provider)}</span></h2>
             <p>${escapeHtml(provider.status)}${provider.quotaStatus && provider.quotaStatus !== provider.status ? ` · ${escapeHtml(provider.quotaStatus)}` : ""}</p>
           </div>
         `).join("")}

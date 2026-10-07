@@ -1414,12 +1414,23 @@ test("grouped quota cards keep two compact rows, truthful remaining and timing u
     assert.match(html, /Reset-window position unknown/);
     assert.doesNotMatch(html, /time \?/);
     assert.match(html, /provider-monogram/);
-    assert.match(html, /provider-name/);
+    assert.match(html, /<b class="provider-name">AGY/);
+    assert.doesNotMatch(html, /<span class="provider-name">/);
     assert.equal((html.match(/class="quota-family-notch"/g) || []).length, 1);
     assert.ok(html.includes("2030-01-08"));
   }
   assert.equal((strip.match(/class="quota-family-row/g) || []).length, 3, "extra unknown window remains in its own unproven group");
   assert.equal((page.split("</summary>")[0].match(/class="quota-family-row/g) || []).length, 3);
+});
+
+test("quota freshness stays accessible with compact single-line text", () => {
+  const app = ui();
+  app.run(`renderQuota(${JSON.stringify({ providers: [{ provider: "agy", stale: true, status: "stale", refreshedAt: "2030-01-01T00:00:00Z", windows: [{ id: "w", label: "week", kind: "weekly", percentRemaining: 50 }], scopes: [] }] })})`);
+  for (const html of [app.node("#quota-strip").innerHTML, app.node("#quota-providers").innerHTML]) {
+    assert.match(html, /class="quota-staleness" title="stale · 0s" aria-label="stale · 0s"/);
+    assert.match(html, /class="quota-age">stale 0s/);
+    assert.match(html, /AGY/);
+  }
 });
 
 test("compact desktop and phone quota previews keep both horizons, reset ticker, and honest marker", () => {

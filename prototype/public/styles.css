@@ -612,9 +612,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .quota-card { min-width: 0; padding: var(--space-3); font-size: var(--text-ui); line-height: 1.4; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px; overflow-wrap: anywhere; }
 .quota-card.quota-accordion { padding: 0; }
 .quota-card-stale { background: var(--surface-soft); border-color: var(--line); }
-.quota-staleness, .quota-reused { display: inline-flex; align-items: center; gap: 5px; width: fit-content; font-size: 11px; font-weight: 650; line-height: 1.3; color: var(--amber); }
+.quota-staleness, .quota-reused { display: inline-flex; align-items: center; gap: 5px; width: fit-content; min-width: 0; max-width: 100%; white-space: nowrap; flex-shrink: 1; font-size: 11px; font-weight: 650; line-height: 1.3; color: var(--amber); }
 .quota-stale-marker { display: inline-grid; place-items: center; flex: 0 0 14px; width: 14px; height: 14px; border: 1px solid var(--amber); border-radius: 50%; background: linear-gradient(to bottom, var(--amber) 50%, transparent 50%); color: var(--surface); font-size: 9px; font-style: normal; font-weight: 800; line-height: 1; }
 .quota-reused { color: var(--muted); font-weight: 550; }
+.quota-age { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-stale-marker { flex-shrink: 0; }
 .quota-accordion-summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); cursor: pointer; list-style: none; user-select: none; border-bottom: 1px solid transparent; transition: background .15s ease; }
 .quota-accordion-summary::-webkit-details-marker { display: none; }
 .quota-accordion[open] > .quota-accordion-summary { border-bottom-color: var(--line); background: var(--surface-soft); }

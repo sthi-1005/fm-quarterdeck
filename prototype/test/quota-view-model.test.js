@@ -117,6 +117,25 @@ test("AGY classified intervals produce label-provenance markers without inventin
   assert.equal(other.windows[0].durationSeconds, null, "fallback is AGY-only");
 });
 
+test("Claude model windows share one visual card without changing source bounds", () => {
+  const provider = { provider: "claude", status: "fresh", windows: [
+    { id: "five_hour", label: "session", percentRemaining: 55 },
+    { id: "seven_day", label: "week", percentRemaining: 70 },
+    { id: "seven_day_fable", label: "fable week", percentRemaining: 85 }
+  ], scopes: [
+    { scope: "all_models", boundedBy: ["five_hour", "seven_day"], percentRemaining: 55 },
+    { scope: "fable", boundedBy: ["seven_day_fable"], percentRemaining: 85 }
+  ] };
+  const families = groups(provider);
+  assert.equal(families.length, 1);
+  assert.deepEqual(Array.from(windowLabels(families[0])), ["session", "7d", "fable 7d"]);
+  const projected = project({ providers: [provider] });
+  assert.equal(projected.sidebar.length, 1);
+  assert.equal(projected.sidebar[0].windows.length, 3);
+  assert.deepEqual(projected.detail[0].scopes[1].boundedBy, ["seven_day_fable"]);
+  assert.equal(projected.detail[0].scopes[1].percentRemaining, 85);
+});
+
 test("week abbreviation is display-only and preserves distinct labels", () => {
   assert.deepEqual(Array.from(windowLabels({ scope: "all_models", windows: [{ label: "Gemini weekly" }, { label: "Other week" }] })), ["Gemini 7d", "Other 7d"]);
   assert.equal(window.quotaViewModel.windowLabel("Weekly quota"), "7d quota");

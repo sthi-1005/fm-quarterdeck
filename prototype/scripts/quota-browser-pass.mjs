@@ -187,7 +187,7 @@ try {
   assert.ok(desktopSidebar.freshness.length > 0, "desktop sidebar shows freshness timestamp");
   assert.ok(!desktopSidebar.html.includes("time ?"), "missing window timing does not clutter rows");
   assert.equal(await evalJs('document.querySelectorAll("#quota-strip .quota-family-side").length'), 4, "one Grok card alongside Codex and two AGY families");
-  assert.deepEqual(await evalJs('[...document.querySelectorAll("#quota-strip .quota-family-side")].filter(f => f.querySelector(".quota-family-identity .provider-name")?.textContent === "grok").map(f => [...f.querySelectorAll(".quota-family-row")].map(r => ({ label: r.querySelector(".quota-family-label").firstChild.textContent.replace(/ · $/, ""), value: r.querySelector(".quota-family-value").textContent })))'), [[{ label: "Credits", value: "12%" }, { label: "Build", value: "43%" }, { label: "Chat", value: "80%" }]], "independent Grok rows in one card");
+  assert.deepEqual(await evalJs('[...document.querySelectorAll("#quota-strip .quota-family-side")].filter(f => f.querySelector(".quota-family-title > .provider-name")?.textContent === "grok").map(f => [...f.querySelectorAll(".quota-family-row")].map(r => ({ label: r.querySelector(".quota-family-label").firstChild.textContent.replace(/ · $/, ""), value: r.querySelector(".quota-family-value").textContent })))'), [[{ label: "Credits", value: "12%" }, { label: "Build", value: "43%" }, { label: "Chat", value: "80%" }]], "independent Grok rows in one card");
 
   // Changing 1/2/3-digit values must not move either bar edge or the notch.
   const stableGeometry = (selector) => `(() => {
@@ -254,6 +254,8 @@ try {
   assert.ok(desktopQuotaView.unconfigured >= 2, "inactive providers grouped into unconfigured tray");
   assert.ok(desktopQuotaView.accordions.some(a => a.provider === "grok" && a.summary.includes("Credits") && a.summary.includes("Build")), "both constrained provider windows remain visible in the summary");
   assert.ok(desktopQuotaView.accordions.some(a => a.provider === "grok" && a.summary.includes("Source-reported limit week")), "only the source-named binding window is called limiting");
+  assert.equal(await evalJs('document.querySelectorAll(".quota-family-identity .provider-name").length'), 0, "provider name is not repeated in the monogram badge");
+  assert.equal(await evalJs('document.querySelector("#quota-view [data-provider=agy] h2").textContent'), "AGY");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family").length'), 2, "full page separates proven AGY scopes");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family-row").length'), 4, "two rows in each AGY family");
   assert.ok(await evalJs('[...document.querySelectorAll("#quota-view [data-provider=agy] .quota-family")].every(g => g.querySelectorAll(".quota-family-row").length === 2)'), "each proven family has exactly two compact window rows");
@@ -264,7 +266,7 @@ try {
   assert.ok(!await evalJs('document.querySelector("#quota-view").innerText.includes("time ?")'), "full page hides timing artifact");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=grok] .quota-family").length'), 1);
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=grok] .quota-family-row").length'), 3);
-  assert.ok(await evalJs('document.querySelector("#quota-view .quota-family-identity .provider-name")?.textContent'), "provider identity remains readable beside decorative monogram");
+  assert.ok(await evalJs('document.querySelector("#quota-view .quota-family-title > .provider-name")?.textContent'), "provider identity remains readable beside decorative monogram");
   const exactReset = await evalJs('document.querySelector(".quota-window time[datetime=\'2026-09-30T22:52:52.000Z\']") !== null');
   assert.ok(exactReset, "exact reset datetime remains available in expanded detail");
 
