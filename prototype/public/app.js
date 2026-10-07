@@ -1020,7 +1020,7 @@ function formatRelativeTime(isoString, now = Date.now()) {
 }
 
 // Only reported effective scopes determine ordering. Unknown remains unknown and sorts last.
-const { project: projectQuota, groups: quotaGroups, marker: quotaMarker, remaining: quotaRemaining, active: quotaActive, windowLabels: quotaWindowLabels, valid: validQuotaPercent } = window.quotaViewModel;
+const { project: projectQuota, groups: quotaGroups, marker: quotaMarker, remaining: quotaRemaining, active: quotaActive, windowLabels: quotaWindowLabels, windowLabel: quotaWindowLabel, valid: validQuotaPercent } = window.quotaViewModel;
 
 // Reuse the Quota page's sanitized reading; the strip never reads quota itself.
 const quotaMarks = { ahead: "↗", on_pace: "→", behind: "↘", mixed: "◇", through_reset: "∞", projected_exhaustion: "⌛", exhausted_now: "×", unknown: "?" };
@@ -1063,7 +1063,7 @@ function quotaFamilyBox(family, readAt, { compact = false } = {}) {
       const reset = w.resetsAt && Number.isFinite(Date.parse(w.resetsAt)) ? new Date(w.resetsAt).toLocaleString([], { dateStyle: "full", timeStyle: "long" }) : "unknown";
       const resetNow = Date.now();
       const inlineReset = compact ? ` · <span class="quota-reset-full">${escapeHtml(compactQuotaReset(w.resetsAt, resetNow, labels[index].length > 14))}</span><span class="quota-reset-short">${escapeHtml(compactQuotaReset(w.resetsAt, resetNow, true))}</span>` : "";
-      const detail = `${w.label || quotaName(w.scope)}: ${quotaPercent(w.percentRemaining)}. Reset: ${reset}. ${position === null ? "Reset-window position unknown (source window boundaries unavailable or inconsistent)" : `${position.toFixed(1)}% of reset window remaining at source capture`}. Pace: ${w.pace?.status || "unknown"}. Runway: ${w.runway?.status || "unknown"}${w.isLimiting ? ". Source-reported limiting window" : ""}`;
+      const detail = `${w.label || quotaName(w.scope)}: ${quotaPercent(w.percentRemaining)}. Reset: ${reset}. ${position === null ? "Reset-window position unknown (source window boundaries unavailable or inconsistent)" : `${position.toFixed(1)}% of reset window remaining at source capture`}${w.durationBasis === "provider_label" ? ". Window length from provider label" : ""}. Pace: ${w.pace?.status || "unknown"}. Runway: ${w.runway?.status || "unknown"}${w.isLimiting ? ". Source-reported limiting window" : ""}`;
       return `<div data-quota-key="${escapeHtml(w.id ?? w.scope)}" class="quota-family-row${!known ? " quota-family-unknown" : w.percentRemaining === 0 ? " quota-family-exhausted" : ""}" title="${escapeHtml(detail)}">
         <span class="quota-family-label" title="${escapeHtml(w.label || quotaName(w.scope))}" aria-label="${escapeHtml(w.label || quotaName(w.scope))}${compact ? `; reset ${escapeHtml(compactQuotaReset(w.resetsAt, resetNow))}` : ""}">${name}${inlineReset}${position === null ? '<span class="sr-only"> Reset-window position unknown.</span>' : ""}</span>
         <span class="quota-family-meter"><span class="quota-family-track${known ? "" : " quota-bar-unknown"}" role="${known ? "progressbar" : "img"}" aria-label="${escapeHtml(`${w.label || quotaName(w.scope)} percent remaining${known ? "" : " unknown"}`)}"${known ? ` aria-valuemin="0" aria-valuemax="100" aria-valuenow="${w.percentRemaining}"` : ""}><span class="quota-family-fill" style="width:${known ? w.percentRemaining : 0}%"></span></span>${position === null ? "" : `<i class="quota-family-notch" style="--remaining:${position}%" role="img" aria-label="${position.toFixed(1)}% of reset window remaining at source capture"></i>`}</span>
@@ -1214,7 +1214,7 @@ function renderQuota(data) {
                 return `
                   <section data-quota-key="${escapeHtml(window.id)}" class="quota-window${isLimiting ? " quota-window-limiting" : ""}">
                     <div class="quota-row-head">
-                      <h3>${escapeHtml(window.label)} <small>(${escapeHtml(window.kind)})</small></h3>
+                      <h3 title="${escapeHtml(window.label)} (${escapeHtml(window.kind)})" aria-label="${escapeHtml(window.label)} (${escapeHtml(window.kind)})">${escapeHtml(quotaWindowLabel(window.label))} <small>(${escapeHtml(quotaWindowLabel(window.kind))})</small></h3>
                       <span class="quota-head-percent">${quotaPercent(window.percentRemaining)}</span>
                     </div>
                     <p>${provider.scopes.some((scope) => scope.boundedBy?.includes(window.id)) ? "Effective scope bound" : "Not established as an effective scope bound"}</p>

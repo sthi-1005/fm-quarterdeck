@@ -43,18 +43,20 @@ window.quotaViewModel = (() => {
   // Abbreviate only an explicit source label's period suffix for compact cards.
   // This is presentation, never duration evidence or a grouping decision. If
   // abbreviating would collide with another row, retain the original labels.
+  const windowLabel = (label) => label.replace(/\b(?:week|weekly)\b/gi, "7d");
   const windowLabels = (family) => {
     const labels = family.windows.map((window) => window.label || window.scope || "Unknown");
     if (family.provider === "grok") {
-      const short = family.windows.map((window) => window.id === "credits" && window.label === "week" ? "Credits" : window.label?.replace(/^Grok /i, "") || "Unknown");
-      return short.map((label, index) => short.indexOf(label) === short.lastIndexOf(label) ? label : labels[index]);
+      const short = family.windows.map((window) => window.id === "credits" && window.label === "week" ? "Credits" : windowLabel(window.label?.replace(/^Grok /i, "") || "Unknown"));
+      return short.map((label, index) => short.indexOf(label) === short.lastIndexOf(label) ? label : windowLabel(labels[index]));
     }
-    if (!family.scope) return labels;
-    const short = labels.map((label) => /(?:^| )5-hour$/i.test(label) ? "5h" : /(?:^| )weekly$/i.test(label) ? "weekly" : label);
-    return short.map((label, index) => short.indexOf(label) === short.lastIndexOf(label) ? label : labels[index]);
+    if (!family.scope) return labels.map(windowLabel);
+    const short = labels.map((label) => /(?:^| )5-hour$/i.test(label) ? "5h" : /(?:^| )(?:week|weekly)$/i.test(label) ? "7d" : windowLabel(label));
+    return short.map((label, index) => short.indexOf(label) === short.lastIndexOf(label) ? label : windowLabel(labels[index]));
   };
   // A notch marks the remaining fraction of a complete source interval, not
-  // consumption or a guess from "weekly". The source can declare a start, or
+  // consumption. AGY's explicit period classification is retained with label
+  // provenance by the sanitizer. Other sources can declare a start, or
   // its pace can explicitly validate the window_seconds basis (an implied
   // start from source duration and reset). Past resets never roll forward.
   const marker = (window, capturedAt) => {
@@ -64,7 +66,7 @@ window.quotaViewModel = (() => {
     const start = window.startsAt ? Date.parse(window.startsAt) : end - duration;
     if (!Number.isFinite(start) || Math.abs(end - start - duration) > 1 || captured < start || captured > end) return null;
     const remaining = (end - captured) / duration * 100;
-    if (!window.startsAt && (window.pace?.cycleBasis !== "window_seconds" || window.pace.cycleSeconds !== window.durationSeconds ||
+    if (!window.startsAt && window.durationBasis !== "provider_label" && (window.pace?.cycleBasis !== "window_seconds" || window.pace.cycleSeconds !== window.durationSeconds ||
       typeof window.pace.timeRemainingPercent !== "number" || Math.abs(remaining - window.pace.timeRemainingPercent) > 0.001)) return null;
     return Math.max(0, Math.min(100, remaining));
   };
@@ -107,5 +109,5 @@ window.quotaViewModel = (() => {
     });
     return { detail, inactive, sidebar };
   };
-  return { project, groups, marker, windowLabels, valid, remaining, active, ageLabel };
+  return { project, groups, marker, windowLabels, windowLabel, valid, remaining, active, ageLabel };
 })();

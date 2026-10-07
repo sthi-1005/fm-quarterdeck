@@ -39,12 +39,18 @@ function sanitizeProvider(provider) {
     if (!good(window) || !text(window.id) || !label || !text(window.kind)) throw new Error("schema");
     // quota-axi publishes windowSeconds (not durationSeconds). Keep the
     // synthetic legacy interval field for existing injected fixtures only.
-    const durationSeconds = number(window.windowSeconds, 1e10) ?? number(window.durationSeconds, 1e10) ??
+    const sourceDuration = number(window.windowSeconds, 1e10) ?? number(window.durationSeconds, 1e10) ??
       (window.pace?.cycleBasis === "starts_at_resets_at" ? number(window.pace.cycleSeconds, 1e10) : null);
+    // AGY's quota-summary adapter classifies provider buckets but omits numeric
+    // intervals. Use only its explicit period classification, never model or
+    // unknown windows. This is marker evidence, not a pace/availability input.
+    const labelDuration = provider.provider === "agy" ? window.kind === "weekly" ? 604800
+      : window.kind === "session" && /(?:^| )5-hour$/i.test(label) ? 18000 : null : null;
+    const durationSeconds = sourceDuration ?? labelDuration;
     const pace = good(window.pace) ? { status: enumValue(window.pace.status), reservePercentPoints: typeof window.pace.reservePercentPoints === "number" && Number.isFinite(window.pace.reservePercentPoints) ? window.pace.reservePercentPoints : null,
       cycleBasis: ["window_seconds", "starts_at_resets_at"].includes(window.pace.cycleBasis) ? window.pace.cycleBasis : null,
       cycleSeconds: number(window.pace.cycleSeconds, 1e10), timeRemainingPercent: number(window.pace.timeRemainingPercent) } : null;
-    return { id: window.id, label, kind: window.kind, percentRemaining: number(window.percentRemaining), resetsAt: date(window.resetsAt), startsAt: date(window.startsAt), durationSeconds, annotation: categorizeSubscriptionText(window.resetText), pace };
+    return { id: window.id, label, kind: window.kind, percentRemaining: number(window.percentRemaining), resetsAt: date(window.resetsAt), startsAt: date(window.startsAt), durationSeconds, ...(sourceDuration === null && labelDuration !== null ? { durationBasis: "provider_label" } : {}), annotation: categorizeSubscriptionText(window.resetText), pace };
   });
   if (provider.quotaSemantics.effectiveAvailability.length > 100) throw new Error("schema");
   const scopes = provider.quotaSemantics.effectiveAvailability.map((scope) => {

@@ -63,7 +63,7 @@ try {
     assert.equal(result.rows.length, 2, `${width}: two preview horizons`);
     assert.ok(result.rows.every(r => r.width > 0), `${width}: preview rows visible`);
     assert.match(result.rows[0].label, /5h/);
-    assert.match(result.rows[1].label, /weekly/);
+    assert.match(result.rows[1].label, /7d/);
     assert.deepEqual(result.rows.map(r => r.value), ["24%", "70%"]);
     assert.match(result.rows[0].reset, /Reset in /);
     assert.match(result.rows[1].reset, /Reset in /);
