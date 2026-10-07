@@ -126,8 +126,8 @@
   .mobile-review-sheet .review-queued { flex: 0 1 auto; }
   .mobile-review-sheet .review-section-head, .mobile-review-sheet .review-sent > summary { min-height: 36px; }
   /* Expanded Sent shares the sheet: each list scrolls so the composer always stays reachable. */
-  .mobile-review-sheet .review-sent[open] > .review-thread { max-height: 20dvh; }
-  .mobile-review-sheet [data-review-tab="review"] #review-thread { max-height: 10dvh; }
+  .mobile-review-sheet .review-sent[open] > .review-thread { max-height: 14dvh; }
+  .mobile-review-sheet [data-review-tab="review"] #review-thread { max-height: 8dvh; }
   .mobile-review-sheet #review-form { flex: 0 1 auto; max-height: none; padding-top: 4px; border: 0; }
   .mobile-review-sheet #review-form-close, .mobile-review-sheet .review-shortcuts, .mobile-review-sheet .review-form-header { display: none; }
   .mobile-review-sheet #review-message { min-height: 64px; max-height: 20dvh; font-size: 16px; border-radius: 10px; padding: 10px; }
