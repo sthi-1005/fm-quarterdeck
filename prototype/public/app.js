@@ -2062,7 +2062,12 @@ function setQuotaAccordionsOpen(open) {
   else if (quotaReading) renderQuota(quotaReading);
   updateQuotaDetailsLabel();
 }
-$("#quota-details-toggle")?.addEventListener("click", () => setQuotaAccordionsOpen(!quotaAllDetails));
+$("#quota-details-toggle")?.addEventListener("click", () => {
+  // Native toggle events are asynchronous; inspect the current disclosures,
+  // not the last event's label, even immediately after a user closes one.
+  updateQuotaDetailsLabel();
+  setQuotaAccordionsOpen(!quotaAllDetails);
+});
 $("#preferences-density").addEventListener("change", (event) => {
   preferenceDensity = event.target.value;
   preferenceOpen.clear();

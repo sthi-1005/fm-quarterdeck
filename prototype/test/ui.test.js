@@ -1782,6 +1782,9 @@ test("Quota Expand all updates native disclosures even before a tapped toggle ev
   list.querySelectorAll = () => [disclosure];
   app.node("#quota-details-toggle").dispatchEvent({ type: "click" });
   assert.equal(disclosure.open, true);
+  disclosure.open = false; // User closes it before the native toggle event.
+  app.node("#quota-details-toggle").dispatchEvent({ type: "click" });
+  assert.equal(disclosure.open, true, "reads live native state rather than a stale all-open label");
   app.node("#quota-details-toggle").dispatchEvent({ type: "click" });
   assert.equal(disclosure.open, false);
 });
