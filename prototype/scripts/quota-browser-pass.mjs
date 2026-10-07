@@ -257,7 +257,7 @@ try {
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family").length'), 2, "full page separates proven AGY scopes");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view [data-provider=agy] .quota-family-row").length'), 4, "two rows in each AGY family");
   assert.ok(await evalJs('[...document.querySelectorAll("#quota-view [data-provider=agy] .quota-family")].every(g => g.querySelectorAll(".quota-family-row").length === 2)'), "each proven family has exactly two compact window rows");
-  assert.equal(await evalJs("document.querySelector('#quota-strip [aria-label=\"Gemini 5-hour\"]')?.textContent.includes('5h')"), true, "only source-scoped labels abbreviate 5-hour");
+  assert.equal(await evalJs("document.querySelector('#quota-strip .quota-family-label[title=\"Gemini 5-hour\"]')?.textContent.includes('5h')"), true, "only source-scoped labels abbreviate 5-hour");
   assert.equal(await evalJs('document.querySelectorAll("#quota-view .quota-family-notch").length'), 6, "out-of-range AGY label intervals never draw timing markers");
   assert.ok(await evalJs('[...document.querySelectorAll("#quota-view [data-provider=agy] .quota-family-row")].every(r => r.title.includes("Window length from provider label"))'), "AGY label interval provenance is disclosed");
   assert.ok(await evalJs('[...document.querySelectorAll("#quota-view [data-provider=agy] .quota-family-label")].some(r => r.firstChild.textContent === "7d" && r.getAttribute("aria-label").includes("weekly"))'), "7d label preserves full accessible wording");
