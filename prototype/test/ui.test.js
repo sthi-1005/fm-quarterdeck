@@ -202,7 +202,7 @@ test("review layout shares semantics but keeps deliberate pointer and touch affo
 
 // Exercise the actual renderer and selection functions without a browser or live home.
 // This is not a layout engine; responsive/keyboard checks remain a review obligation.
-function ui({ fetchImpl = () => new Promise(() => {}), compact = true } = {}) {
+function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage = new Map() } = {}) {
   const nodes = new Map();
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -287,7 +287,7 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true } = {}) {
   const context = vm.createContext({
     document, URL,
     window: { location: { hash: "#lanes" }, getSelection: () => document.selection, addEventListener(name, listener) { windowListeners.set(name, listener); }, matchMedia: (query) => ({ matches: query.includes("max-width") ? compact : false, addEventListener() {} }) },
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: { getItem: (key) => storage.get(key) ?? null, setItem(key, value) { storage.set(key, value); } },
     // Leave initial network loading pending; tests inject only synthetic records.
     fetch: fetchImpl,
     setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -295,7 +295,8 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true } = {}) {
   });
   vm.runInContext(script, context);
   return { run: (code) => vm.runInContext(code, context), node: (id) => document.querySelector(id),
-    hashchange: (hash) => windowListeners.get("hashchange")?.({ newURL: `http://localhost/${hash}` }) };
+    hashchange: (hash) => windowListeners.get("hashchange")?.({ newURL: `http://localhost/${hash}` }),
+    windowEvent: (name) => windowListeners.get(name)?.() };
 }
 
 test("selected unloaded task and disk displace retained IDs at the sixty-ID cap; automatic retries stop", () => {
@@ -389,6 +390,128 @@ test("first load is explicit, errors survive filter rerenders, and refs hydrate 
   assert.equal(params.get("disk"), "disk");
   assert.equal(app.run("transcriptQuery"), "keep me");
   assert.equal(app.run("laneStatusFilter"), "idle");
+});
+
+test("compact mode shows timestamp/sender/kind/preview per message or lane block", () => {
+  const app = ui();
+  const blocks = ['alpha', 'beta'].map(name => ({projectId:name, name, text:`[fm-lane ${name}]\n${name} preview\n[end ${name}]`}));
+  seed(app, [lane('alpha', [record({recordId:'one',text:'[fm-lane alpha]\nMeaningful inner preview\n[end alpha]'}), record({recordId:'mixed', mixedLaneMessage:{recordId:'mixed',text:blocks.map(b=>b.text).join('\n\n'),blocks}})])]);
+  app.run('renderFeed(); changeCompactMode(true)');
+  const html = app.node('#messages').innerHTML;
+  assert.equal((html.match(/class="(?:mixed-lane-toggle )?message-compact-line"/g)||[]).length, 3);
+  assert.equal((html.match(/class="compact-clock"/g)||[]).length, 3);
+  assert.match(html, /compact-sender[^>]*>Firstmate/);
+  assert.match(html, /compact-kind[^>]*>Reply/);
+  assert.match(html, /compact-lane">beta/);
+  assert.match(html, /compact-line-preview">Meaningful inner preview/);
+  assert.equal(app.run("compactPreview('[fm-lane alpha]\\nUnmatched envelope\\n[end beta]')"), '[fm-lane alpha] Unmatched envelope [end beta]');
+  assert.doesNotMatch(html, /message-day/);
+  assert.equal(app.node('#message-compact-toggle').getAttribute('aria-pressed'), 'true');
+  assert.match(app.run("compactMetadata({author:'Unknown',kind:'tools',occurredAt:'invalid',time:'Time unknown'})"), /Time unknown/);
+});
+
+test("compact choices persist through reload, filters and pages without changing record counts", () => {
+  const storage = new Map(), app = ui({storage});
+  seed(app,[lane('alpha',Array.from({length:451},(_,i)=>record({recordId:`r${i}`})))]);
+  app.run('renderFeed(); changeCompactMode(true)');
+  const scope=app.run('renderedReadingScope');
+  assert.equal(ui({storage}).run(`compactViews.has(${JSON.stringify(scope)})`),true);
+  app.node('#transcript-older').dispatchEvent({type:'click'});
+  assert.equal(app.node('#messages').classList.contains('is-compact'),true);
+  assert.equal((app.node('#messages').innerHTML.match(/<article /g)||[]).length,200);
+  app.run("transcriptQuery='Readable'; renderFeed()");
+  assert.equal(app.node('#messages').classList.contains('is-compact'),false);
+  app.run("transcriptQuery=''; renderFeed()");
+  assert.equal(app.node('#messages').classList.contains('is-compact'),true);
+  app.run('changeCompactMode(false)');
+  assert.equal(app.run('compactViews.has(renderedReadingScope)'),false);
+});
+
+test("compact choices bound retention, tolerate denied storage and expand tools on line activation", () => {
+  const app=ui({storage:new Map([['fm-agentos-compact-views.v1','[null,7,"view"]']])});
+  assert.equal(app.run('compactViews.size'),1);
+  app.run("for(let i=0;i<80;i++) compactViews.add('scope-'+i); renderFeed(); changeCompactMode(true)");
+  assert.equal(app.run('compactViews.size'),60);
+  const denied=ui({storage:{get(){throw Error('denied');},set(){throw Error('denied');}}});
+  seed(denied,[lane('alpha',[record({recordId:'tool',kind:'tools'})])]);
+  denied.run("selectedMessageTypes.add('tools'); renderFeed(); changeCompactMode(true); changeCompactMode(false,{closest:()=>null,getBoundingClientRect:()=>({top:0})})");
+  assert.match(denied.node('#messages').innerHTML, /<details open>/);
+});
+
+test("last viewed checkpoints use visible durable keys, survive reload, and stay scoped to filters", () => {
+  const storage = new Map();
+  const app = ui({ storage });
+  seed(app, [lane("alpha", Array.from({ length: 4 }, (_, i) => record({ recordId: `r${i}`, text: `Reply ${i}` })))]);
+  app.run("renderFeed()");
+  app.node("#conversations-view").classList.add("active");
+  const feed = app.node("#messages");
+  let rows = [
+    { dataset: { recordKey: 'r0', recordIndex: '0' }, getBoundingClientRect: () => ({ top: -10, bottom: 20, height: 30 }) },
+    { dataset: { recordKey: 'r1', recordIndex: '1' }, getBoundingClientRect: () => ({ top: 25, bottom: 60, height: 35 }) },
+    { dataset: { recordKey: 'r2', recordIndex: '2' }, getBoundingClientRect: () => ({ top: 65, bottom: 110, height: 45 }) },
+  ];
+  feed.querySelectorAll = (selector) => selector === 'article.message' ? rows : [];
+  app.windowEvent('blur');
+  assert.equal(app.run('lastViewed.get(renderedReadingScope)'), 'r1', 'last fully visible, not clipped later reply');
+  const originalScope = app.run('renderedReadingScope');
+  assert.equal(storage.has('fm-agentos-last-viewed.v1'), true);
+  rows = [rows[2]];
+  app.run('renderFeed()');
+  assert.equal(app.run('lastViewed.get(renderedReadingScope)'), 'r1', 'refresh must not move the checkpoint');
+  assert.equal(app.node('#jump-to-last-viewed').disabled, false);
+  app.run("transcriptQuery = 'Reply'; renderFeed()");
+  assert.equal(app.run(`lastViewed.get(${JSON.stringify(originalScope)})`), 'r2', 'leaving a filter view saves its rendered position');
+  assert.equal(app.run('lastViewedIndex'), -1, 'search has its own checkpoint');
+  assert.equal(app.node('#jump-to-last-viewed').disabled, true);
+  const reload = ui({ storage });
+  assert.equal(reload.run(`lastViewed.get(${JSON.stringify(originalScope)})`), 'r2');
+  assert.equal(app.run("readingScope() === (selectedMessageTypes = new Set([...selectedMessageTypes].reverse()), readingScope())"), true, 'kind ordering is not a different view');
+  app.run("lastViewed.set(readingScope(), 'missing'); renderFeed()");
+  assert.equal(app.node('#jump-to-last-viewed').disabled, true, 'unloaded or filtered-out records are not invented');
+});
+
+test("last viewed selects the saved loaded page and anchors it rather than following latest", () => {
+  const app = ui();
+  seed(app, [lane('alpha', Array.from({ length: 451 }, (_, i) => record({ recordId: `r${i}` })))]);
+  app.run('renderFeed(); lastViewed.set(renderedReadingScope, "r5"); renderFeed()');
+  const feed = app.node('#messages');
+  feed.scrollHeight = 1000; feed.clientHeight = 100; feed.scrollTop = 900;
+  const target = app.node('#synthetic-target');
+  target.dataset = { recordKey: 'r5', recordIndex: '5' };
+  target.getBoundingClientRect = () => ({ top: 500 - feed.scrollTop, bottom: 540 - feed.scrollTop, height: 40 });
+  const latest = { dataset: { recordKey: 'r400', recordIndex: '400' }, getBoundingClientRect: () => ({ top: 0, bottom: 40, height: 40 }) };
+  feed.querySelectorAll = (selector) => selector === 'article.message' ? (app.run('transcriptPage') === 0 ? [target] : [latest]) : [];
+  app.run('updateLastViewedControl()');
+  assert.equal(app.node('#jump-to-last-viewed').disabled, false);
+  app.node('#jump-to-last-viewed').dispatchEvent({ type: 'click' });
+  assert.equal(app.run('transcriptPage'), 0);
+  assert.equal(target.getBoundingClientRect().top, 12);
+  assert.equal(target.classList.contains('last-viewed-highlight'), true);
+  assert.equal(target.getAttribute('tabindex'), '-1');
+  assert.equal(app.node('#jump-to-last-viewed').disabled, true);
+  assert.equal(app.node('#sr-announcer').textContent, 'Returned to your last viewed message.');
+  app.run('clearTimeout(lastViewedHighlightTimer)');
+});
+
+test("last viewed tolerates tall replies, empty panes, unavailable storage, and caps retention", () => {
+  const storage = { get() { throw new Error('storage denied'); }, set() { throw new Error('storage denied'); } };
+  const app = ui({ storage });
+  seed(app, [lane('alpha', [record({ recordId: 'tall' })])]);
+  app.run('renderFeed()');
+  app.node('#conversations-view').classList.add('active');
+  const feed = app.node('#messages');
+  feed.querySelectorAll = (selector) => selector === 'article.message' ? [{ dataset: { recordKey: 'tall', recordIndex: '0' }, getBoundingClientRect: () => ({ top: -50, bottom: 250, height: 300 }) }] : [];
+  app.windowEvent('pagehide');
+  assert.equal(app.run('lastViewed.get(renderedReadingScope)'), 'tall');
+  app.run("for (let i=0;i<80;i++) { renderedReadingScope = 'scope-' + i; captureLastViewed(); }");
+  assert.equal(app.run('lastViewed.size'), 60);
+  assert.equal(app.run("lastViewed.has('scope-0')"), false);
+  feed.querySelectorAll = () => [];
+  app.run("renderedReadingScope = 'empty'; captureLastViewed()");
+  assert.equal(app.run("lastViewed.has('empty')"), false);
+  app.node('#conversations-view').classList.remove('active');
+  app.run("renderedReadingScope = 'inactive'; captureLastViewed()");
+  assert.equal(app.run("lastViewed.has('inactive')"), false);
 });
 
 test("send-time chat snapshot keeps checked lanes and only viewport-visible old history", () => {
@@ -646,8 +769,8 @@ test("mixed lane replies preserve context with selected sections expanded and un
   app.run('allLanesSelected = false; selectedLaneIds = new Set(["alpha"]); renderFeed()');
   const html = app.node("#messages").innerHTML;
   assert.equal((html.match(/<article /g) || []).length, 1);
-  assert.equal((html.match(/aria-expanded="false"/g) || []).length, 2);
-  assert.equal((html.match(/aria-expanded="true"/g) || []).length, 1);
+  assert.equal((html.match(/class="mixed-lane-toggle"[^>]*aria-expanded="false"/g) || []).length, 2);
+  assert.equal((html.match(/class="mixed-lane-toggle"[^>]*aria-expanded="true"/g) || []).length, 1);
   assert.match(html, /\[fm-lane <strong>alpha-UI<\/strong>\]<\/button>/);
   assert.equal((html.match(/\[fm-lane /g) || []).length, 3, "each marker is the toggle, not repeated in its body");
   assert.match(html, /2 lines/);
@@ -655,9 +778,9 @@ test("mixed lane replies preserve context with selected sections expanded and un
   assert.match(html, /&lt;img src=x&gt;/);
   assert.equal(app.run('window.quarterdeckMessageTargets[0].recordId'), "original:1");
   app.run('allLanesSelected = true; renderFeed()');
-  assert.equal((app.node("#messages").innerHTML.match(/aria-expanded="true"/g) || []).length, 3);
+  assert.equal((app.node("#messages").innerHTML.match(/class="mixed-lane-toggle"[^>]*aria-expanded="true"/g) || []).length, 3);
   app.run('allLanesSelected = false; selectedLaneIds = new Set(["alpha", "beta"]); renderFeed()');
-  assert.equal((app.node("#messages").innerHTML.match(/aria-expanded="true"/g) || []).length, 2);
+  assert.equal((app.node("#messages").innerHTML.match(/class="mixed-lane-toggle"[^>]*aria-expanded="true"/g) || []).length, 2);
   app.run('messageFormat = "raw"; renderFeed()');
   assert.match(app.node("#messages").innerHTML, /mixed-lane-content" hidden/);
 });
@@ -1172,7 +1295,7 @@ test("reading position is preserved during feed updates when scrolled up with ju
   const messagesNode = app.node("#messages");
   const jumpBtn = app.node("#jump-to-latest");
   assert.equal(messagesNode.scrollTop, 100);
-  assert.equal(jumpBtn.classList.contains("hidden"), true);
+  assert.equal(jumpBtn.disabled, true);
 
   // User scrolls up (clientHeight=50, scrollHeight=200, scrollTop=20 -> distance = 200-20-50 = 130 >= 60)
   messagesNode.clientHeight = 50;
@@ -1182,12 +1305,12 @@ test("reading position is preserved during feed updates when scrolled up with ju
   // Re-rendering feed (e.g. background refresh) preserves reading position and displays jump-to-latest button
   app.run("renderFeed();");
   assert.equal(messagesNode.scrollTop, 20);
-  assert.equal(jumpBtn.classList.contains("hidden"), false);
+  assert.equal(jumpBtn.disabled, false);
 
   // Clicking jump-to-latest scrolls to bottom and hides the button
   jumpBtn.dispatchEvent({ type: "click" });
   assert.equal(messagesNode.scrollTop, 200);
-  assert.equal(jumpBtn.classList.contains("hidden"), true);
+  assert.equal(jumpBtn.disabled, true);
 });
 
 test("search debounces input and highlights matches safely across markdown and raw text", async () => {
@@ -1415,8 +1538,8 @@ test("Phase 2.5 responsive, typography, and accessibility polish constraints", a
   assert.match(css, /::-webkit-search-cancel-button[\s\S]+-webkit-appearance: none/);
 
   // Jump to latest stays within the feed rather than overlapping mobile navigation.
-  assert.match(css, /\.jump-to-latest \{ position: absolute; bottom: var\(--space-4\);/);
-  assert.match(css, /@media \(max-width: 720px\)[\s\S]+\.jump-to-latest \{ bottom: 16px; \}/);
+  assert.match(css, /\.feed-jump-controls \{ flex: 0 0 auto; display: flex;/);
+  assert.match(css, /\.jump-to-latest \{[^}]*min-height: 44px;/);
 
   // Laptop view avoids dual scrollbars by keeping body and workspace overflow hidden
   assert.match(css, /@media \(max-width: 1200px\)[\s\S]+body \{ overflow: hidden; \}/);
