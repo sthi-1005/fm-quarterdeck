@@ -2120,7 +2120,7 @@ test("quota cards distinguish reused and stale readings and suppress stale proje
   const reusedAt = new Date(Date.now() - 42000).toISOString();
   app.run(`renderQuota(${JSON.stringify({ maxAgeMs: 300000, readAt: reusedAt, providers: [{ ...baseProvider, reused: true, refreshedAt: reusedAt }] })})`);
   let cards = app.node("#quota-providers").innerHTML;
-  assert.match(cards, /class="quota-reused">reused 42s/);
+  assert.match(cards, /class="quota-reused" title="reused 42s" aria-label="reused 42s"><span class="quota-age">reused 42s/);
 
   const staleAt = new Date(Date.now() - 1000).toISOString();
   app.run(`renderQuota(${JSON.stringify({ maxAgeMs: 300000, readAt: staleAt, providers: [{ ...baseProvider, status: "stale", stale: true, refreshedAt: staleAt }] })})`);
@@ -2290,7 +2290,7 @@ test("quota freshness preserves in-card and compact interactions and captured ma
     assertInteraction();
     app.run("quotaNow += 15000; quotaTick()");
     assert.equal(card.classList.contains("quota-card-stale"), true);
-    assert.match(card.textContent, /stale · 5m/);
+    assert.match(card.textContent, /stale 5m/);
     assert.match(card.textContent, /Effective availability unknown/);
     assert.match(card.textContent, /Runway: Unknown/);
     assert.doesNotMatch(card.textContent, /Pace: Ahead|Projected exhaustion|percentage points reserve/);
@@ -2356,7 +2356,7 @@ test("stale scope-only quota preserves compact eligibility, focus and fourth-row
     for (let index = 0; index < 4; index++) {
       assert.equal(staleLinks[index], links[index]);
       assert.equal(staleRows[index], rows[index]);
-      assert.match(staleRows[index].textContent, /stale · 5m/);
+      assert.match(staleRows[index].textContent, /stale 5m/);
     }
     for (const surface of [strip, mobile]) assert.doesNotMatch(surface.textContent, /unmeasured|Hidden source|grok/);
     if (interaction === "sidebar-focus") assert.equal(app.run("document.activeElement"), links[0]);
