@@ -283,12 +283,13 @@ try {
   for (const mode of ["highest", "lowest", "runway"]) {
     await evalJs(`document.querySelector("#quota-sort-${mode}").click()`);
     assert.deepEqual(await evalJs('[...document.querySelectorAll("#quota-providers article[data-provider]")].map(c => c.dataset.provider)'), await evalJs('[...new Set([...document.querySelectorAll("#quota-strip .quota-family")].map(c => JSON.parse(c.dataset.quotaKey)[0]))]'), `${mode}: page and sidebar share order`);
-    assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort").value'), mode);
+    assert.equal(await evalJs('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")'), mode);
+    assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), String(mode === "runway"));
   }
   await cmd("Page.reload");
   await wait(250);
-  assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort").value'), "runway", "shared preference persists across reload");
-  await evalJs('document.querySelector("#sidebar-quota-sort").value = "lowest"; document.querySelector("#sidebar-quota-sort").dispatchEvent(new Event("change"))');
+  assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), "true", "shared preference persists across reload");
+  await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=left]").click(); if (localStorage.getItem("fm-agentos-sidebar-quota-sort.v1") !== "lowest") document.querySelector("#sidebar-quota-sort [data-sort=left]").click()');
   assert.equal(await evalJs('document.querySelector("#quota-sort-lowest").getAttribute("aria-pressed")'), "true", "sidebar changes page control");
   await evalJs('document.querySelector("#quota-details-toggle").click()');
   assert.equal(await evalJs('[...document.querySelectorAll("details.quota-more")].every(d => d.open)'), true, "Show all details opens every disclosure");
