@@ -1514,8 +1514,18 @@ for (const [name, id] of [["lanes", "#mobile-lanes-tab"], ["kinds", "#mobile-kin
   });
 }
 const desktopPanels = { lane: true, kind: true };
-function setDesktopPanelExpanded(which, expanded) {
-  desktopPanels[which] = expanded;
+// Panels the user wants open may still render collapsed when the feed would drop below its minimum width.
+function fittedDesktopPanels() {
+  const width = $(".conversation-body")?.clientWidth;
+  return width ? filterView.fitDesktopPanels(width, desktopPanels) : { ...desktopPanels };
+}
+function applyDesktopPanels() {
+  const fitted = fittedDesktopPanels();
+  setDesktopPanelExpanded("lane", fitted.lane, false);
+  setDesktopPanelExpanded("kind", fitted.kind, false);
+}
+function setDesktopPanelExpanded(which, expanded, remember = true) {
+  if (remember) desktopPanels[which] = expanded;
   const panel = $(which === "lane" ? "#lane-options" : "#conversation-kind-panel");
   const toggle = $(which === "lane" ? "#lane-panel-toggle" : "#kind-panel-toggle");
   const name = which === "lane" ? "Included fleets" : "Message kinds";
@@ -1545,8 +1555,7 @@ function syncConversationFilterLayout() {
   }
   if (!compact) {
     setLaneFiltersExpanded(true);
-    setDesktopPanelExpanded("lane", desktopPanels.lane);
-    setDesktopPanelExpanded("kind", desktopPanels.kind);
+    applyDesktopPanels();
     menu?.setAttribute("open", "");
   } else {
     setLaneFiltersExpanded(false);
@@ -1583,8 +1592,8 @@ function closeOpenPopovers() {
   });
 }
 
-$("#lane-panel-toggle").addEventListener("click", () => setDesktopPanelExpanded("lane", !desktopPanels.lane));
-$("#kind-panel-toggle").addEventListener("click", () => setDesktopPanelExpanded("kind", !desktopPanels.kind));
+$("#lane-panel-toggle").addEventListener("click", () => { setDesktopPanelExpanded("lane", !fittedDesktopPanels().lane); applyDesktopPanels(); });
+$("#kind-panel-toggle").addEventListener("click", () => { setDesktopPanelExpanded("kind", !fittedDesktopPanels().kind); applyDesktopPanels(); });
 $("#lane-filter-toggle").addEventListener("click", () => {
   setLaneFiltersExpanded($("#lane-filter-toggle").getAttribute("aria-expanded") !== "true");
   if (phoneChatFilters?.matches && $("#lane-filter-toggle").getAttribute("aria-expanded") === "true") $(mobileFilterTab === "lanes" ? "#mobile-lanes-tab" : "#mobile-kinds-tab").focus();
@@ -1592,7 +1601,7 @@ $("#lane-filter-toggle").addEventListener("click", () => {
 const laneShortcut = $("#conversation-filter-shortcut");
 let shortcutPreviewTimer;
 function previewLaneShortcut() {
-  if (compactChatFilters?.matches || desktopPanels.lane) return;
+  if (compactChatFilters?.matches || fittedDesktopPanels().lane) return;
   clearTimeout(shortcutPreviewTimer);
   const rect = laneShortcut.getBoundingClientRect();
   const panel = $("#lane-options");
@@ -1623,8 +1632,9 @@ laneShortcut.addEventListener("click", () => {
     setLaneFiltersExpanded(true);
     $("#lane-filter-toggle").focus();
   } else {
-    setDesktopPanelExpanded("lane", !desktopPanels.lane);
-    if (!desktopPanels.lane) previewLaneShortcut();
+    setDesktopPanelExpanded("lane", !fittedDesktopPanels().lane);
+    applyDesktopPanels();
+    if (!fittedDesktopPanels().lane) previewLaneShortcut();
   }
 });
 $("#lane-filter-close").addEventListener("click", () => {
@@ -1673,6 +1683,7 @@ window.matchMedia?.("(max-width: 1200px)").addEventListener?.("change", () => se
 compactChatFilters?.addEventListener?.("change", syncConversationFilterLayout);
 roomyChatHeader?.addEventListener?.("change", syncConversationFilterLayout);
 syncConversationFilterLayout();
+if (window.ResizeObserver && $(".conversation-body")) new ResizeObserver(() => { if (!compactChatFilters?.matches) applyDesktopPanels(); }).observe($(".conversation-body"));
 
 function soloLane(laneId) {
   navigateToLane(laneId);

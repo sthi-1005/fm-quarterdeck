@@ -100,7 +100,22 @@ window.filterView = (() => {
     return { statusFilter: nextStatus };
   }
 
+  // Desktop panel widths mirror the conversation-body grid in styles.css.
+  const PANEL_WIDTHS = { lane: [215, 52], kind: [205, 44] };
+  const MIN_FEED_WIDTH = 480;
+  // Which desktop side panels may stay expanded so the feed keeps MIN_FEED_WIDTH.
+  // The message-kinds panel yields first, then the fleets panel; user choice only narrows.
+  function fitDesktopPanels(bodyWidth, wanted) {
+    const fits = (lane, kind) => bodyWidth - PANEL_WIDTHS.lane[lane ? 0 : 1] - PANEL_WIDTHS.kind[kind ? 0 : 1] >= MIN_FEED_WIDTH;
+    let lane = Boolean(wanted.lane), kind = Boolean(wanted.kind);
+    if (!fits(lane, kind) && kind) kind = false;
+    if (!fits(lane, kind) && lane) lane = false;
+    return { lane, kind };
+  }
+
   return {
+    fitDesktopPanels,
+    MIN_FEED_WIDTH,
     kindGlyph,
     kindFiltersHtml,
     syncKindsBulk,
