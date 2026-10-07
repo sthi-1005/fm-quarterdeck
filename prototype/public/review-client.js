@@ -1,7 +1,7 @@
 // Native review overlay. Annotation is always available; the toggle swaps click precedence.
 const el = (id) => document.getElementById(id);
 // Content taps/clicks annotate immediately, including on touch devices with no hover.
-// The pen toggles interaction mode; controls always take ordinary clicks.
+// The pen toggles interaction mode; while it is on every click annotates, Alt-click interacts.
 let annotateByDefault = false;
 let awaitingReview = null;
 function showAwaitingReview(count) {
@@ -259,12 +259,14 @@ function update() {
   el("review-inline-summary").textContent = compactSummary;
 
   el("review-toggle").setAttribute("aria-label", annotateByDefault
-    ? "Annotation mode on: tap or click content to annotate; controls interact normally. Alt-click content to interact."
+    ? "Annotation mode on: tap or click content to annotate; every click is captured. Alt-click to interact."
     : "Annotation mode off: tap or click to interact; Alt-click to annotate on desktop.");
-  el("review-target").textContent = selected ? `Annotating ${selected.label} · ${selected.route}` : "Message to review conversation";
+  el("review-target").textContent = selected ? `Annotating ${selected.label} · ${selected.route}` : "";
   el("review-target").hidden = !selected && Boolean(phoneReview?.matches);
   updateSelectionAction();
-  el("review-queue").textContent = selected ? "Queue annotation" : "Queue message";
+  const queueLabel = selected ? "Queue annotation" : "Queue message";
+  el("review-queue").textContent = "Queue\n(Enter)";
+  el("review-queue").setAttribute("aria-label", `${queueLabel} (Enter)`);
   el("review-context").textContent = `Version ${config.version.slice(0, 12)} · ${config.delivery === "lavish" ? `Lavish session ${config.sessionId}` : config.intakeReady ? "Firstmate inbox intake" : "Local receipt · Firstmate intake unavailable"}`;
   const sendable = queue.length || retryBatches.length || (activeReviewTab !== "review" && el("review-message").value.trim());
   el("review-send").disabled = !sendable || pending || !config.ready;
@@ -672,24 +674,15 @@ document.addEventListener("click", (event) => {
     }
     touchStart = null;
   }
-  if (pickingRegion) {
-    if (event.target.closest(".review-pick-notice") || !regionFor(event.target)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    selectRegion(event.target);
-    return;
-  }
-  if (!event.target.closest(".product-view, .lane-list, .context-rail")) return;
-  // Alt inverts the current default for content. Operational controls always
-  // take an ordinary click, including when a gesture
-  // is enabled. Alt-click can still deliberately annotate a control.
-  if (!event.altKey && event.target.closest(controls)) return;
-  // Checked means ordinary content clicks annotate; Alt reverses that choice.
-  if (annotateByDefault === event.altKey) return;
-  if (!regionFor(event.target)) return;
+  // Review chrome stays operable so annotation mode can always be turned off.
+  if (event.target.closest(".review-pick-notice, .review-gesture-controls, #review-gesture-popover, #desktop-review-footer")) return;
+  // While annotating (picking, mode on, or Alt-click with mode off) the tool owns
+  // every click, including non-interactive areas; none reaches the page beneath.
+  if (!pickingRegion && annotateByDefault === event.altKey) return;
   event.preventDefault();
-  event.stopPropagation();
-  selectRegion(event.target, { x: event.clientX, y: event.clientY });
+  event.stopImmediatePropagation();
+  if (!regionFor(event.target)) return;
+  selectRegion(event.target, pickingRegion ? undefined : { x: event.clientX, y: event.clientY });
 }, true);
 el("review-message").addEventListener("input", () => { resizeMessage(); update(); });
 el("review-message").addEventListener("keydown", (event) => {

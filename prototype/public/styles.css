@@ -143,6 +143,7 @@ input[type="search"]::-webkit-search-results-decoration {
 #review-message { width: 100%; resize: vertical; border: 1px solid var(--control-line); border-radius: 8px; padding: 8px; font: inherit; }
 #review-state { color: var(--accent); font-size: var(--text-ui); overflow-wrap: anywhere; }
 .review-actions button { min-width: 0; padding: 6px 4px; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+#review-queue { white-space: pre-line; }
 @media (max-width: 600px) { #review-pick { bottom: 68px; right: 16px; } }
 
 /* Persistent navigation. Lane Chats is one deliberately proportioned control row. */
@@ -1042,7 +1043,9 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .nav-caption { margin: 0 8px 4px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
 .primary-tab { min-height: 44px; padding: 8px 12px; border-radius: 8px; }
 .primary-tab.active, .lane-chats-row:has(.active) { background: var(--surface); color: var(--accent); box-shadow: inset 3px 0 var(--accent), 0 1px 4px #243c2e12; }
-.lane-chats-row { grid-template-columns: minmax(0, 1fr) 44px 64px; min-height: 48px; border-color: #cddbd2; background: #f5f8f5; }
+/* No select-all cell exists in the row: reserving a column for it left a blank strip beside the tab. */
+.lane-chats-row { grid-template-columns: minmax(0, 1fr) 44px; min-height: 48px; border-color: #cddbd2; background: #f5f8f5; }
+@media (min-width: 1200.01px) { .lane-chats-row { grid-template-columns: minmax(0, 1fr); } }
 .lane-chats-row .primary-tab { min-height: 48px; }
 .lane-chats-row .primary-tab small { display: block; }
 /* H2 — desktop shell: one primary label per nav row; secondary lives in title tooltip */
@@ -1283,6 +1286,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .lane-chats-row:has(.active) .lane-select-all,
 .primary-tab.active .chats-icon { color: #0a6f60; }
 .lane-filter-toggle:hover { background: #1a3a48; color: #9ff0e0; }
+.lane-chats-row .primary-tab:hover:not(.active) { background: #1a3a48; color: #9ff0e0; border-color: transparent; }
 .lane-chats-row:has(.active) .lane-filter-toggle:hover { background: #d5f3ee; color: #0a6f60; }
 .lane-select-all { border-color: #2a4a58; }
 .lane-filter { background: #f4f7f9; color: var(--text); box-shadow: 0 8px 24px #06141c55; }

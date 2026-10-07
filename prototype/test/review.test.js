@@ -459,7 +459,7 @@ test("native review stays available with panel hidden and click precedence toggl
   assert.match(html, /id="review-send"/);
   assert.match(html, /id="review-end"/);
   assert.match(script, /annotateByDefault === event\.altKey/);
-  assert.match(script, /event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*selectRegion/);
+  assert.match(script, /event\.preventDefault\(\);\s*event\.stopImmediatePropagation\(\);\s*if \(!regionFor\(event\.target\)\) return;\s*selectRegion/);
   assert.doesNotMatch(script, /active = false/);
   assert.match(script, /entry\.region/);
   assert.match(html, /Enter: queue · Shift\+Enter: new line · Ctrl\/Cmd\+Enter: send/);
@@ -530,12 +530,12 @@ test("annotation addresses the clicked control, never its enclosing sidebar", as
   assert.equal(region.id, "refresh");
   assert.equal(vm.runInContext("regionFor", context)(sidebar), null);
   // Alt-click on the nested icon selects the button, not the sidebar or icon.
-  documentListeners.get("click")({ target: content, button: 0, detail: 1, altKey: false, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: content, button: 0, detail: 1, altKey: false, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating Card/);
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating Card/, "Alt-click interacts when annotation mode is on");
   vm.runInContext("annotateByDefault = false", context);
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating Refresh data/);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(nodes.get("review-message").focused, true);
@@ -548,33 +548,41 @@ test("annotation addresses the clicked control, never its enclosing sidebar", as
   assert.equal(vm.runInContext("regionFor", context)(quotaBar).label, "agy · 5h: 42% remaining. Open Quota page");
   assert.equal(vm.runInContext("regionFor", context)(strip).label, "Quota snapshot");
   let interceptedLabel = false;
-  documentListeners.get("click")({ target: gestureText, button: 0, detail: 1, altKey: false, preventDefault() { interceptedLabel = true; }, stopPropagation() {} });
+  documentListeners.get("click")({ target: gestureText, button: 0, detail: 1, altKey: false, preventDefault() { interceptedLabel = true; }, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.equal(interceptedLabel, false); // label remains a usable checkbox on ordinary click
-  documentListeners.get("click")({ target: gestureText, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: gestureText, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating Alt-click annotation control/);
-  documentListeners.get("click")({ target: quotaBar, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: quotaBar, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating agy · 5h/);
-  documentListeners.get("click")({ target: strip, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: strip, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.match(nodes.get("review-target").textContent, /Annotating Quota snapshot/);
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   checkbox.checked = true;
   checkbox.dispatch("change", { target: checkbox });
   assert.equal(checkbox.checked, true);
   let intercepted = false;
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {} });
-  assert.equal(intercepted, false); // checked: Refresh remains clickable
-  documentListeners.get("click")({ target: tabLabel, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {} });
-  assert.equal(intercepted, false); // navigation is operational even through nested spans
-  documentListeners.get("click")({ target: content, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {} });
-  assert.equal(intercepted, true); // non-control content remains annotatable
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {}, stopImmediatePropagation() {} });
+  assert.equal(intercepted, true); // checked: even controls are captured, not activated
+  documentListeners.get("click")({ target: tabLabel, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {}, stopImmediatePropagation() {} });
+  assert.equal(intercepted, true); // navigation is captured through nested spans too
+  intercepted = false;
+  documentListeners.get("click")({ target: content, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {}, stopImmediatePropagation() {} });
+  assert.equal(intercepted, true); // non-control content is annotated
   intercepted = false;
   checkbox.checked = false;
   checkbox.dispatch("change", { target: checkbox });
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {} });
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} });
   checkbox.checked = true;
   checkbox.dispatch("change", { target: checkbox });
-  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() { intercepted = true; }, stopPropagation() {} });
+  documentListeners.get("click")({ target: icon, button: 0, detail: 1, altKey: true, preventDefault() { intercepted = true; }, stopPropagation() {}, stopImmediatePropagation() {} });
   assert.equal(intercepted, false); // Alt-click interacts when checked
+  // Regression: annotation click mode owns every click, including non-interactive
+  // areas with no annotatable region; none may reach the page underneath.
+  assert.equal(vm.runInContext("regionFor", context)(sidebar), null);
+  intercepted = false;
+  let stopped = false;
+  documentListeners.get("click")({ target: sidebar, button: 0, detail: 1, altKey: false, preventDefault() { intercepted = true; }, stopPropagation() {}, stopImmediatePropagation() { stopped = true; } });
+  assert.equal(intercepted && stopped, true, "click on a non-annotatable area is still captured in annotation mode");
   assert.match(nodes.get("review-toggle").getAttribute("aria-label"), /Annotation mode on/);
   const message = nodes.get("review-message");
   let prevented = false;
