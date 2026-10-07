@@ -26,11 +26,12 @@ try {
     await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 720 });
     await command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/#lanes` });
     await until("document.querySelectorAll('.mixed-lane-toggle').length === 3");
-    // Start from All even if the previous viewport changed the route.
-    await evaluate("for(const input of document.querySelectorAll('#lane-filter-rows input[data-filter-lane]')) if(!input.checked) input.click()");
+    // Re-query after each click because filter rendering replaces the inputs.
+    const selectAll = () => evaluate("while(true) { const input=document.querySelector('#lane-filter-rows input[data-filter-lane]:not(:checked)'); if(!input) break; input.click(); }");
+    await selectAll();
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-toggle[aria-expanded=true]').length"), 3);
     assert.equal(await evaluate("document.querySelectorAll('article.message').length"), 1, "one original reply, not duplicate projections");
-    await evaluate("for(const input of document.querySelectorAll('#lane-filter-rows input[data-filter-lane]')) if(input.checked !== (input.dataset.filterLane === 'alpha')) input.click()");
+    await evaluate("while(true) { const input=[...document.querySelectorAll('#lane-filter-rows input[data-filter-lane]')].find(i => i.checked !== (i.dataset.filterLane === 'alpha')); if(!input) break; input.click(); }");
     const state = () => evaluate("[...document.querySelectorAll('.mixed-lane-toggle')].map(b => ({name:b.querySelector('strong').textContent, expanded:b.getAttribute('aria-expanded'), hidden:document.getElementById(b.getAttribute('aria-controls')).hidden}))");
     assert.deepEqual(await state(), [
       { name: "General", expanded: "false", hidden: true },
@@ -52,7 +53,7 @@ try {
     assert.equal((await state())[2].hidden, true);
     assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
     // No local preference is introduced; All defaults to every section expanded.
-    await evaluate("for(const input of document.querySelectorAll('#lane-filter-rows input[data-filter-lane]')) if(!input.checked) input.click()");
+    await selectAll();
     assert.equal(await evaluate("document.querySelectorAll('.mixed-lane-content[hidden]').length"), 0);
     console.log(`${width}x${height}: mixed-lane filtering, keyboard/click toggles, raw format and rerender persistence passed`);
   }
