@@ -182,7 +182,7 @@ try {
   assert.equal(await evalJs('document.querySelectorAll("#quota-strip .quota-family").length'), 4, "AGY scope families and unsplit providers each have a compact box");
   assert.equal(await evalJs('document.querySelectorAll("#quota-strip .quota-family-notch").length'), 6, "source intervals and in-range AGY label intervals draw notches");
   assert.ok(await evalJs('document.querySelector("#quota-strip .quota-family-notch")?.getAttribute("aria-label")?.includes("remaining at source capture")'), "notch has an accessible meaning");
-  assert.ok(Math.abs(Number(await evalJs('document.querySelector("#quota-strip .quota-family-notch").style.getPropertyValue("--remaining").replace("%", "")')) - 79.1667) < 0.001, "5d13h remaining in the 7-day Codex window positions the marker at 79.1%");
+  assert.ok(Math.abs(Number(await evalJs('document.querySelector("#quota-strip [data-quota-key*=codex] .quota-family-notch").style.getPropertyValue("--remaining").replace("%", "")')) - 79.1667) < 0.001, "5d13h remaining in the 7-day Codex window positions the marker at 79.1%");
   assert.ok(desktopSidebar.html.includes("Gemini 5-hour") && desktopSidebar.html.includes("Claude/GPT 5-hour"), "desktop sidebar shows multiple windows for AGY");
   assert.ok(desktopSidebar.freshness.length > 0, "desktop sidebar shows freshness timestamp");
   assert.ok(!desktopSidebar.html.includes("time ?"), "missing window timing does not clutter rows");
