@@ -220,7 +220,7 @@ try {
   await evalJs('document.querySelector(".workspace").style.removeProperty("--shell-nav-width")');
 
   // The full Quota page remains reachable from the main navigation.
-  await evalJs(`document.querySelector('.primary-nav a[href="#quota"]').click()`);
+  await evalJs(`document.querySelector('.primary-nav [data-view="quota"]').click()`);
   await wait(150);
 
   const desktopQuotaView = await evalJs(`(() => {
