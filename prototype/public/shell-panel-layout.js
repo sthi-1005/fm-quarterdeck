@@ -18,3 +18,13 @@ export function savedShellWidth(value) {
   const width = Number(value);
   return Number.isFinite(width) && width > 0 ? width : null;
 }
+
+// Apply the saved width to the workspace grid. app.js scrolls the feed to its newest record as soon as
+// lanes load, so this must run before app.js; a later width change re-wraps the feed and leaves it
+// short of the bottom.
+export function restoreShellWidth(workspace, viewportWidth, storage) {
+  let saved = null;
+  try { saved = savedShellWidth(storage.getItem(SHELL_WIDTH_KEY)); } catch { /* Storage is optional. */ }
+  if (saved !== null) workspace.style.setProperty("--shell-nav-width", `${shellWidth(saved, viewportWidth)}px`);
+  return saved;
+}
