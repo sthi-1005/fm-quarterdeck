@@ -194,14 +194,20 @@ try {
   assert.deepEqual(await evaluate(`(() => { const s = JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')); return [s.retryBatches.length, s.sent.length]; })()`), [35, 35]);
   assert.deepEqual(await evaluate("['#review-thread', '#review-sent-list', '#review-phone-thread'].map(selector => document.querySelector(selector).children.length)"), [35, 35, 70], "all retained batches render in desktop Queued/Sent and the combined phone Review thread");
   await evaluate("sessionStorage.removeItem('fm-agentos-review-draft-v1')");
-  await command("Page.reload");
-  await until("document.querySelector('#review-message') && document.querySelector('#projects').children.length > 0");
   let loseNext = true, newConfig = false, eventError;
+  // Board rendering is not review readiness: loadConfig() is an independent
+  // fetch. Hold its response to force the ordering that used to flake in CI.
+  let holdConfig = true;
+  const configPaused = Promise.withResolvers();
   browser.onEvent((event) => {
     if (event.method !== "Fetch.requestPaused") return;
     const { requestId, request } = event.params;
     let action;
-    if (request.method === "POST" && loseNext) {
+    if (request.method === "GET" && holdConfig) {
+      holdConfig = false;
+      configPaused.resolve(requestId);
+      return;
+    } else if (request.method === "POST" && loseNext) {
       loseNext = false;
       action = command("Fetch.failRequest", { requestId, errorReason: "Failed" });
     } else if (request.method === "GET" && newConfig) {
@@ -211,8 +217,19 @@ try {
     action.catch((error) => { eventError = error; });
   });
   await command("Fetch.enable", { patterns: [{ urlPattern: "*/api/review", requestStage: "Response" }] });
-  await evaluate("document.querySelector('#review-message').value = 'Synthetic lost response'; document.querySelector('#review-form').requestSubmit(); document.querySelector('#review-send').click()");
-  await until("JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).retryBatches.length === 1");
+  await command("Page.reload");
+  await until("document.querySelector('#review-message') && document.querySelector('#projects').children.length > 0");
+  const configRequestId = await configPaused.promise;
+  await evaluate("document.querySelector('#review-message').value = 'Synthetic lost response'; document.querySelector('#review-form').requestSubmit()");
+  assert.equal(await evaluate("document.querySelector('#review-send').disabled"), true, "rendered board cannot send before review configuration arrives");
+  await evaluate("document.querySelector('#review-send').click()");
+  assert.equal(deliveries, 0, "an early click is ignored, not a simulated lost delivery");
+  assert.equal(await evaluate("JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).queue.length"), 1, "early click preserves the queued note");
+  await command("Fetch.continueRequest", { requestId: configRequestId });
+  await until("document.querySelector('#review-context')?.textContent.includes('Version') && !document.querySelector('#review-send').disabled");
+  await evaluate("document.querySelector('#review-send').click()");
+  await until("(() => { const s = JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')); return s.retryBatches.length === 1 && !s.inFlight; })()");
+  assert.equal(loseNext, false, "the POST response was intercepted and lost");
   const original = await evaluate("JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).retryBatches[0]");
   assert.equal(deliveries, 1, "receipt persisted before losing its response");
   newConfig = true;
