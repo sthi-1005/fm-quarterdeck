@@ -73,7 +73,8 @@ try {
  await screenshot('collapsed');
  await browser.command('Page.reload');await browser.until(`document.querySelector('#sidebar-quota-toggle')?.getAttribute('aria-expanded') === 'false' && document.querySelectorAll('#quota-strip .quota-badge').length === 6`);
  await browser.evaluate(`document.querySelector('#sidebar-quota-toggle').focus()`);
- await browser.command('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+ assert.equal(await browser.evaluate(`document.activeElement.id`),'sidebar-quota-toggle');
+ await browser.command('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',windowsVirtualKeyCode:13});
  await browser.command('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
  assert.equal(await browser.evaluate(`document.querySelector('#sidebar-quota-toggle').getAttribute('aria-expanded')`),'true');
  await sort('highest');
