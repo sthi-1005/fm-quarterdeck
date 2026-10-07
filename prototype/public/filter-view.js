@@ -110,13 +110,12 @@ window.filterView = (() => {
   const PANEL_WIDTHS = { lane: [215, 52], kind: [205, 44] };
   const MIN_FEED_WIDTH = 480;
   // Which desktop side panels may stay expanded so the feed keeps MIN_FEED_WIDTH.
-  // The message-kinds panel yields first, then the fleets panel; user choice only narrows.
-  function fitDesktopPanels(bodyWidth, wanted) {
-    const fits = (lane, kind) => bodyWidth - PANEL_WIDTHS.lane[lane ? 0 : 1] - PANEL_WIDTHS.kind[kind ? 0 : 1] >= MIN_FEED_WIDTH;
-    let lane = Boolean(wanted.lane), kind = Boolean(wanted.kind);
-    if (!fits(lane, kind) && kind) kind = false;
-    if (!fits(lane, kind) && lane) lane = false;
-    return { lane, kind };
+  // The other panel yields before `keep` (the one the user last expanded, fleets by default); user choice only narrows.
+  function fitDesktopPanels(bodyWidth, wanted, keep = "lane") {
+    const open = { lane: Boolean(wanted.lane), kind: Boolean(wanted.kind) };
+    const fits = () => bodyWidth - PANEL_WIDTHS.lane[open.lane ? 0 : 1] - PANEL_WIDTHS.kind[open.kind ? 0 : 1] >= MIN_FEED_WIDTH;
+    for (const which of keep === "kind" ? ["lane", "kind"] : ["kind", "lane"]) if (!fits()) open[which] = false;
+    return open;
   }
 
   return {

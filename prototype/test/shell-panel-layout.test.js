@@ -5,6 +5,10 @@ import { SHELL_DEFAULT_WIDTH, SHELL_RESIZE_STEP, SHELL_WIDTH_KEY, restoreShellWi
 
 test("shell width reserves 480px for the conversation and caps navigation at 440px", () => {
   assert.deepEqual(shellWidthBounds(1600), { min: 220, max: 440 });
+  // Above 1200px the Fleet Chats rail (288px) and collapsed filter rails (52px + 44px) are reserved too.
+  assert.deepEqual(shellWidthBounds(1201), { min: 220, max: 337 });
+  assert.deepEqual(shellWidthBounds(1374), { min: 220, max: 440 });
+  assert.deepEqual(shellWidthBounds(1200), { min: 220, max: 440 });
   assert.deepEqual(shellWidthBounds(800), { min: 220, max: 320 });
   assert.deepEqual(shellWidthBounds(721), { min: 220, max: 241 });
   assert.equal(shellWidth(900, 1600), 440);

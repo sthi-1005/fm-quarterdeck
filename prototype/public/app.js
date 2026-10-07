@@ -1514,10 +1514,11 @@ for (const [name, id] of [["lanes", "#mobile-lanes-tab"], ["kinds", "#mobile-kin
   });
 }
 const desktopPanels = { lane: true, kind: true };
+let keptDesktopPanel = "lane";
 // Panels the user wants open may still render collapsed when the feed would drop below its minimum width.
 function fittedDesktopPanels() {
   const width = $(".conversation-body")?.clientWidth;
-  return width ? filterView.fitDesktopPanels(width, desktopPanels) : { ...desktopPanels };
+  return width ? filterView.fitDesktopPanels(width, desktopPanels, keptDesktopPanel) : { ...desktopPanels };
 }
 function applyDesktopPanels() {
   const fitted = fittedDesktopPanels();
@@ -1526,6 +1527,7 @@ function applyDesktopPanels() {
 }
 function setDesktopPanelExpanded(which, expanded, remember = true) {
   if (remember) desktopPanels[which] = expanded;
+  if (remember && expanded) keptDesktopPanel = which;
   const panel = $(which === "lane" ? "#lane-options" : "#conversation-kind-panel");
   const toggle = $(which === "lane" ? "#lane-panel-toggle" : "#kind-panel-toggle");
   const name = which === "lane" ? "Included fleets" : "Message kinds";
@@ -1577,6 +1579,9 @@ function syncConversationFilterLayout() {
 }
 
 function setLaneFiltersExpanded(expanded) {
+  // Wide desktop lays the fleets panel out as a grid column (collapsed via data-collapsed), never hidden:
+  // route changes elsewhere close the compact sheet, and a hidden column would squeeze the feed.
+  if (!(compactChatFilters?.matches ?? true)) expanded = true;
   const toggle = $("#lane-filter-toggle");
   toggle.setAttribute("aria-expanded", String(expanded));
   toggle.setAttribute("aria-label", phoneChatFilters?.matches ? (expanded ? "Close conversation filters" : "Open conversation filters") : (expanded ? "Collapse fleet filters" : "Expand fleet filters"));
