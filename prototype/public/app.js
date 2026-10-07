@@ -124,6 +124,17 @@ function compactMetadata(message) {
   const label = ({ conversation: "Reply", supervision: "Outcome", branch: "Crew reply", crew: "Crew status" })[type] || messageTypeLabel(type);
   return `<time class="compact-clock" datetime="${escapeHtml(message.occurredAt || "")}" title="${escapeHtml(message.time || message.occurredAt || "Time unknown")}">${escapeHtml(time)}</time><span class="compact-sender" title="${escapeHtml(message.author)}">${escapeHtml(message.author)}</span><span class="compact-kind" title="${escapeHtml(messageTypeLabel(type))}">${escapeHtml(label)}</span>`;
 }
+function expandFullRecords(messages, all = false) {
+  if (all) expandedFullViews.add(renderedReadingScope);
+  const selected = new Set(selectedLanes().map((lane) => lane.id));
+  const scope = laneSelection().all && laneStatusFilter === "all" && !feedLaneOverrideId ? "All" : [...selected].sort().join(",");
+  for (const message of messages) {
+    message.mixedLaneMessage?.blocks.forEach((_, index) => mixedLaneExpansion.set(JSON.stringify([message.recordId, scope, index]), true));
+    const key = JSON.stringify([renderedReadingScope, messageRecordKey(message)]);
+    if (all) fullDetailChoices.delete(key);
+    else fullDetailChoices.set(key, true);
+  }
+}
 function changeCompactMode(compact, clickedLine = null) {
   const feed = $("#messages"), bounds = feed.getBoundingClientRect();
   const visible = [...feed.querySelectorAll("article.message")].filter((node) => { const r = node.getBoundingClientRect(); return r.height > 0 && r.bottom > bounds.top && r.top < bounds.bottom; });
@@ -134,21 +145,156 @@ function changeCompactMode(compact, clickedLine = null) {
   if (compact) compactViews.add(renderedReadingScope);
   while (compactViews.size > 60) compactViews.delete(compactViews.values().next().value);
   try { localStorage.setItem(COMPACT_VIEWS_KEY, JSON.stringify([...compactViews])); } catch {}
-  if (!compact && clickedLine) {
-    expandedFullViews.add(renderedReadingScope);
-    const selected = new Set(selectedLanes().map((lane) => lane.id));
-    const scope = laneSelection().all && laneStatusFilter === "all" && !feedLaneOverrideId ? "All" : [...selected].sort().join(",");
-    for (const message of messagesForSelection()) {
-      message.mixedLaneMessage?.blocks.forEach((_, index) => mixedLaneExpansion.set(JSON.stringify([message.recordId, scope, index]), true));
-      fullDetailChoices.delete(JSON.stringify([renderedReadingScope, messageRecordKey(message)]));
-    }
-  }
+  if (!compact && clickedLine) expandFullRecords(messagesForSelection(), true);
   renderFeed();
   pendingMessageAnchor = null;
 }
 function updateLatestControl(atBottom) {
   const button = $("#jump-to-latest");
   if (button) button.disabled = atBottom && transcriptPage === previousPageCount - 1;
+}
+// Numeric indices cover loaded history, not just the bounded rendered page.
+const kindRecordIndices = new Map();
+const kindJumpTargets = new Map();
+let pendingKindJump = null;
+function kindJumpIndex(indices, cursor, step) {
+  let low = 0, high = indices.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (step < 0 ? indices[mid] < cursor : indices[mid] <= cursor) low = mid + 1;
+    else high = mid;
+  }
+  return indices[step < 0 ? low - 1 : low] ?? -1;
+}
+function kindJumpScope() {
+  const parts = JSON.parse(readingScope());
+  // Default native-thinking detection may change as older records arrive; an
+  // explicit kind preference must still cancel any superseded navigation.
+  try {
+    if (localStorage.getItem(MESSAGE_TYPES_KEY) === null && localStorage.getItem(MESSAGE_TYPES_LEGACY_KEY) === null) parts[3] = parts[3].filter(id => id !== "thinking");
+  } catch {}
+  return JSON.stringify(parts);
+}
+function currentReadingRecord() {
+  const feed = $("#messages"), bounds = feed.getBoundingClientRect();
+  return [...feed.querySelectorAll("article.message")].find(node => {
+    const r = node.getBoundingClientRect();
+    return r.height > 0 && r.bottom > bounds.top && r.top < bounds.bottom;
+  });
+}
+function canLoadEarlierKind(kind) {
+  return selectedMessageTypes.has(kind) && selectedLanes().length > 0 && transcriptCoverage.expandable &&
+    (transcriptCoverage.windowBytes || transcriptWindowBytes) < 8 * 1024 * 1024;
+}
+function updateKindNavigation() {
+  if (pendingKindJump && (pendingKindJump.scope !== kindJumpScope() || $(".workspace").dataset.view !== "conversations")) pendingKindJump = null;
+  const first = currentReadingRecord();
+  const cursor = first ? Number(first.dataset.recordIndex) : (transcriptPage || 0) * TRANSCRIPT_PAGE_SIZE - 1;
+  kindJumpTargets.clear();
+  for (const type of MESSAGE_TYPES) {
+    const indices = kindRecordIndices.get(type.id) || [];
+    kindJumpTargets.set(type.id, { previous: kindJumpIndex(indices, cursor, -1), next: kindJumpIndex(indices, cursor, 1) });
+  }
+  for (const button of $("#message-type-filters").querySelectorAll("button[data-kind-jump]")) {
+    const kind = button.dataset.kindJump, previous = Number(button.dataset.kindStep) < 0;
+    const index = kindJumpTargets.get(kind)?.[previous ? "previous" : "next"] ?? -1;
+    button.disabled = Boolean(pendingKindJump) || !selectedMessageTypes.has(kind) || (index < 0 && !(previous && canLoadEarlierKind(kind)));
+    button.setAttribute("aria-busy", String(Boolean(pendingKindJump)));
+    button.title = pendingKindJump ? "Loading earlier history…" : !selectedMessageTypes.has(kind)
+      ? "Enable this message kind to navigate its records."
+      : index >= 0 ? `${button.getAttribute("aria-label")} in loaded history.`
+      : previous && canLoadEarlierKind(kind) ? "Load earlier records on demand to find this kind (up to 8 MiB/source)."
+      : "No matching message in this direction in loaded history. Older sessions can be loaded separately.";
+  }
+}
+function revealRecord(target) {
+  // An identical page retains its DOM. Synchronize the destination explicitly
+  // so cached fingerprints cannot leave a manually collapsed lane hidden.
+  for (const toggle of target.querySelectorAll("button[data-mixed-lane-key]")) {
+    mixedLaneExpansion.set(toggle.dataset.mixedLaneKey, true);
+    toggle.setAttribute("aria-expanded", "true");
+    const chevron = toggle.querySelector(".mixed-lane-chevron");
+    if (chevron) chevron.textContent = "▾";
+    const summary = toggle.parentElement.querySelector(".mixed-lane-summary");
+    if (summary) summary.hidden = true;
+    const body = document.getElementById(toggle.getAttribute("aria-controls"));
+    if (body) body.hidden = false;
+  }
+  for (const detail of target.querySelectorAll("details")) detail.open = true;
+}
+function navigateToRecord(index, { expand = false, announcement = "Returned to your last viewed message." } = {}) {
+  const messages = messagesForSelection(), message = messages[index];
+  if (!message) return;
+  const key = messageRecordKey(message);
+  pendingLastViewedJump = key;
+  pendingMessageAnchor = null;
+  transcriptPage = Math.floor(index / TRANSCRIPT_PAGE_SIZE);
+  preservePageAnchor = false;
+  if (expand) {
+    const wasCompact = compactViews.delete(renderedReadingScope);
+    if (wasCompact) {
+      try { localStorage.setItem(COMPACT_VIEWS_KEY, JSON.stringify([...compactViews])); } catch {}
+    }
+    expandFullRecords(wasCompact ? messages : [message], wasCompact);
+    if (compactChatFilters?.matches) { setLaneFiltersExpanded(false); closeOpenPopovers(); }
+  }
+  renderFeed();
+  pendingLastViewedJump = "";
+  const feed = $("#messages");
+  const target = [...feed.querySelectorAll("article.message")].find(node => node.dataset.recordKey === key);
+  if (!target) return;
+  if (expand) revealRecord(target);
+  feed.scrollTop += target.getBoundingClientRect().top - feed.getBoundingClientRect().top - 12;
+  feed.querySelectorAll(".last-viewed-highlight").forEach(node => node.classList.remove("last-viewed-highlight"));
+  clearTimeout(lastViewedHighlightTimer);
+  target.classList.add("last-viewed-highlight");
+  lastViewedHighlightTimer = setTimeout(() => target.classList.remove("last-viewed-highlight"), 1800);
+  target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+  $("#sr-announcer").textContent = announcement;
+  updateLastViewedControl();
+  updateKindNavigation();
+  updateLatestControl(feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60);
+}
+function loadEarlierKindWindow() {
+  const pending = pendingKindJump;
+  const next = Math.min(8 * 1024 * 1024, (transcriptCoverage.windowBytes || transcriptWindowBytes) * 2);
+  if (!pending || next <= pending.requestedWindow || !canLoadEarlierKind(pending.kind)) {
+    pendingKindJump = null;
+    updateKindNavigation();
+    $("#sr-announcer").textContent = pending && canLoadEarlierKind(pending.kind) && next <= pending.requestedWindow
+      ? "Older history did not advance. Use Refresh or Load more records to retry."
+      : "No earlier matching message in the bounded loaded history. Load older sessions separately if needed.";
+    return;
+  }
+  pending.requestedWindow = transcriptWindowBytes = next;
+  $("#transcript-load-more").disabled = true;
+  $("#transcript-load-more").textContent = "Loading more records…";
+  $("#sr-announcer").textContent = "Loading earlier history to find this message kind…";
+  updateKindNavigation();
+  requestLanes();
+}
+function resumeKindJump() {
+  const pending = pendingKindJump;
+  if (!pending) return;
+  if (pending.scope !== kindJumpScope() || $(".workspace").dataset.view !== "conversations") { pendingKindJump = null; updateKindNavigation(); return; }
+  const messages = messagesForSelection();
+  const anchor = pending.anchorKey ? messages.findIndex(message => messageRecordKey(message) === pending.anchorKey) : messages.length;
+  if (anchor < 0) { pendingKindJump = null; updateKindNavigation(); $("#sr-announcer").textContent = "The reading anchor is no longer loaded. Choose a current message to navigate."; return; }
+  const index = kindJumpIndex(kindRecordIndices.get(pending.kind) || [], anchor, -1);
+  if (index < 0) { loadEarlierKindWindow(); return; }
+  pendingKindJump = null;
+  navigateToRecord(index, { expand: true, announcement: pending.announcement });
+}
+function jumpToKind(kind, step, announcement = `${step < 0 ? "Previous" : "Next"} ${messageTypeLabel(kind)} message.`) {
+  updateKindNavigation();
+  if (pendingKindJump || !selectedMessageTypes.has(kind) || !MESSAGE_TYPES.some(type => type.id === kind) || ![-1, 1].includes(step)) return;
+  const index = kindJumpTargets.get(kind)?.[step < 0 ? "previous" : "next"] ?? -1;
+  if (index >= 0) { navigateToRecord(index, { expand: true, announcement }); return; }
+  if (step < 0 && canLoadEarlierKind(kind)) {
+    pendingKindJump = { kind, scope: kindJumpScope(), anchorKey: currentReadingRecord()?.dataset.recordKey || "", requestedWindow: 0, announcement };
+    loadEarlierKindWindow();
+  }
 }
 let lastPageAnchor = "";
 let preservePageAnchor = false;
@@ -421,6 +567,7 @@ function renderMessageTypeFilters() {
     root: $("#message-type-filters"),
     nodes: kindBulkNodes(),
   });
+  updateKindNavigation();
 }
 function syncLaneBulkControls() {
   const selection = laneSelection();
@@ -502,6 +649,7 @@ function renderSessionHistory(visibleLanes) {
 }
 
 function renderLanesLoading() {
+  $("#message-compact-toggle").disabled = true;
   $("#conversation-title").textContent = "Loading Fleet Chats…";
   $("#conversation-status").textContent = "loading";
   $("#conversation-subtext").textContent = "Reading recent records · older history remains available on demand";
@@ -514,7 +662,7 @@ function renderLanesLoading() {
 }
 
 function renderFeed() {
-  if (!hasLoadedLanes && !lanes.length) {
+  if (!lanes.length && (!hasLoadedLanes || lanesLoadError)) {
     if (!lanesLoadError) renderLanesLoading();
     return;
   }
@@ -522,6 +670,7 @@ function renderFeed() {
   if (renderedReadingScope && renderedReadingScope !== nextReadingScope) captureLastViewed();
   renderedReadingScope = nextReadingScope;
   const dense = compactViews.has(renderedReadingScope);
+  $("#message-compact-toggle").disabled = false;
   $("#messages").classList.toggle("is-compact", dense);
   $("#message-compact-toggle")?.setAttribute("aria-pressed", String(dense));
   const visibleLanes = selectedLanes();
@@ -554,6 +703,12 @@ function renderFeed() {
   }
 
   const messages = messagesForSelection();
+  kindRecordIndices.clear();
+  messages.forEach((message, index) => {
+    const kind = messageTypeId(message);
+    if (!kindRecordIndices.has(kind)) kindRecordIndices.set(kind, []);
+    kindRecordIndices.get(kind).push(index);
+  });
   const feedSelection = JSON.stringify([visibleLanes.map((lane) => lane.id), [...selectedMessageTypes], selectedSessionId, selectedTranscriptSession]);
   const selectionChanged = feedSelection !== transcriptSelection;
   if (selectionChanged) transcriptPage = null;
@@ -670,6 +825,7 @@ function renderFeed() {
   const bookmark = lastViewed.get(renderedReadingScope);
   lastViewedIndex = bookmark ? messages.findIndex((message) => recordKey(message) === bookmark) : -1;
   updateLastViewedControl();
+  updateKindNavigation();
 
   const announcer = $("#sr-announcer");
   if (announcer) {
@@ -745,11 +901,19 @@ function renderLanes(data) {
   preservePageAnchor = hasRenderedFeed;
   applyRoute({ isRefresh: true });
   if (selectedSessionId && lanes.some((lane) => lane.sessions.some((session) => session.id === selectedSessionId && !session.loaded))) requestLanes(true);
+  resumeKindJump();
 }
 
 function renderLanesError(message) {
   lanes = [];
   lanesLoadError = message;
+  kindRecordIndices.clear();
+  pendingKindJump = null;
+  lastViewedIndex = -1;
+  $("#message-compact-toggle").disabled = true;
+  $("#jump-to-latest").disabled = true;
+  updateLastViewedControl();
+  updateKindNavigation();
   $("#messages").setAttribute("aria-busy", "false");
   $("#transcript-window-status").hidden = true;
   $("#transcript-summary").textContent = "Transcript unavailable";
@@ -1709,7 +1873,7 @@ function setContextDrawer(open) {
 }
 
 function showView(view, closedLaneId = null, { updateRoute = true } = {}) {
-  if (view !== "conversations") captureLastViewed();
+  if (view !== "conversations") { captureLastViewed(); pendingKindJump = null; }
   feedLaneOverrideId = closedLaneId;
   document.querySelector(".workspace").dataset.view = view;
   const pageTitles = { overview: "Fleet at a glance", work: "Work split", conversations: "Fleet Chats", closed: "Closed fleets", expenses: "Expenses", quota: "Quota", preferences: "Preferences" };
@@ -1723,6 +1887,7 @@ function showView(view, closedLaneId = null, { updateRoute = true } = {}) {
   if (view !== "conversations") setContextDrawer(false);
   if (updateRoute) setRoute(view === "conversations" ? conversationRoute() : `#${view}`);
   ensureViewData(view);
+  if (view === "conversations") updateKindNavigation();
 }
 
 function navigateToLane(laneId, sessionId = "", { updateRoute = true } = {}) {
@@ -2131,6 +2296,11 @@ $("#messages").addEventListener("scroll", () => {
   const isAtBottom = clientHeight > 0 ? (scrollHeight - scrollTop - clientHeight < 60) : true;
   updateLatestControl(isAtBottom);
   updateLastViewedControl();
+  updateKindNavigation();
+});
+$("#message-type-filters").addEventListener("click", (event) => {
+  const button = event.target?.closest?.("button[data-kind-jump]");
+  if (button && !button.disabled) jumpToKind(button.dataset.kindJump, Number(button.dataset.kindStep), `${button.getAttribute("aria-label")}.`);
 });
 window.addEventListener("blur", () => { captureLastViewed(); });
 window.addEventListener("pagehide", () => { captureLastViewed(); });
@@ -2139,27 +2309,11 @@ document.addEventListener("visibilitychange", () => {
 });
 $("#jump-to-last-viewed")?.addEventListener("click", () => {
   if (lastViewedIndex < 0) return;
-  pendingLastViewedJump = lastViewed.get(renderedReadingScope);
-  const message = messagesForSelection()[lastViewedIndex];
-  if (!message) { pendingLastViewedJump = ""; return; }
-  transcriptPage = Math.floor(lastViewedIndex / TRANSCRIPT_PAGE_SIZE);
-  preservePageAnchor = false;
-  renderFeed();
-  const feed = $("#messages");
-  const target = [...feed.querySelectorAll("article.message")].find((node) => node.dataset.recordKey === pendingLastViewedJump);
-  pendingLastViewedJump = "";
-  if (!target) return;
-  feed.scrollTop += target.getBoundingClientRect().top - feed.getBoundingClientRect().top - 12;
-  feed.querySelectorAll(".last-viewed-highlight").forEach((node) => node.classList.remove("last-viewed-highlight"));
-  clearTimeout(lastViewedHighlightTimer);
-  target.classList.add("last-viewed-highlight");
-  lastViewedHighlightTimer = setTimeout(() => target.classList.remove("last-viewed-highlight"), 1800);
-  target.setAttribute("tabindex", "-1");
-  target.focus({ preventScroll: true });
-  $("#sr-announcer").textContent = "Returned to your last viewed message.";
-  updateLastViewedControl();
+  pendingKindJump = null;
+  navigateToRecord(lastViewedIndex);
 });
 $("#jump-to-latest")?.addEventListener("click", () => {
+  pendingKindJump = null;
   const messagesEl = $("#messages");
   transcriptPage = null;
   preservePageAnchor = false;
@@ -2184,11 +2338,13 @@ $("#transcript-load-more").addEventListener("click", () => {
 });
 
 $("#transcript-older").addEventListener("click", () => {
+  pendingKindJump = null;
   lastPageAnchor = "";
   transcriptPage = Math.max(0, transcriptPage - 1);
   renderFeed();
 });
 $("#transcript-newer").addEventListener("click", () => {
+  pendingKindJump = null;
   lastPageAnchor = "";
   transcriptPage += 1;
   renderFeed();

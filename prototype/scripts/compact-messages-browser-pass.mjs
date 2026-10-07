@@ -60,6 +60,8 @@ try {
     await enter();
     assert.equal(await evaluate("document.querySelector('#message-compact-toggle').getAttribute('aria-pressed')"),"true");
     assert.equal(await evaluate("document.activeElement.id"),"message-compact-toggle","keyboard toolbar activation retains focus");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).transitionDuration"),"0s","pressed label must not flash white-on-white during a background fade");
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).color"),await evaluate("getComputedStyle(document.querySelector('#message-compact-toggle')).backgroundColor"));
     assert.equal(await evaluate("document.querySelectorAll('.message-day').length"),0,"date grouping is removed");
     const lines = await evaluate(`[...document.querySelectorAll('.message-compact-line')].map(n=>({height:n.getBoundingClientRect().height,wrap:getComputedStyle(n).whiteSpace,time:n.querySelector('time')?.textContent,sender:n.querySelector('.compact-sender')?.textContent,kind:n.querySelector('.compact-kind')?.textContent,preview:n.querySelector('.compact-line-preview')?.textContent}))`);
     assert.equal(lines.length,53,"50 single-message lines plus three lane-block lines");
