@@ -49,7 +49,7 @@ test("next reset excludes past, missing, invalid, stale and non-fresh provider e
 });
 test("provider sorting shares the sidebar window keys, not Grok effective scope percentages", () => {
   const providers = [provider("grok", 6, { windows: [{ id: "w", percentRemaining: 60, pace: { status: "behind", reservePercentPoints: 10 } }] }), provider("codex", 20, { windows: [{ id: "w", percentRemaining: 20, pace: { status: "ahead", reservePercentPoints: -20 } }] })];
-  for (const mode of ["highest", "lowest", "runway"]) {
+  for (const mode of ["highest", "lowest", "runway", "runway-lowest", "az", "za"]) {
     const result = project({ providers }, { now, sortMode: mode, sidebarSort: mode });
     assert.deepEqual(Array.from(result.detail, p => p.provider), Array.from(result.sidebar, p => p.provider));
     for (const p of result.detail) { const f = result.sidebar.find(f => f.provider === p.provider); assert.equal(p.sortRemaining, f.sortRemaining); assert.equal(p.sortRunway.value, f.sortRunway.value); }

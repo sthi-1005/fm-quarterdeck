@@ -282,11 +282,12 @@ try {
   assert.ok(codexBar && codexBar.width === "19%", "truthful remaining progressbar width matches percentRemaining exactly");
 
   // Shared keys and saved preference; AGY's adjacent families remain one page card.
-  for (const mode of ["highest", "lowest", "runway"]) {
-    await evalJs(`document.querySelector("#quota-sort-${mode}").click()`);
+  for (const mode of ["highest", "lowest", "runway", "runway-lowest", "az", "za"]) {
+    const key = mode.startsWith("runway") ? "runway" : ["az", "za"].includes(mode) ? "az" : "left";
+    for (let attempt = 0; attempt < 2 && await evalJs('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")') !== mode; attempt++) await evalJs(`document.querySelector("#quota-sort-${key}").click()`);
     assert.deepEqual(await evalJs('[...document.querySelectorAll("#quota-providers article[data-provider]")].map(c => c.dataset.provider)'), await evalJs('[...new Set([...document.querySelectorAll("#quota-strip .quota-family")].map(c => JSON.parse(c.dataset.quotaKey)[0]))]'), `${mode}: page and sidebar share order`);
     assert.equal(await evalJs('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")'), mode);
-    assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), String(mode === "runway"));
+    assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), String(mode.startsWith("runway")));
   }
   await evalJs("window.quotaReloadPending = true");
   await cmd("Page.reload");
@@ -295,9 +296,12 @@ try {
     await wait(50);
   }
   assert.equal(await evalJs('!window.quotaReloadPending && document.readyState === "complete"'), true, "checks the replaced document after reload");
-  assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=runway]").getAttribute("aria-pressed")'), "true", "shared preference persists across reload");
+  assert.equal(await evalJs('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")'), "za", "shared preference persists across reload");
+  assert.equal(await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=az]").getAttribute("aria-pressed")'), "true");
+  assert.equal(await evalJs('document.querySelector("#quota-sort-az .quota-sort-direction").textContent'), "↓");
   await evalJs('document.querySelector("#sidebar-quota-sort [data-sort=left]").click(); if (localStorage.getItem("fm-agentos-sidebar-quota-sort.v1") !== "lowest") document.querySelector("#sidebar-quota-sort [data-sort=left]").click()');
-  assert.equal(await evalJs('document.querySelector("#quota-sort-lowest").getAttribute("aria-pressed")'), "true", "sidebar changes page control");
+  assert.equal(await evalJs('document.querySelector("#quota-sort-left").getAttribute("aria-pressed")'), "true", "sidebar changes page control");
+  assert.equal(await evalJs('document.querySelector("#quota-sort-left .quota-sort-direction").textContent'), "↑");
   await evalJs('document.querySelector("#quota-details-toggle").click()');
   assert.equal(await evalJs('[...document.querySelectorAll("details.quota-more")].every(d => d.open)'), true, "Show all details opens every disclosure");
   await evalJs('document.querySelector("#quota-details-toggle").click()');

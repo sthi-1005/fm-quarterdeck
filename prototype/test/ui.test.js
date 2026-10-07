@@ -1354,6 +1354,23 @@ test("quota page summarizes source evidence, renders unsupported counts and supp
   assert.doesNotMatch(tightest.textContent, /\d+%/);
 });
 
+test("page sort has one bidirectional key each and shares every stored mode with the sidebar", () => {
+  const app = ui();
+  const stored = () => app.run('sidebarQuotaSort');
+  const click = key => app.node("#quota-sort-" + key).dispatchEvent({ type: "click" });
+  assert.equal(stored(), "highest");
+  click("left"); assert.equal(stored(), "lowest");
+  click("left"); assert.equal(stored(), "highest");
+  click("runway"); assert.equal(stored(), "runway");
+  click("runway"); assert.equal(stored(), "runway-lowest");
+  click("az"); assert.equal(stored(), "az");
+  click("az"); assert.equal(stored(), "za");
+  click("runway"); assert.equal(stored(), "runway-lowest", "returning to a key keeps its direction");
+  click("left"); assert.equal(stored(), "highest");
+  assert.equal(app.node("#quota-sort-left").getAttribute("aria-pressed"), "true");
+  assert.equal(app.node("#quota-sort-runway").getAttribute("aria-pressed"), "false");
+});
+
 test("compact quota family output is byte-identical to the sidebar batch baseline", () => {
   const app = ui();
   const family = { provider: "grok", name: "grok", scope: null, status: "fresh", windows: [{ id: "credits", label: "week", percentRemaining: 12, isLimiting: true }, { id: "chat", label: "Chat", percentRemaining: null }] };
@@ -1530,7 +1547,7 @@ test("Quota controls sort known effective remaining, keep unknown last, and hide
   assert.ok(cards.indexOf("High</h2>") < cards.indexOf("Low</h2>"));
   assert.ok(cards.indexOf("Low</h2>") < cards.indexOf("Unknown</h2>"));
   assert.match(cards, /inactive/);
-  app.node("#quota-sort-lowest").dispatchEvent({ type: "click" });
+  app.node("#quota-sort-left").dispatchEvent({ type: "click" });
   cards = app.node("#quota-providers").innerHTML;
   assert.ok(cards.indexOf("Low</h2>") < cards.indexOf("High</h2>"));
   assert.ok(cards.indexOf("High</h2>") < cards.indexOf("Unknown</h2>"));
@@ -2351,7 +2368,7 @@ test("quota freshness preserves in-card and compact interactions and captured ma
     assert.equal(card.classList.contains("quota-card-stale"), false);
     assert.match(card.textContent, /Pace: Ahead/);
     assertInteraction();
-    app.node("#quota-sort-lowest").dispatchEvent({ type: "click" });
+    app.node("#quota-sort-left").dispatchEvent({ type: "click" });
     assert.equal(cards.querySelector("details").dataset.provider, "agy");
     assertInteraction();
   }

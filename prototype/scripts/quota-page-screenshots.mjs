@@ -26,10 +26,18 @@ try {
         // Navigation acknowledges before document replacement; never let the
         // previous state's DOM satisfy this capture's readiness predicate.
         await browser.evaluate("window.quotaCaptureNavigationPending = true");
-        await browser.command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/#quota` });
+        await browser.command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/?quota-capture=${state}-${width}#quota` });
         await browser.until('!window.quotaCaptureNavigationPending && document.readyState === "complete" && document.querySelector(".workspace")?.dataset.view === "quota"');
         await browser.until(state === "loading" ? 'document.querySelector("#quota-providers .quota-skeleton")' : 'document.querySelector("#quota-providers")?.getAttribute("aria-busy") === "false"');
-        if (state !== "loading") await browser.evaluate(`document.querySelector("#quota-sort-${state === "runway" ? "runway" : "lowest"}").click()`);
+        if (state !== "loading") {
+          const mode = state === "runway" ? "runway" : "lowest";
+          await browser.evaluate(`(() => {
+            const desired = ${JSON.stringify(mode)}, button = document.querySelector("#quota-sort-${mode === "runway" ? "runway" : "left"}");
+            if (localStorage.getItem("fm-agentos-sidebar-quota-sort.v1") !== desired) button.click();
+            if (localStorage.getItem("fm-agentos-sidebar-quota-sort.v1") !== desired) button.click();
+          })()`);
+          assert.equal(await browser.evaluate('localStorage.getItem("fm-agentos-sidebar-quota-sort.v1")'), mode);
+        }
         if (state === "expanded") await browser.evaluate('document.querySelector("#quota-details-toggle").click()');
         await browser.evaluate('document.querySelector("#quota-view").scrollTop = 0; document.activeElement?.blur()');
         const geometry = await browser.evaluate(`({ overflow: document.documentElement.scrollWidth > innerWidth,

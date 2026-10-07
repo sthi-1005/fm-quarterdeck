@@ -1312,7 +1312,7 @@ function renderQuota(data) {
           ${providerLogoHtml(provider.provider, { mono: false, size: 28 })}
           <h2 id="${headingId}" tabindex="-1">${escapeHtml(provider.provider === "agy" ? "AGY" : quotaName(provider.provider))}</h2>
           ${provider.scopes.length ? `<div class="quota-effective">${percent === null ? "?" : `${percent}%`}<small>${percent === null ? "effective unknown" : provider.scopes.length > 1 ? "lowest effective" : "effective"}</small></div>` : '<small>no effective scope reported</small>'}
-          <div class="quota-card-headline">${provider.stale ? "" : `<span>${provider.critical.kind === "source-limiting" ? `limit ${escapeHtml(provider.critical.windows.map(w => quotaWindowLabels({ provider: provider.provider, scope: null, windows: [w] })[0]).join(", "))}` : escapeHtml(critical.label)}</span>`}<span class="${provider.scopes.some(s => ["projected_exhaustion", "exhausted_now"].includes(s.runway?.status)) ? "quota-runway-warn" : "quota-runway"}">Runway ${escapeHtml(quotaCardRunway(provider))}</span>${quotaFreshnessHtml(provider)}${sidebarQuotaSort === "runway" ? `<small class="quota-sort-basis">runway basis: ${escapeHtml(provider.sortRunway?.basis || "unknown")}</small>` : ""}</div>
+          <div class="quota-card-headline">${provider.stale ? "" : `<span>${provider.critical.kind === "source-limiting" ? `limit ${escapeHtml(provider.critical.windows.map(w => quotaWindowLabels({ provider: provider.provider, scope: null, windows: [w] })[0]).join(", "))}` : escapeHtml(critical.label)}</span>`}<span class="${provider.scopes.some(s => ["projected_exhaustion", "exhausted_now"].includes(s.runway?.status)) ? "quota-runway-warn" : "quota-runway"}">Runway ${escapeHtml(quotaCardRunway(provider))}</span>${quotaFreshnessHtml(provider)}${sidebarQuotaSort.startsWith("runway") ? `<small class="quota-sort-basis">runway basis: ${escapeHtml(provider.sortRunway?.basis || "unknown")}</small>` : ""}</div>
         </div>
         <div data-quota-key="families" class="quota-summary-windows" aria-label="Reported quota windows; filled bars show percent remaining, not percent used or elapsed time">
           ${families.length ? families.map((family) => quotaFamilyBox({ ...family, stale: provider.stale, effective: provider.scopes.find(s => s.scope === family.scope)?.percentRemaining, showHeading: families.length > 1, exhausted: provider.scopes.some(s => s.runway?.status === "exhausted_now") }, data.capturedAt === undefined ? data.readAt : data.capturedAt, { variant: "page" })).join("") : '<span class="quota-meta">No subscription windows reported.</span>'}
@@ -2017,7 +2017,7 @@ $("#quota-hide-inactive").addEventListener("change", (event) => {
   quotaHideInactive = event.target.checked;
   if (quotaReading) renderQuota(quotaReading);
 });
-for (const mode of ["highest", "lowest", "runway"]) $("#quota-sort-" + mode)?.addEventListener("click", () => setQuotaSort(mode));
+for (const key of ["left", "runway", "az"]) $("#quota-sort-" + key)?.addEventListener("click", () => selectQuotaSortKey(key));
 $("#quota-summary")?.addEventListener("click", (event) => {
   const provider = event.target.closest?.("[data-quota-target]")?.dataset.quotaTarget;
   if (!provider) return;
