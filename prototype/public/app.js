@@ -1279,13 +1279,29 @@ function renderQuota(data) {
 
   const { detail: activeProviders, inactive: unconfiguredProviders } = projection;
 
+  const quotaMoreHtml = (provider) => `<div class="quota-more-body">
+    ${provider.stale || provider.quotaStatus !== "known" ? `<p class="quota-meta">Quota: ${escapeHtml(quotaName(provider.quotaStatus))}${provider.stale ? ` · ${escapeHtml(provider.staleLabel || "stale · age unknown")} · effective unknown` : ""}</p>` : ""}
+    ${provider.unresolvedWindowIds?.length ? `<p class="quota-unresolved">Unresolved windows: ${escapeHtml(provider.unresolvedWindowIds.join(", "))}</p>` : ""}
+    ${provider.scopes.length ? `<div data-quota-key="scopes" class="quota-group"><h3 class="quota-group-heading">Effective Scopes</h3>
+      <table class="quota-scopes"><thead><tr><th scope="col">Scope</th><th scope="col">Effective</th><th scope="col">Bounded by</th><th scope="col">Limit</th><th scope="col">Runway</th></tr></thead><tbody>
+      ${provider.scopes.map(s => `<tr data-quota-key="${escapeHtml(s.scope)}" class="quota-scope"><td><h3>${escapeHtml(quotaName(s.scope))}</h3></td>
+        <td>${quotaPercent(s.percentRemaining)}<br>${provider.stale ? "Effective availability unknown" : escapeHtml(quotaName(s.status))}${pace(s.pace)}</td>
+        <td><span class="sr-only">Reported bounds: </span>${s.boundedBy?.length ? escapeHtml(s.boundedBy.map(quotaName).join(", ")) : "Unknown"}</td>
+        <td><span class="sr-only">Source-reported limits: </span>${s.limitingWindowIds?.length ? escapeHtml(s.limitingWindowIds.map(quotaName).join(", ")) : "Unknown"}</td>
+        <td>Runway: ${escapeHtml(quotaName(s.runway?.status))}${quotaDuration(s.runway?.seconds) ? ` · ${quotaDuration(s.runway.seconds)}` : ""}${s.runway?.exhaustedAt ? ` · Projected exhaustion: ${date(s.runway.exhaustedAt)}` : ""}</td></tr>`).join("")}</tbody></table></div>` : "<p>Effective scope unavailable or unknown.</p>"}
+    ${provider.windows.length ? `<div data-quota-key="windows" class="quota-group"><h3 class="quota-group-heading">Quota Windows</h3>
+      ${provider.windows.map(w => `<section data-quota-key="${escapeHtml(w.id)}" class="quota-window${w.isLimiting ? " quota-window-limiting" : ""}">
+        <div class="quota-row-head"><h3 title="${escapeHtml(w.label)} (${escapeHtml(w.kind || "unknown")})" aria-label="${escapeHtml(w.label)} (${escapeHtml(w.kind || "unknown")})">${escapeHtml(quotaWindowLabel(w.label))} <small>(${escapeHtml(quotaWindowLabel(w.kind))})</small></h3><span class="quota-head-percent">${quotaPercent(w.percentRemaining)}</span></div>
+        <p>${provider.scopes.some(s => s.boundedBy?.includes(w.id)) ? "Effective scope bound" : "Not established as an effective scope bound"}</p>
+        <p>Reset: ${date(w.resetsAt)}${formatRelativeTime(w.resetsAt) ? ` (${formatRelativeTime(w.resetsAt)})` : ""}${w.annotation ? ` · Note: ${escapeHtml(quotaName(w.annotation.category))} — ${escapeHtml(w.annotation.meaning)}` : ""}${pace(w.pace)}</p>${pacingExplanation(w.pace)}</section>`).join("")}</div>` : "<p>No subscription windows reported.</p>"}
+  </div>`;
+
   const renderActiveCard = (provider) => {
     const isOpen = quotaOpen.has(provider.provider) ? quotaOpen.get(provider.provider) : quotaAllDetails;
     const critical = getCriticalConstraint(provider);
     const families = quotaGroups(provider);
     const percent = quotaRemaining(provider);
     const headingId = `quota-heading-${reviewId(provider.provider)}`;
-    const limitingSet = new Set(provider.windows.filter((window) => window.isLimiting).map((window) => window.id));
 
     return `
       <article data-quota-key="${escapeHtml(provider.provider)}" class="quota-card${provider.stale ? " quota-card-stale" : ""}" data-review-id="quota:${reviewId(provider.provider)}" data-provider="${escapeHtml(provider.provider)}" aria-labelledby="${headingId}">
@@ -1299,42 +1315,7 @@ function renderQuota(data) {
           ${families.length ? families.map((family) => quotaFamilyBox({ ...family, stale: provider.stale, effective: provider.scopes.find(s => s.scope === family.scope)?.percentRemaining, showHeading: families.length > 1, exhausted: provider.scopes.some(s => s.runway?.status === "exhausted_now") }, data.capturedAt === undefined ? data.readAt : data.capturedAt, { variant: "page" })).join("") : '<span class="quota-meta">No subscription windows reported.</span>'}
         </div>
         <details data-quota-key="more" class="quota-more" data-provider="${escapeHtml(provider.provider)}"${isOpen ? " open" : ""}><summary>Scopes, exact resets &amp; notes</summary>
-        <div class="quota-more-body">
-          ${provider.stale || provider.quotaStatus !== "known" ? `<p class="quota-meta">Quota: ${escapeHtml(quotaName(provider.quotaStatus))}${provider.stale ? ` · ${escapeHtml(provider.staleLabel || "stale · age unknown")} · effective unknown` : ""}</p>` : ""}
-          ${provider.unresolvedWindowIds?.length ? `<p class="quota-unresolved">Unresolved windows: ${escapeHtml(provider.unresolvedWindowIds.join(", "))}</p>` : ""}
-
-          ${provider.scopes?.length ? `
-            <div data-quota-key="scopes" class="quota-group">
-              <h3 class="quota-group-heading">Effective Scopes</h3>
-              <table class="quota-scopes"><thead><tr><th scope="col">Scope</th><th scope="col">Effective</th><th scope="col">Bounded by</th><th scope="col">Limit</th><th scope="col">Runway</th></tr></thead><tbody>
-              ${provider.scopes.map((scope) => `<tr data-quota-key="${escapeHtml(scope.scope)}" class="quota-scope">
-                <td><h3>${escapeHtml(quotaName(scope.scope))}</h3></td>
-                <td>${quotaPercent(scope.percentRemaining)}<br>${provider.stale ? "Effective availability unknown" : escapeHtml(quotaName(scope.status))}${pace(scope.pace)}</td>
-                <td>Reported bounds: ${scope.boundedBy?.length ? escapeHtml(scope.boundedBy.map(quotaName).join(", ")) : "Unknown"}</td>
-                <td>Source-reported limits: ${scope.limitingWindowIds?.length ? escapeHtml(scope.limitingWindowIds.map(quotaName).join(", ")) : "Unknown"}</td>
-                <td>Runway: ${escapeHtml(quotaName(scope.runway?.status))}${quotaDuration(scope.runway?.seconds) ? ` · ${quotaDuration(scope.runway.seconds)}` : ""}${scope.runway?.exhaustedAt ? ` · Projected exhaustion: ${date(scope.runway.exhaustedAt)}` : ""}</td>
-              </tr>`).join("")}</tbody></table>
-            </div>` : "<p>Effective scope unavailable or unknown.</p>"}
-
-          ${provider.windows?.length ? `
-            <div data-quota-key="windows" class="quota-group">
-              <h3 class="quota-group-heading">Quota Windows</h3>
-              ${provider.windows.map((window) => {
-                const isLimiting = limitingSet.has(window.id);
-                const relReset = window.resetsAt ? formatRelativeTime(window.resetsAt) : null;
-                return `
-                  <section data-quota-key="${escapeHtml(window.id)}" class="quota-window${isLimiting ? " quota-window-limiting" : ""}">
-                    <div class="quota-row-head">
-                      <h3 title="${escapeHtml(window.label)} (${escapeHtml(window.kind)})" aria-label="${escapeHtml(window.label)} (${escapeHtml(window.kind)})">${escapeHtml(quotaWindowLabel(window.label))} <small>(${escapeHtml(quotaWindowLabel(window.kind))})</small></h3>
-                      <span class="quota-head-percent">${quotaPercent(window.percentRemaining)}</span>
-                    </div>
-                    <p>${provider.scopes.some((scope) => scope.boundedBy?.includes(window.id)) ? "Effective scope bound" : "Not established as an effective scope bound"}</p>
-                    <p>Reset: ${date(window.resetsAt)}${relReset ? ` (${relReset})` : ""}${window.annotation ? ` · Note: ${escapeHtml(quotaName(window.annotation.category))} — ${escapeHtml(window.annotation.meaning)}` : ""}${pace(window.pace)}</p>
-                    ${pacingExplanation(window.pace)}
-                  </section>`;
-              }).join("")}
-            </div>` : "<p>No subscription windows reported.</p>"}
-        </div></details>
+        ${quotaMoreHtml(provider)}</details>
       </article>`;
   };
 

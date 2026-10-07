@@ -24,7 +24,7 @@ try {
         await browser.command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 1000 });
         await browser.command("Emulation.setEmulatedMedia", { features: [{ name: "forced-colors", value: state === "forced-colours" ? "active" : "none" }, { name: "prefers-reduced-motion", value: "reduce" }] });
         await browser.command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/#quota` });
-        await browser.until(state === "loading" ? 'document.querySelector("#quota-providers .quota-skeleton") && document.querySelector(".workspace").dataset.view === "quota"' : 'document.querySelector("#quota-providers").getAttribute("aria-busy") === "false"');
+        await browser.until(state === "loading" ? 'document.querySelector("#quota-providers .quota-skeleton") && document.querySelector(".workspace").dataset.view === "quota"' : 'document.querySelector("#quota-providers")?.getAttribute("aria-busy") === "false"');
         if (state !== "loading") await browser.evaluate(`document.querySelector("#quota-sort-${state === "runway" ? "runway" : "lowest"}").click()`);
         if (state === "expanded") await browser.evaluate('document.querySelector("#quota-details-toggle").click()');
         await browser.evaluate('document.querySelector("#quota-view").scrollTop = 0; document.activeElement?.blur()');
