@@ -56,13 +56,15 @@ window.bearingsView = (() => {
     const label = CHAT_LABELS[card.kind] || "Ask";
     const id = idFor(card.key);
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
-    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Asked")}">${escape(clockText(card.clock))}</span></header>
+    return `<div class="call-chrome"><header class="call-head"><span class="state-chip call-chat-chip">${label} · Chat ask</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Asked")}">${escape(clockText(card.clock))}</span></header>
       <h3>${label} asked in chat</h3>
       <dl class="call-context">${row("About", "Firstmate asked in chat; no captain hold is filed")}${row("Decide", card.summary || "Ask text not recorded", ` class="call-clamp" data-call-clamp id="call-decide-${id}"`)}${row("Reply", repliesText(card.replies))}</dl>
       <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden><p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p></div>
       <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
       <p class="call-meta">Answering here, dismissing, or replying in chat with the quoted reply closes this card.</p>
-      <div class="call-answer-actions"><button type="button" data-call-dismiss>Dismiss</button><span class="call-meta" data-call-dismiss-error role="alert" hidden></span></div></div>
+      <div class="call-answer-actions"><button type="button" data-call-dismiss>Review dismissal</button></div>
+      <div class="call-dismiss-confirm" data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden><p>Hide this ask from Captain's Call? Nothing is sent to Firstmate. Unsent text stays in this tab.</p><div class="call-answer-actions"><button type="button" data-call-dismiss-send>Dismiss this ask</button><button type="button" data-call-dismiss-cancel>Cancel</button></div></div>
+      <p class="call-answer-error" data-call-dismiss-error role="alert" hidden></p></div>
       ${answerHtml(card, `${label} asked in chat`)}`;
   }
   const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length

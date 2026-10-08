@@ -1773,6 +1773,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-cards { display: flex; flex-direction: column; gap: var(--space-3); overflow-anchor: auto; }
 .call-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .call-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.call-chat-chip { border: 1px dashed var(--control-line); }
+.call-card[data-call-type="chat"] { border-left-width: 3px; border-left-style: double; }
+.call-dismiss-confirm { margin-top: 12px; padding: 12px; border: 1px dashed var(--control-line); border-radius: 6px; background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; }
+.call-dismiss-confirm p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.call-dismiss-confirm[hidden], [data-call-dismiss][hidden], [data-call-dismiss-error][hidden] { display: none; }
 .call-card h3 { margin: 12px 0 8px; font-size: var(--text-body); line-height: 1.5; overflow-wrap: anywhere; }
 .call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
 .call-read-only { font-weight: 400; margin-left: 8px; }

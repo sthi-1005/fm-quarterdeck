@@ -1739,29 +1739,19 @@ function observeBearings(data) {
   renderFreshness();
 }
 // Answer and overflow controllers re-apply their per-card state after every patcher fill.
-let callAnswers = null, callOverflow = null;
+let callAnswers = null, callOverflow = null, callDismiss = null;
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
-  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); },
-  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); },
+  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); },
+  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); },
 });
 callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
-// Dismissing a chat ask is recorded in Quarterdeck's own state; the card leaves on the pushed model.
-$("#call-cards")?.addEventListener("click", async (event) => {
-  const button = event.target.closest?.("[data-call-dismiss]");
-  const card = button?.closest("[data-call-key]");
-  if (!card) return;
-  const error = card.querySelector("[data-call-dismiss-error]");
-  button.disabled = true;
-  try {
-    const response = await fetch("/api/bearings/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: card.getAttribute("data-call-key"), cardRev: card.getAttribute("data-call-rev") }) });
-    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Dismiss failed");
-  } catch (failure) {
-    button.disabled = false;
-    if (error) { error.textContent = failure.message; error.hidden = false; }
-  }
+// Focus leaves the held section only after a confirmed dismissal; drafts remain protected.
+callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
+  list: $("#call-cards"), focusTarget: $('.primary-tab[data-view="overview"]'),
+  onDismiss(key) { if (callPatcher.tracker.state().selected === key) callPatcher.tracker.deselect(); },
 });
 const callLive = window.bearingsLive?.createBearingsLive({
   onModel(model) { callPatcher.update(model); renderCallBadge(model); observeBearings(model); },

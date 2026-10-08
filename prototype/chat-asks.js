@@ -504,9 +504,8 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
     await chat.applySnapshot(baseTasks(), fresh()).catch(() => false);
   })().finally(() => { refreshing = null; }));
   async function tick() {
-    const before = current().rev;
     await refresh();
-    if (current().rev !== before) emit();
+    emit();
   }
   let unsubscribeHub = null;
   return {

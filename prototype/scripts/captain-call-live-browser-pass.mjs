@@ -1,11 +1,12 @@
-// Offline exact-revision acceptance. One isolated axi browser, synthetic snapshot only.
+// Offline exact-revision acceptance. One isolated axi browser, synthetic snapshot and transcript.
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, writeFile, chmod, rm } from 'node:fs/promises';
+import { appendFile, mkdtemp, mkdir, readFile, writeFile, chmod, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer } from '../server.js';
+import { claudeProjectDirectory } from '../claude-transcript.js';
 import { captureKpiGeometry } from './kpi-geometry.mjs';
 import { waitForBrowserPort, cleanupBrowserProfile } from './browser-harness.mjs';
 const root = path.resolve(import.meta.dirname, '../..');
@@ -16,6 +17,13 @@ const proof = process.env.SCREENSHOT_DIR || temp;
 await mkdir(proof, { recursive: true });
 const home = path.join(temp, 'home');
 for (const dir of ['bin', 'data', 'state']) await mkdir(path.join(home, dir), { recursive: true });
+const config = path.join(temp, 'claude');
+const transcriptDir = claudeProjectDirectory(config, home);
+await mkdir(transcriptDir, { recursive: true });
+await writeFile(path.join(home, 'state/.lock-session'), 'synthetic-main\n');
+const transcriptPath = path.join(transcriptDir, 'synthetic-main.jsonl');
+const chatRecord = (uuid, text) => `${JSON.stringify({ type: 'assistant', uuid, timestamp: new Date().toISOString(), message: { role: 'assistant', model: 'synthetic-model', content: [{ type: 'text', text }] } })}\n`;
+await writeFile(transcriptPath, chatRecord('synthetic-ask-one', '**APPROVAL NEEDED:** Publish the sample notes. Reply "publish" or "wait".'));
 const fixturePath = path.join(home, 'snapshot.json');
 let raw = JSON.parse(await readFile(new URL('../test/fixtures/bearings/two-calls.json', import.meta.url), 'utf8'));
 raw.decisions_open[0].updated_at = new Date(Date.now() - 120000).toISOString();
@@ -70,7 +78,7 @@ const change = async () => {
   // Exercise the filtered watch trigger (not a private record parser or manual API).
   await writeFile(path.join(home, 'data/backlog.md'), `# Synthetic backlog ${raw.generated}\n`);
 };
-const server = createServer({ FM_HOME: home, FM_BEARINGS_MIN_GAP_MS: '15000', FM_QUARTERDECK_STATE_PATH: path.join(temp, 'presentation.json') }, {
+const server = createServer({ FM_HOME: home, CLAUDE_CONFIG_DIR: config, FM_BEARINGS_MIN_GAP_MS: '15000', FM_QUARTERDECK_STATE_PATH: path.join(temp, 'presentation.json') }, {
   quotaReader: async () => ({ providers: [], stale: false, error: 'Offline fixture' }),
   costReader: async () => ({ azure: { status: 'unavailable' }, github: { status: 'unavailable' } }),
   lanesReader: async () => ({ lanes: [], transcript: { sessions: [], warnings: [] } }),
@@ -81,7 +89,35 @@ try {
   const port = await waitForBrowserPort(chrome, profile, { spawnError: () => spawnError, diagnostics: () => diagnostics });
   env.CHROME_DEVTOOLS_AXI_BROWSER_URL = `http://127.0.0.1:${port}`;
   await browser('newpage', `http://127.0.0.1:${server.address().port}/#overview`);
-  await until("document.querySelectorAll('[data-call-key]').length===3 && document.querySelectorAll('#summary .metric-card').length===3");
+  await until("document.querySelectorAll('[data-call-key]').length===4 && document.querySelectorAll('#summary .metric-card').length===3");
+  // Transcript cards load and stream without a snapshot write or an AI call.
+  for (const scheme of ['light', 'dark']) {
+    await browser('emulate', '--color-scheme', scheme);
+    for (const width of [1280, 360, 390]) {
+      await browser('resize', String(width), '844');
+      await evaluate(`() => { const c=document.querySelector('[data-call-type="chat"]'); c.scrollIntoView({block:'center'}); if(!c.innerText.includes('Approval · Chat ask')||c.querySelectorAll('input[type=radio]').length!==2||document.documentElement.scrollWidth>innerWidth||c.scrollWidth>c.clientWidth+1||getComputedStyle(c).borderLeftStyle!=='double')throw Error('chat card identity or geometry'); for(const b of c.querySelectorAll('button')){if(b.getBoundingClientRect().height && b.getBoundingClientRect().height<44)throw Error('chat touch target');} return {chat:true,width:innerWidth,scheme:'${scheme}'}; }`);
+      await browser('screenshot', path.join(proof, `captain-chat-${scheme}-${width}.png`));
+    }
+  }
+  await browser('emulate', '--color-scheme', 'light');
+  await evaluate(`() => { const c=document.querySelector('[data-call-type="chat"]'); c.querySelector('[data-call-dismiss]').click(); if(c.querySelector('[data-call-dismiss-confirm]').hidden||document.activeElement!==c.querySelector('[data-call-dismiss-send]')||c.getAttribute('aria-current'))throw Error('dismiss review/focus/control'); c.querySelector('[data-call-dismiss-cancel]').click(); if(!c.querySelector('[data-call-dismiss-confirm]').hidden)throw Error('cancel dismissal'); c.querySelector('[data-call-dismiss]').click(); return 'dismiss reviewed locally'; }`);
+  assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'Dismiss review does not send an inbox note');
+  await browser('screenshot', path.join(proof, 'captain-chat-dismiss-confirm-390.png'));
+  await evaluate(`() => { document.querySelector('[data-call-dismiss-send]').click(); return 'confirmed dismissal'; }`);
+  await until(`!document.querySelector('[data-call-type="chat"]')`);
+  await evaluate(`() => { if(!document.activeElement.matches('.primary-tab[data-view="overview"]'))throw Error('dismiss focus destination'); return 'dismiss focus retained on Overview'; }`);
+  assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'Dismiss never sends an inbox note');
+  await appendFile(transcriptPath, chatRecord('synthetic-ask-two', 'ACTION NEEDED: Rotate the sample token. Reply "rotated".'));
+  await until(`!!document.querySelector('[data-call-type="chat"]')`);
+  await evaluate(`() => { const c=document.querySelector('[data-call-type="chat"]'); if(!c.innerText.includes('Rotate the sample token'))throw Error('appended transcript ask missed'); const radio=c.querySelector('input[value="reply-1"]'); radio.checked=true; radio.dispatchEvent(new Event('change',{bubbles:true})); c.querySelector('.call-answer-review').click(); if(c.querySelector('[data-call-answer-confirm]').hidden||c.querySelector('[data-call-answer-preview]').textContent!=='rotated')throw Error('suggested reply review'); c.querySelector('[data-call-answer-send]').click(); return 'chat reply sent'; }`);
+  await until(`document.querySelector('[data-call-type="chat"] [data-call-answer]')?.dataset.callAnswerPhase==='sent'`);
+  const chatNote = await readFile(path.join(home, 'answer-note.txt'), 'utf8');
+  const chatEnvelope = JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(chatNote)[1]);
+  assert.deepEqual([chatEnvelope.type, chatEnvelope.selection, chatEnvelope.note], ['chat', '', 'rotated']);
+  await evaluate(`() => { document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'chat answer disengaged'; }`);
+  await until(`!document.querySelector('[data-call-type="chat"]')`);
+  await rm(path.join(home, 'answer-note.txt'));
+  await until("document.querySelectorAll('[data-call-key]').length===3");
   if (process.env.FM_BROWSER_FORCED_COLORS === '1') await evaluate(`() => { if(!matchMedia('(forced-colors: active)').matches)throw Error('forced colors not active'); return 'native Chromium forced colors active'; }`);
   for (const width of [1280,360,390]) {
     await browser('resize', String(width), '844');

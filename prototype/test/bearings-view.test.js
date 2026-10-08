@@ -86,6 +86,33 @@ test('held notice names the diff; resolved stub leaves text to textContent', () 
   assert.doesNotMatch(stub, /<script>/);
   for (const hook of ['stub-text', 'stub-copy', 'stub-dismiss']) assert.ok(stub.includes(`data-call-${hook}`));
 });
+test('chat cards escape asks, marker evidence and up to three reply choices', () => {
+  const replies = ['<b>publish</b>', '"wait" & see', "don't publish"];
+  const html = view.cardHtml({ key: 'chat:synthetic', type: 'chat', kind: 'approval', summary: '<script>approve?</script>', marker: '<img onerror=x>', replies, answer: { options: replies.map((label, i) => ({ value: `reply-${i + 1}`, label })) } });
+  assert.doesNotMatch(html, /<script>|<img|<b>publish/);
+  for (const text of ['&lt;script&gt;approve?', '&lt;img onerror=x&gt;', '&lt;b&gt;publish&lt;\/b&gt;', '&quot;wait&quot; &amp; see', 'don&#039;t publish']) assert.ok(html.includes(text), text);
+  assert.equal((html.match(/type="radio"/g) || []).length, 3);
+  assert.match(html, /Approval · Chat ask/);
+  assert.match(html, /data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden/);
+  assert.match(html, /Nothing is sent to Firstmate/);
+  const noReply = view.cardHtml({ type: 'chat', kind: 'action', summary: 'Synthetic ask', replies: [], answer: { options: [] } });
+  assert.match(noReply, /No quoted reply/);
+  assert.doesNotMatch(noReply, /type="radio"/);
+  assert.match(noReply, /Your answer/);
+});
+test('linked asks render within the hold and disclose escaped reply alternatives', () => {
+  const html = view.cardHtml({ type: 'decision', summary: 'Choose', chatAsks: [{ summary: '<one>', replies: ['<yes>', 'no'] }, { summary: 'Second & ask', replies: [] }] });
+  assert.match(html, /Also asked in chat/);
+  assert.match(html, /&lt;one&gt; · reply “&lt;yes&gt;” or “no”<br>Second &amp; ask · reply No quoted reply/);
+  assert.doesNotMatch(html, /<one>|<yes>|data-call-dismiss/);
+  assert.doesNotMatch(view.cardHtml({ type: 'decision', chatAsks: [] }), /Also asked in chat/);
+});
+test('coverage names chat scan failures, omitted asks and bounded catchup', () => {
+  for (const state of ['loading', 'unavailable']) assert.match(view.coverageText({ state: 'ready', chat: { state } }), /Chat asks unavailable/);
+  const text = view.coverageText({ state: 'ready', chat: { state: 'unavailable', error: 'Synthetic scan failed', omitted: 4, behind: true } });
+  for (const phrase of ['Synthetic scan failed', '4 older chat asks not shown', 'Still reading the Firstmate transcript']) assert.ok(text.includes(phrase));
+  assert.doesNotMatch(view.coverageText({ state: 'ready', chat: { state: 'ready', omitted: 0, behind: false } }), /Chat asks unavailable|not shown|Still reading/);
+});
 test('check ages are conservative for missing or future clocks', () => {
   assert.equal(view.age(null, 100000), 'age unknown');
   assert.equal(view.age('1970-01-01T00:00:00Z', 120000), '2m ago');

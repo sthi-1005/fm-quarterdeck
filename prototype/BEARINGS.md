@@ -1,8 +1,8 @@
 # Live Captain's Call
 
-Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves the call.
+Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves filed holds. Chat-only asks have the mechanical Quarterdeck resolution paths below.
 
-Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases) and `public/bearings-overflow.js` (More details). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
+Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases) `public/bearings-overflow.js` (More details) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
 
 ## Source and authority
 
@@ -96,7 +96,7 @@ Expanding works in place, is kept per card key across patches (pruned when the c
 
 ## Answers
 
-Quarterdeck relays the captain's explicit answer; it adds no authority. The answer is the same `fm-bearings-answer.v1` context the `/bearings` lavish board queues, so Firstmate routes it exactly like a board answer (bearings skill, "Handling a board wake") into `fm-captain-hold.sh`'s one keyed-answer intake, and the merge-click ruling for merges. Quarterdeck never runs `fm-captain-hold.sh`, `fm-pr-merge.sh` or any GitHub mutation, never answers by itself, and never removes a card: a card leaves only when a later snapshot drops it.
+Quarterdeck relays the captain's explicit answer; it adds no authority. The answer is the same `fm-bearings-answer.v1` context the `/bearings` lavish board queues, so Firstmate routes it exactly like a board answer (bearings skill, "Handling a board wake") into `fm-captain-hold.sh`'s one keyed-answer intake, and the merge-click ruling for merges. Quarterdeck never runs `fm-captain-hold.sh`, `fm-pr-merge.sh` or any GitHub mutation, never answers by itself, and never closes a filed hold: a snapshot card leaves only when a later snapshot drops it. Chat-only cards close by the rules in Chat asks below.
 
 **What can be answered** (`card.answer`, built by `bearings.js`):
 
@@ -142,7 +142,7 @@ Firstmate also asks the captain things in chat without filing a captain hold, so
 
 - **Detection:** an upper-case `ACTION NEEDED`, `APPROVAL NEEDED` or `DECISION NEEDED` at the start of a line of Firstmate's own text. Leading markdown is allowed. The ask continues until a blank line, and code fences are ignored. Quoted alternatives after "reply" become the card's suggested replies.
 - **Sources:** the Claude Code primary session, the in-home `state/.main-session` pointer and the cursor-named main Pi session. They are read incrementally behind a persisted byte cursor, at most 4 MiB per source per scan. A new source is backfilled from its newest 4 MiB, and asks older than 24 h at that point are not resurfaced.
-- **Cadence:** every `GET /api/bearings` (including `?since`) scans before answering. While a stream is open, a scan runs every 3 s. An idle scan only stats the sources.
+- **Cadence:** every `GET /api/bearings` (including `?since`) scans before answering. While a stream is open, a scan runs every 3 s, emitting `model` only when content changed and `observed` otherwise. The interval stops when the last subscriber leaves. An idle scan only stats the sources.
 - **Card** `chat:<16 hex>`, keyed by a hash of the record id, part index and marker line: `{key, type:"chat", kind:"action"|"approval"|"decision", marker, summary, replies[], source, transcript:{offset, part}, clock:{label:"Asked", at}, answer, rev}`. `answer.question` is `chat.<16 hex>`, and `answer.options` are the suggested replies (`reply-N`) plus freeform text. Chat cards follow the snapshot cards, newest first, at most 100.
 - **Filed holds:** an ask whose text names an open snapshot call's task id is linked to that task. It appears inside that card as `chatAsks[{key, kind, summary, replies, clock}]` instead of as a separate card.
 - **Resolution** (state `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json`, outside `FM_HOME`) happens in any of these ways:
@@ -156,13 +156,14 @@ Firstmate also asks the captain things in chat without filing a captain hold, so
 - **Model:** `chat:{state, error, open, linked, omitted, behind, sources[{source, backfillOmittedBytes}]}` is part of the content revision. `chatCheckedAt` is freshness only. The model `rev` hashes the composed cards, coverage, omissions and chat coverage.
 - **Answers:** these use the same `POST /api/bearings/answer` checks. A chat card needs `chat.state` to be `ready`, not the snapshot. A chosen reply is relayed as the captain's own words (`selection:""`, `note:"<reply>[ - <note>]"`). The envelope has `type:"chat"` and `ask` (marker and text, at most 1 KiB) instead of `task`. The note's human line tells Firstmate that no hold was filed. Quarterdeck resolves the card once the note is accepted.
 - **`POST /api/bearings/dismiss`** (host only; 404 through a preview path) is same-origin JSON with no query and a body of at most 1 KiB. The body is exactly `{key, cardRev}` with a `chat:` key (otherwise 400), and the served revision must still match (409 `revision`). It returns `409 gone` when the key is not an open chat card, `409 changed` when the card rev differs, `503 unrecorded` when the state could not be saved, and otherwise `200 {state:"dismissed", key}`. Snapshot cards cannot be dismissed, because Firstmate owns holds.
+- **Dismiss UX:** **Review dismissal** opens a local confirmation explaining that nothing is sent to Firstmate; **Cancel** returns focus to Review dismissal. Only **Dismiss this ask** posts the reviewed `{key, cardRev}`. Pending clicks are ignored without disabling or dropping focus. A changed card invalidates the review; an unconfirmed save returns to review with a visible error and no automatic retry. On success, focus returns to the Overview tab only if it is still in the dismissed card, and any selection of that card is cleared. The ordinary engagement release applies; another engaged card is never forced to update. Unsent drafts remain as copyable stubs. Confirmation state is tab-memory only, pruned when the card leaves; reload never resumes or submits it. The Chat ask chip and double left border distinguish chat asks without relying on color.
 - **One-off evaluation:** `node scripts/chat-asks.mjs --home <abs> [--state <abs agent-state.json>] [--write]` prints the open chat cards. It persists nothing unless `--write` is given.
 
 ## Validation
 
 ```sh
 cd prototype
-node --test --test-concurrency=2 test/bearings*.test.js test/chat-asks.test.js
+node --test --test-concurrency=2 test/bearings*.test.js test/chat-asks*.test.js
 # One isolated synthetic browser; run from a clean committed checkout:
 SCREENSHOT_DIR=/absolute/private/proof node scripts/captain-call-live-browser-pass.mjs
 # Sequential forced-colors matrix (never a second concurrent browser):

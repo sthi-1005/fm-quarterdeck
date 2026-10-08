@@ -1,6 +1,6 @@
 # Chat asks: decision record
 
-**Status:** adopted (framework). **Owner:** Quarterdeck. **Code:** `prototype/chat-asks.js`. **Wire contract:** [Captain's Call, "Chat asks"](../prototype/BEARINGS.md#chat-asks).
+**Status:** adopted (framework and presentation). **Owner:** Quarterdeck. **Code:** `prototype/chat-asks.js`. **Wire contract:** [Captain's Call, "Chat asks"](../prototype/BEARINGS.md#chat-asks).
 
 ## Problem
 
@@ -38,7 +38,7 @@ Inside a source, only the model's own text parts count as Firstmate text: Claude
 | Path | Rule |
 | --- | --- |
 | Answered in Quarterdeck | A confirmed send through the existing `POST /api/bearings/answer` keyed relay (`202`) resolves the ask in Quarterdeck state. |
-| Dismissed in Quarterdeck | `POST /api/bearings/dismiss {key, cardRev}` (host-only, same-origin, revision-guarded) resolves it. |
+| Dismissed in Quarterdeck | Review dismissal → Dismiss this ask posts `POST /api/bearings/dismiss {key, cardRev}` (host-only, same-origin, revision-guarded). Cancel and review are local; no inbox note is sent. |
 | Replied in chat | A later captain prompt whose whole text, or any one of its lines, equals a quoted reply after normalization (case, quotes, emphasis, whitespace, trailing `.`/`!`) resolves the newest earlier open ask offering that reply. |
 | Hold closed | A linked ask resolves once a **fresh** snapshot (state `ready`, not stale) no longer contains any of its linked tasks. |
 | Superseded | Firstmate asks the identical question again. |
@@ -55,7 +55,8 @@ The state lives in one JSON file, `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json` (
 - **Never writes Firstmate.** Nothing is written under `FM_HOME`, and Firstmate's backlog is never touched. The only outbound path is the existing guarded inbox note, sent after an explicit captain confirmation.
 - **Not dependent on the snapshot.** Chat cards appear even when the snapshot is loading, stale or unavailable. An answer to a chat card needs only the chat scan to be `ready`.
 - **Bounded.** Each scan only stats the sources when nothing grew. New bytes are read from the cursor, at most 4 MiB per source per scan, in whole lines. A record over 2 MiB is skipped to its newline, and only lines containing `NEEDED` or a short `"user"` record are JSON-parsed. A new or rewritten source is backfilled from its newest 4 MiB only, and asks older than 24 hours in that backfill are recorded as closed. At most 100 unlinked chat cards are served (`chat.omitted` counts the rest).
-- **Cadence.** Every `GET /api/bearings` (page load, refresh or `?since` poll) scans before it answers. While a stream is open, a scan runs every 3 s, and snapshot events re-apply linking.
+- **Cadence.** Every `GET /api/bearings` (page load, refresh or `?since` poll) scans before it answers. While a stream is open, a scan runs every 3 s, and snapshot events re-apply linking. Scans emit `model` for a new composed revision and `observed` otherwise; the last unsubscribe stops the interval.
+- **Explicit dismissal.** Review and Cancel never write state. Only confirmation posts the reviewed card revision; a changed card requires another review. Failures are visible and never retried automatically. Focus returns to the Overview tab if still in the dismissed card, so the normal engagement release can remove it. Moving focus to another card during delivery preserves that card's engagement. Unsent text is kept in the existing resolved-copy stub. The chip says Chat ask and the card has a double left border (non-color identification).
 
 ## Known limits
 
@@ -64,7 +65,12 @@ The state lives in one JSON file, `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json` (
 - When several open asks offer the same reply text, a matching captain line resolves only the newest one.
 - Linking needs a whole-token task-id mention. An ask about a filed hold that never names its task id shows as its own card.
 - Asks in a source's history beyond the 4 MiB backfill window, or older than 24 hours at first discovery, are not shown.
+- A chat card resolves on accepted send (`202`), not on a later received/replied receipt. Its receipt is visible only while the ordinary engagement hold keeps it on screen. Whether to keep answered cards until receipt acknowledgement is a separate product decision.
 - An answer to a chat card reaches Firstmate as captain text (`question: chat.<id>`, `type: "chat"`). Firstmate's keyed intake has no hold to close for it.
+
+## Validation evidence
+
+Synthetic renderer and DOM tests cover escaped asks/replies/markers, linked holds, incomplete chat coverage, local dismissal review/cancel, changed-card refusal, save errors, focus transfer without stealing moved focus, protected drafts and live arrival/resolution fades. Fake-timer source tests cover model/observed revisions, one subscriber-owned interval, last-unsubscribe cleanup, hub close and linking before publication. The isolated browser pass writes only synthetic transcripts in a temporary home and checks load, appended live asks, dismissal, suggested-reply inbox envelopes, phone widths, light/dark OS preferences and forced colors. See [BEARINGS.md validation](../prototype/BEARINGS.md#validation) for commands. Native phone/background checks remain pending.
 
 ## Alternatives rejected
 

@@ -172,6 +172,8 @@ export function fakeTimers() {
   return {
     setTimeout: (fn, ms = 0) => { const id = ++seq; tasks.set(id, { at: now + ms, fn }); return id; },
     clearTimeout: (id) => { tasks.delete(id); },
+    setInterval: (fn, ms) => { const id = ++seq; tasks.set(id, { at: now + ms, fn, interval: ms }); return id; },
+    clearInterval: (id) => { tasks.delete(id); },
     pending: () => tasks.size,
     advance(ms) {
       const end = now + ms;
@@ -180,6 +182,7 @@ export function fakeTimers() {
         if (!next) break;
         tasks.delete(next[0]);
         now = next[1].at;
+        if (next[1].interval) tasks.set(next[0], { ...next[1], at: now + next[1].interval });
         next[1].fn();
       }
       now = end;
