@@ -6,7 +6,7 @@ Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/beari
 
 ## Source and authority
 
-- Calls come from exactly one Firstmate interface: `$FM_HOME/bin/fm-bearings-snapshot.sh --json` (never `--include-prs`), with `FM_HOME` set, nice 10, a 45 s process-group kill, 2 MiB stdout and 4 KiB stderr caps. Concurrent callers share one run.
+- Filed calls come from exactly one Firstmate interface: `$FM_HOME/bin/fm-bearings-snapshot.sh --json` (never `--include-prs`), with `FM_HOME` set, nice 10, a 45 s process-group kill, 2 MiB stdout and 4 KiB stderr caps. Concurrent callers share one run.
 - It never reads backlog, meta or status records to build calls, and writes nothing under `FM_HOME`. After the snapshot, a read-only, 2 MiB bounded read of the selected home's `data/backlog.md` supplements only `(main)` decision clocks (exact task id); no other home's records are inspected. The snapshot's own documented observational cache refresh is the only fleet-side write, the same as a plain `/bearings`.
 - Validation fails closed: `schema` must be `fm-bearings.v1`, and `decisions_open`, `omitted` and `contributions` (`captain[]`, `known`, `checked`, `proven_clear`) must have the expected types. A missing home or script, a failed run or invalid output never synthesizes calls: with a previous good model it stays visible as `state: "stale"`; without one the model is `state: "unavailable"` with no cards.
 
@@ -136,15 +136,37 @@ Firstmate's lavish adapter rule maps it to one keyed line: `<question>\t<selecti
 
 **Firstmate follow-up (separate repository, not done here):** the bearings skill must route an inbox note carrying a `json fm-bearings-answer` block with `channel:"quarterdeck"` exactly like a board answer — feed `<question>\t<answer>\t<label>[\t<close>]` to `fm-captain-hold.sh answers`, handle `merge.<task>` through the merge-click ruling, and record "later" as `hold --until`. Until then Firstmate reads the note as an ordinary captain note.
 
+## Chat asks
+
+Firstmate also asks the captain things in chat without filing a captain hold, so the snapshot never sees them. `chat-asks.js` finds these asks mechanically in the primary Firstmate transcript and serves each one as a card in the same model. There is no model call, Quarterdeck never writes under `FM_HOME`, and chat cards do not depend on the snapshot. The [decision record](../docs/CHAT-ASKS.md) covers the sources, the full marker grammar, limits and the rejected alternatives.
+
+- **Detection:** an upper-case `ACTION NEEDED`, `APPROVAL NEEDED` or `DECISION NEEDED` at the start of a line of Firstmate's own text. Leading markdown is allowed. The ask continues until a blank line, and code fences are ignored. Quoted alternatives after "reply" become the card's suggested replies.
+- **Sources:** the Claude Code primary session, the in-home `state/.main-session` pointer and the cursor-named main Pi session. They are read incrementally behind a persisted byte cursor, at most 4 MiB per source per scan. A new source is backfilled from its newest 4 MiB, and asks older than 24 h at that point are not resurfaced.
+- **Cadence:** every `GET /api/bearings` (including `?since`) scans before answering. While a stream is open, a scan runs every 3 s. An idle scan only stats the sources.
+- **Card** `chat:<16 hex>`, keyed by a hash of the record id, part index and marker line: `{key, type:"chat", kind:"action"|"approval"|"decision", marker, summary, replies[], source, transcript:{offset, part}, clock:{label:"Asked", at}, answer, rev}`. `answer.question` is `chat.<16 hex>`, and `answer.options` are the suggested replies (`reply-N`) plus freeform text. Chat cards follow the snapshot cards, newest first, at most 100.
+- **Filed holds:** an ask whose text names an open snapshot call's task id is linked to that task. It appears inside that card as `chatAsks[{key, kind, summary, replies, clock}]` instead of as a separate card.
+- **Resolution** (state `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json`, outside `FM_HOME`) happens in any of these ways:
+  - a confirmed answer (`202`);
+  - `POST /api/bearings/dismiss`;
+  - a later captain prompt whose whole text or one line equals a suggested reply (case, quotes, emphasis and trailing punctuation are ignored), which resolves the newest earlier open ask with that reply;
+  - a fresh snapshot without any linked task;
+  - Firstmate repeating the identical ask.
+
+  Resolved keys are tombstoned and never revived.
+- **Model:** `chat:{state, error, open, linked, omitted, behind, sources[{source, backfillOmittedBytes}]}` is part of the content revision. `chatCheckedAt` is freshness only. The model `rev` hashes the composed cards, coverage, omissions and chat coverage.
+- **Answers:** these use the same `POST /api/bearings/answer` checks. A chat card needs `chat.state` to be `ready`, not the snapshot. A chosen reply is relayed as the captain's own words (`selection:""`, `note:"<reply>[ - <note>]"`). The envelope has `type:"chat"` and `ask` (marker and text, at most 1 KiB) instead of `task`. The note's human line tells Firstmate that no hold was filed. Quarterdeck resolves the card once the note is accepted.
+- **`POST /api/bearings/dismiss`** (host only; 404 through a preview path) is same-origin JSON with no query and a body of at most 1 KiB. The body is exactly `{key, cardRev}` with a `chat:` key (otherwise 400), and the served revision must still match (409 `revision`). It returns `409 gone` when the key is not an open chat card, `409 changed` when the card rev differs, `503 unrecorded` when the state could not be saved, and otherwise `200 {state:"dismissed", key}`. Snapshot cards cannot be dismissed, because Firstmate owns holds.
+- **One-off evaluation:** `node scripts/chat-asks.mjs --home <abs> [--state <abs agent-state.json>] [--write]` prints the open chat cards. It persists nothing unless `--write` is given.
+
 ## Validation
 
 ```sh
 cd prototype
-node --test --test-concurrency=2 test/bearings*.test.js
+node --test --test-concurrency=2 test/bearings*.test.js test/chat-asks.test.js
 # One isolated synthetic browser; run from a clean committed checkout:
 SCREENSHOT_DIR=/absolute/private/proof node scripts/captain-call-live-browser-pass.mjs
 # Sequential forced-colors matrix (never a second concurrent browser):
 FM_BROWSER_FORCED_COLORS=1 SCREENSHOT_DIR=/absolute/private/forced-proof node scripts/captain-call-live-browser-pass.mjs
 ```
 
-Fixtures under `test/fixtures/bearings/` are synthetic `fm-bearings.v1` output; tests that run a snapshot use a temporary home with a fake `bin/fm-bearings-snapshot.sh`.
+Fixtures under `test/fixtures/bearings/` are synthetic `fm-bearings.v1` output; tests that run a snapshot use a temporary home with a fake `bin/fm-bearings-snapshot.sh`. Chat-ask tests write synthetic Claude and Pi transcripts into a temporary home.

@@ -16,6 +16,7 @@ import { compactLanes } from "./lane-payload.js";
 import { readSupervisionOutcomes } from "./supervision.js";
 import { createQuotaReader } from "./quota.js";
 import { createBearingsHub } from "./bearings.js";
+import { chatAskKey, chatAsksPath, createCallSource, createChatAskScanner } from "./chat-asks.js";
 import { AnswerRefused, MAX_BODY_BYTES as MAX_ANSWER_BODY_BYTES, createAnswerRelay } from "./bearings-answer.js";
 import { createConfiguredCostReader } from "./costs.js";
 import { readExpenseOverlay } from "./private-runtime.js";
@@ -949,7 +950,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createCallSource({ hub: createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), chat: createChatAskScanner({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env), statePath: chatAsksPath(configuredStatePath(env)) }) }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -1274,6 +1275,9 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
       }
       if (request.method === "GET" && url.pathname === "/api/bearings") {
         bearingsSource.touch();
+        // A refresh or poll reads any new transcript lines first (bounded, stat-only when idle).
+        // Only the chat scan is awaited; the snapshot run never delays a read.
+        if (bearingsSource.refresh) await bearingsSource.refresh();
         const since = url.searchParams.get("since");
         const freshness = bearingsSource.freshness();
         const model = since && since === freshness.rev ? { unchanged: true, ...freshness } : bearingsSource.current();
@@ -1299,11 +1303,35 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         // A request spanning a fast-forward is refused rather than answered under a mixed identity.
         if (await syncRevision(true) !== commit) { await sendJson(request, response, 409, { error: "Quarterdeck updated; reload to continue", code: "revision" }); return; }
         try {
-          await sendJson(request, response, 202, await answerRelay.submit(body, bearingsSource.current()));
+          const accepted = await answerRelay.submit(body, bearingsSource.current());
+          // A chat ask has no Firstmate hold to close it; the confirmed relay resolves it here.
+          if (accepted.envelope?.type === "chat") await bearingsSource.resolveChat?.(accepted.key, "answered", { requestId: accepted.requestId }).catch(() => {});
+          await sendJson(request, response, 202, accepted);
         } catch (error) {
           if (!(error instanceof AnswerRefused)) throw error;
           await sendJson(request, response, error.status, { error: error.message, code: error.code });
         }
+        return;
+      }
+      // Dismiss a chat ask (BEARINGS.md "Chat asks"): recorded only in Quarterdeck's own state.
+      if (url.pathname === "/api/bearings/dismiss" && request.method === "POST") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        if (!authorized(request)) { await sendJson(request, response, 403, { error: "Unauthorized origin", code: "origin" }); return; }
+        if (url.search || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 415, { error: "JSON required", code: "invalid" }); return; }
+        let text = "";
+        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > 1024) { await sendJson(request, response, 413, { error: "Request too large", code: "too-long" }); return; } }
+        let body = null;
+        try { body = JSON.parse(text); } catch {}
+        if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== "cardRev,key" || !chatAskKey(body.key) || !/^[0-9a-f]{16}$/.test(String(body.cardRev))) {
+          await sendJson(request, response, 400, { error: "Dismiss must name a chat ask and the revision shown", code: "invalid" }); return;
+        }
+        if (await syncRevision(true) !== commit) { await sendJson(request, response, 409, { error: "Quarterdeck updated; reload to continue", code: "revision" }); return; }
+        const card = (bearingsSource.current().cards || []).find((entry) => entry.key === body.key);
+        if (!card || card.type !== "chat") { await sendJson(request, response, 409, { error: "This ask is no longer open", code: "gone" }); return; }
+        if (card.rev !== body.cardRev) { await sendJson(request, response, 409, { error: "This ask changed; review it before dismissing", code: "changed" }); return; }
+        try { await bearingsSource.resolveChat(body.key, "dismissed"); }
+        catch { await sendJson(request, response, 503, { error: "Quarterdeck could not record the dismissal; try again", code: "unrecorded" }); return; }
+        await sendJson(request, response, 200, { state: "dismissed", key: body.key });
         return;
       }
       if (url.pathname === "/api/bearings/answer/status" && request.method === "GET") {

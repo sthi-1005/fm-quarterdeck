@@ -1,0 +1,83 @@
+# Chat asks: decision record
+
+**Status:** adopted (framework). **Owner:** Quarterdeck. **Code:** `prototype/chat-asks.js`. **Wire contract:** [Captain's Call, "Chat asks"](../prototype/BEARINGS.md#chat-asks).
+
+## Problem
+
+Captain's Call showed only what `fm-bearings-snapshot.sh --json` reports: filed captain holds and merge-ready contributions. When Firstmate asked the captain something in chat without filing a hold, Quarterdeck showed no card, even though a chat `/bearings` surfaced it. The ask existed only in the transcript, and filing it depended on Firstmate following a rule.
+
+Goal: every ask Firstmate makes in chat appears as a card on the next Quarterdeck refresh or live update. The parse is deterministic, involves no model, and does not depend on Firstmate filing anything.
+
+## Decision
+
+Quarterdeck reads the primary Firstmate transcript incrementally. It turns each **marker line** in Firstmate's own text into a card, merges that card with snapshot calls about the same task, and closes it only by mechanical rules.
+
+### Sources read (read-only)
+
+- The **Claude Code primary session** for the selected home, chosen by the same rule as Fleet Chats (`findClaudePrimary`): the `state/.lock-session` id, otherwise the newest session that does not open with a machine envelope. Only the home-encoded project directory is listed.
+- The in-home **`state/.main-session`** pointer, which must resolve inside `FM_HOME`.
+- The **main Pi session** named by `state/.branch-mirror-cursor`, read only when it lives in the directory that encodes the exact home and its session header's `cwd` equals the home.
+- **Not read:** branch sessions, worker transcripts, other homes, backlog and status records. The snapshot remains the only source of filed calls.
+
+Inside a source, only the model's own text parts count as Firstmate text: Claude `assistant` text that is not harness or synthetic text, and Pi `assistant` message text. Captain text is a human prompt that is not a machine envelope (`FIRSTMATE_OP:`, supervision wakes, mirrors, task notifications or skill bodies). Thinking, tool calls and results, sidechains, hooks and meta records are ignored.
+
+### Marker grammar
+
+- A marker is `ACTION NEEDED`, `APPROVAL NEEDED` or `DECISION NEEDED`, in upper case, at the **start of a line**. It may follow blockquote `>`, a list bullet or number, a heading `#`, one emoji, or emphasis `*`/`_`. A colon, dash or emphasis may follow it (`**APPROVAL NEEDED:** …`, `**DECISION NEEDED** on …:`).
+- The ask is the rest of the marker line plus any following non-blank lines, such as a decision's option list. It ends at a blank line, another marker, a code fence or a `[fm-lane …]`/`[end …]` line. Code-fenced text is never an ask. A mid-sentence or backticked mention of a marker is not an ask. Ask text is capped at 4000 characters.
+- **Replies** are quoted alternatives after the word *reply* (`Reply **"x"**`, `reply \`a\` or \`b\``, `shortest reply: "y"`). Unquoted replies are never guessed, and at most 6 are kept.
+
+### Card identity and deduplication
+
+- Key: `chat:` + 16-hex sha256 of `[transcript record id, text part index, marker line]`. The record id is Claude's `uuid` or Pi's `id`, with a source byte offset as the fallback. A session resumed into a new file keeps its record ids, so its asks keep the same keys.
+- **Re-ask:** a new ask with the same kind and normalized text supersedes the older open one, so Firstmate repeating itself does not stack cards.
+- **Filed holds:** an ask that names an open snapshot call's task id as a whole token is **linked** to that task, either when it appears or later when the hold is filed. A linked ask does not get its own card. It is shown inside the snapshot card as `chatAsks[]` ("Also asked in chat"), so nothing is hidden and nothing is duplicated.
+
+### Resolution paths (all mechanical)
+
+| Path | Rule |
+| --- | --- |
+| Answered in Quarterdeck | A confirmed send through the existing `POST /api/bearings/answer` keyed relay (`202`) resolves the ask in Quarterdeck state. |
+| Dismissed in Quarterdeck | `POST /api/bearings/dismiss {key, cardRev}` (host-only, same-origin, revision-guarded) resolves it. |
+| Replied in chat | A later captain prompt whose whole text, or any one of its lines, equals a quoted reply after normalization (case, quotes, emphasis, whitespace, trailing `.`/`!`) resolves the newest earlier open ask offering that reply. |
+| Hold closed | A linked ask resolves once a **fresh** snapshot (state `ready`, not stale) no longer contains any of its linked tasks. |
+| Superseded | Firstmate asks the identical question again. |
+
+Resolved keys become tombstones (up to 5000), so re-reading a rewritten transcript never revives them.
+
+### State location
+
+The state lives in one JSON file, `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json` (schema `fm-quarterdeck-chat-asks.v1`). It sits beside Quarterdeck's presentation state, which the server already requires to be outside `FM_HOME`. It holds per-source cursors `{ino, offset, skip}`, open and recently resolved asks, and tombstones. Writes use the same discipline as `agent-state.js`: an exclusive lock file, a temp file, fsync and rename. A busy lock is never stolen.
+
+### Guarantees
+
+- **No AI.** Extraction, linking and resolution are regular expressions and exact comparisons. Nothing calls a model.
+- **Never writes Firstmate.** Nothing is written under `FM_HOME`, and Firstmate's backlog is never touched. The only outbound path is the existing guarded inbox note, sent after an explicit captain confirmation.
+- **Not dependent on the snapshot.** Chat cards appear even when the snapshot is loading, stale or unavailable. An answer to a chat card needs only the chat scan to be `ready`.
+- **Bounded.** Each scan only stats the sources when nothing grew. New bytes are read from the cursor, at most 4 MiB per source per scan, in whole lines. A record over 2 MiB is skipped to its newline, and only lines containing `NEEDED` or a short `"user"` record are JSON-parsed. A new or rewritten source is backfilled from its newest 4 MiB only, and asks older than 24 hours in that backfill are recorded as closed. At most 100 unlinked chat cards are served (`chat.omitted` counts the rest).
+- **Cadence.** Every `GET /api/bearings` (page load, refresh or `?since` poll) scans before it answers. While a stream is open, a scan runs every 3 s, and snapshot events re-apply linking.
+
+## Known limits
+
+- An ask Firstmate phrases **without** a marker line is not detected. The marker convention is the one contract with Firstmate.
+- Chat-reply resolution needs the captain to repeat a quoted reply exactly (after normalization). A paraphrase ("ok, do it") leaves the card open until it is answered, dismissed or superseded.
+- When several open asks offer the same reply text, a matching captain line resolves only the newest one.
+- Linking needs a whole-token task-id mention. An ask about a filed hold that never names its task id shows as its own card.
+- Asks in a source's history beyond the 4 MiB backfill window, or older than 24 hours at first discovery, are not shown.
+- An answer to a chat card reaches Firstmate as captain text (`question: chat.<id>`, `type: "chat"`). Firstmate's keyed intake has no hold to close for it.
+
+## Alternatives rejected
+
+- **A Python script or cron job writing cards.** It would duplicate the transcript confinement rules already in the Node server, add a second process and a second state owner, and lag behind the live stream. Node in the server reuses `findClaudePrimary`, `claudeTurns`, the answer relay and the SSE hub. `prototype/scripts/chat-asks.mjs` runs the same scanner on demand.
+- **Requiring Firstmate to file every ask as a captain hold.** This is the rule that failed. It depends on agent compliance, and the captain asked not to rely on rules.
+- **Model-based extraction or summarization.** It is non-deterministic, costs money, and was explicitly excluded.
+- **Writing chat asks into Firstmate's backlog.** That would violate the read-only boundary, and Firstmate alone owns holds.
+- **Re-parsing the windowed Fleet Chats transcript on each poll.** That reads up to 8 MiB per request. The cursor makes an idle poll a `stat`.
+- **Matching replies by substring or fuzzy similarity.** Words like "yes" and "merge" occur in ordinary prose, so it would close cards wrongly. Exact, whole-message or whole-line equality is predictable.
+- **Using `fs.watch` on the transcript.** It is unreliable on WSL and network filesystems. A 3 s stat while streamed is cheap and certain.
+
+## Revisit triggers
+
+- Firstmate adds structured ask records, such as an `asks[]` field in the snapshot. In that case, prefer that source and keep this parser as the fallback.
+- A harness changes its transcript layout. Add a reviewed adapter beside `recordTurns`.
+- False positives or missed asks appear in practice. Adjust the marker grammar here and in `test/chat-asks.test.js` together.

@@ -1748,6 +1748,21 @@ const callPatcher = window.bearingsPatch?.createCallPatcher({
 });
 callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
+// Dismissing a chat ask is recorded in Quarterdeck's own state; the card leaves on the pushed model.
+$("#call-cards")?.addEventListener("click", async (event) => {
+  const button = event.target.closest?.("[data-call-dismiss]");
+  const card = button?.closest("[data-call-key]");
+  if (!card) return;
+  const error = card.querySelector("[data-call-dismiss-error]");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/bearings/dismiss", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: card.getAttribute("data-call-key"), cardRev: card.getAttribute("data-call-rev") }) });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Dismiss failed");
+  } catch (failure) {
+    button.disabled = false;
+    if (error) { error.textContent = failure.message; error.hidden = false; }
+  }
+});
 const callLive = window.bearingsLive?.createBearingsLive({
   onModel(model) { callPatcher.update(model); renderCallBadge(model); observeBearings(model); },
   onObserved(data) { callPatcher.observe(data); observeBearings(data); },

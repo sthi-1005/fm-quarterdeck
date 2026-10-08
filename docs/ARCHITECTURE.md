@@ -21,6 +21,7 @@ No home discovery or saved circular pointer inside the home is required. The sel
 - `prototype/transcript.js` / `supervision.js`: JSONL normalization, exact-home session confinement, mirror deduplication and outcome notes.
 - `prototype/private-runtime.js` / `cost-config.js`: guarded private expense selection and validated attribution.
 - `prototype/costs.js` / `quota.js`: bounded allowlisted account adapters, cache coalescing and truthful unavailable/stale states.
+- `prototype/bearings.js` / `chat-asks.js`: the snapshot call hub and the deterministic transcript chat-ask extractor composed over it.
 - `prototype/agent-state.js` / `work-model.js`: atomic presentation state, explicit classification, read-only endpoint probes and completion/delivery separation.
 - `prototype/review.js`, `inbox.js`, `revision.js`, `previews.js`, `preview-lifecycle.js`: exact identity, origin, receipt/intake and pre-provisioned runtime contracts.
 - `prototype/public/`: hash routing, safe rendering, independently refreshing views, filters, source selection, pagination and accessibility.
@@ -49,7 +50,7 @@ Lane/kind/source/task/search filters intersect. Search is debounced and escaped.
 
 ## Surfaces
 
-- **Overview:** fleet KPI cards plus live Captain's Calls from `$FM_HOME/bin/fm-bearings-snapshot.sh --json`. The cached, normalized call model travels via host-only SSE (previews/error recovery poll with `since`); keyed patches hold while engaged and preserve typed text. Answers are relayed only on an explicit captain confirmation, as an `fm-bearings-answer.v1` inbox note through `$FM_HOME/bin/fm-inbox.sh`; Quarterdeck never closes a call. No project tree. [Captain's Call](../prototype/BEARINGS.md) owns the contract.
+- **Overview:** fleet KPI cards plus live Captain's Calls from `$FM_HOME/bin/fm-bearings-snapshot.sh --json`. The cached, normalized call model travels via host-only SSE (previews/error recovery poll with `since`); keyed patches hold while engaged and preserve typed text. Answers are relayed only on an explicit captain confirmation, as an `fm-bearings-answer.v1` inbox note through `$FM_HOME/bin/fm-inbox.sh`; Quarterdeck never closes a filed call. Asks Firstmate makes only in chat (`ACTION`/`APPROVAL`/`DECISION NEEDED` marker lines) are extracted mechanically from the primary transcript behind a byte cursor and served as chat cards in the same model; see the [chat-ask decision record](CHAT-ASKS.md). No project tree. [Captain's Call](../prototype/BEARINGS.md) owns the contract.
 - **Work Split:** repository → lane/workstream → theme, explicit classification and exact task links. Active requires in-flight executing work with process-incarnation proof. A recorded terminal pane is a weaker, visibly labelled evidence tier; it can inform the row but cannot establish Active or a live worker process. [Work taxonomy](../prototype/WORK-TAXONOMY.md) owns platform probes, evidence labels, pressure and completion attention semantics.
 - **Lane Chats:** oldest-to-newest feed, independent refresh, preserved reading intent, safe Markdown/raw text, bounded history and context drawers. Lane envelopes are display hints, not agent authority.
 - **Expenses:** selected private overlay before empty canonical public ledger; labeled synthetic demo only when the canonical file is absent. Decimal strings use BigInt cents with separate currency/project/category totals. Billing snapshots are separate, never added to ledger totals. Attribution comes from private `costs.json`; unknown allocation stays unclassified.
@@ -59,7 +60,7 @@ Lane/kind/source/task/search filters intersect. Search is debounced and escaped.
 
 ## Security and portability
 
-No arbitrary browser shell, filesystem path, ref, command or destination control is provided. There are narrow POST contracts for review/chat, confirmed Captain's Call answers (`POST /api/bearings/answer`, receipts via `GET /api/bearings/answer/status`; both host-only), presentation state and registered preview selection; this is not a GET-only application. Reads do not fabricate missing clocks, thinking, dialogue, currency conversion or account evidence.
+No arbitrary browser shell, filesystem path, ref, command or destination control is provided. There are narrow POST contracts for review/chat, confirmed Captain's Call answers (`POST /api/bearings/answer`, receipts via `GET /api/bearings/answer/status`) and chat-ask dismissals (`POST /api/bearings/dismiss`, recorded only in Quarterdeck state; all host-only), presentation state and registered preview selection; this is not a GET-only application. Reads do not fabricate missing clocks, thinking, dialogue, currency conversion or account evidence.
 
 Keep loopback binding or one exact private HTTPS Host/Origin pair. Forwarding headers and tailnet wildcard names are not authority. Every request proves the clean serving Git revision; no-Git archives fail closed. A later authorized fresh repository must regenerate all operator-owned revision bindings instead of carrying old objects/refs/history. HTML and search input are escaped; full feeds are not screen-reader live regions.
 

@@ -7,6 +7,7 @@ Quarterdeck is the Firstmate operational cockpit: conversations are the shell; l
 | [License](../LICENSE), [governance](../GOVERNANCE.md), [security](../SECURITY.md), [contributions](../CONTRIBUTING.md), [notices](../THIRD-PARTY-NOTICES.md) | MIT source-preview posture, repository-owner maintenance and truthful upstream attribution |
 | [Architecture](ARCHITECTURE.md) | Data flow, message classes, surfaces and security boundaries |
 | [Live Captain's Call](../prototype/BEARINGS.md) | Overview calls, snapshot cadence, SSE, engagement hold, More details and confirmed answers |
+| [Chat asks](CHAT-ASKS.md) | Decision record: model-free extraction of chat asks into Captain's Call, resolution paths, limits and rejected alternatives |
 | [Quarterdeck rename](QUARTERDECK-RENAME.md) | Current product identity, retained compatibility namespaces and deliberate rollout |
 | [Branch/preview contract](branching-and-preview-model.md) | Admission, exact identities, local/remote evidence and isolated previews |
 | [First run](FIRST-RUN.md) | Explicit home selection and owned preference preview/confirmation |

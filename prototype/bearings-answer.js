@@ -51,7 +51,9 @@ function parseBody(body) {
 // selection must be one of that card's own options.
 export function validateAnswer(body, model) {
   const parsed = parseBody(body);
-  if (model?.state !== "ready") refuse(409, "not-current", "Captain's Call is not current; wait for it to refresh");
+  // A chat ask is current when the transcript scan is; it never waits on the snapshot.
+  const chat = parsed.key.startsWith("chat:");
+  if ((chat ? model?.chat?.state : model?.state) !== "ready") refuse(409, "not-current", "Captain's Call is not current; wait for it to refresh");
   const card = (model.cards || []).find((entry) => entry.key === parsed.key);
   if (!card) refuse(409, "gone", "This call is no longer open");
   if (card.rev !== parsed.cardRev) refuse(409, "changed", "This call changed; review it before answering");
@@ -70,16 +72,33 @@ export function answerEnvelope({ card, selection, note }, observedRev) {
     note = displayAnswer(selection, note);
     selection = "";
   }
+  // A chat ask has no hold behind it: its quoted reply is sent as the captain's own words,
+  // exactly as if typed in chat, so the keyed line never carries an internal option value.
+  if (card.type === "chat") {
+    const reply = card.answer.options.find((option) => option.value === selection)?.label;
+    if (reply) { note = displayAnswer(reply, note); selection = ""; }
+  }
   const envelope = { schema: ANSWER_SCHEMA, question: card.answer.question, selection, note };
   if (card.answer.close) envelope.close = card.answer.close;
-  const title = `${card.type === "merge" ? "Merge" : "Decision"} ${card.task}`;
-  return { ...envelope, channel: "quarterdeck", type: card.type, task: card.task, label: clipBytes(`${title} -> ${displayAnswer(selection, note)}`.replace(/\s+/g, " "), 512), cardRev: card.rev, observedRev: observedRev ?? null };
+  const title = cardTitle(card);
+  const provenance = card.type === "chat" ? { ask: clipBytes(`${card.marker}: ${card.summary}`.replace(/\s+/g, " "), 1024) } : { task: card.task };
+  return { ...envelope, channel: "quarterdeck", type: card.type, ...provenance, label: clipBytes(`${title} -> ${displayAnswer(selection, note)}`.replace(/\s+/g, " "), 512), cardRev: card.rev, observedRev: observedRev ?? null };
 }
+const cardTitle = (card) => card.type === "chat" ? `Chat ask ${card.answer.question}` : `${card.type === "merge" ? "Merge" : "Decision"} ${card.task}`;
 
 // One human line, then the envelope in a tagged fence. Backticks inside JSON strings are
 // escaped so captain text can never close the fence.
 export function formatAnswerNote(envelope) {
   const shown = displayAnswer(envelope.selection, envelope.note).replace(/\s+/g, " ");
+  if (envelope.type === "chat") return [
+    `Captain's Call answer from Quarterdeck · reply to your chat ask: ${shown}`,
+    `Your ask: ${envelope.ask}`,
+    "This answers an ask you made in chat (no captain hold was filed). Act on it as the captain's reply; it is not a keyed-intake answer.",
+    "",
+    "```json fm-bearings-answer",
+    JSON.stringify(envelope, null, 2).replaceAll("`", "\\u0060"),
+    "```",
+  ].join("\n");
   return [
     `Captain's Call answer from Quarterdeck · ${envelope.type === "merge" ? "Merge" : "Decision"} ${envelope.task}: ${shown}`,
     "Route it like a /bearings board answer (bearings skill, Handling a board wake). Quarterdeck closed nothing.",

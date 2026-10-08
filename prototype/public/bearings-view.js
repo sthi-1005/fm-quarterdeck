@@ -49,7 +49,26 @@ window.bearingsView = (() => {
       <div class="call-answer-receipt" data-call-answer-receipt tabindex="-1" hidden><p role="status" data-call-answer-receipt-text></p><button type="button" data-call-answer-again>Answer again</button></div>
     </form>`;
   }
+  const CHAT_LABELS = { approval: "Approval", action: "Action", decision: "Decision" };
+  const repliesText = (replies) => (Array.isArray(replies) && replies.length ? replies.map((reply) => `“${reply}”`).join(" or ") : "No quoted reply");
+  // A chat ask is one Firstmate made in conversation without filing a hold (BEARINGS.md "Chat asks").
+  function chatCardHtml(card) {
+    const label = CHAT_LABELS[card.kind] || "Ask";
+    const id = idFor(card.key);
+    const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
+    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Asked")}">${escape(clockText(card.clock))}</span></header>
+      <h3>${label} asked in chat</h3>
+      <dl class="call-context">${row("About", "Firstmate asked in chat; no captain hold is filed")}${row("Decide", card.summary || "Ask text not recorded", ` class="call-clamp" data-call-clamp id="call-decide-${id}"`)}${row("Reply", repliesText(card.replies))}</dl>
+      <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden><p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p></div>
+      <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
+      <p class="call-meta">Answering here, dismissing, or replying in chat with the quoted reply closes this card.</p>
+      <div class="call-answer-actions"><button type="button" data-call-dismiss>Dismiss</button><span class="call-meta" data-call-dismiss-error role="alert" hidden></span></div></div>
+      ${answerHtml(card, `${label} asked in chat`)}`;
+  }
+  const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length
+    ? `<div class="call-context-row"><dt>Also asked in chat</dt><dd>${card.chatAsks.map((ask) => `${escape(ask.summary)} · reply ${escape(repliesText(ask.replies))}`).join("<br>")}</dd></div>` : "";
   function cardHtml(card) {
+    if (card.type === "chat") return chatCardHtml(card);
     const merge = card.type === "merge";
     let url = null;
     try { const parsed = new URL(card.url); if (parsed.protocol === "https:" && !parsed.username && !parsed.password) url = parsed.href; } catch {}
@@ -63,7 +82,7 @@ window.bearingsView = (() => {
     const about = [card.repo || "Repository not recorded", card.owner || "Owner not recorded", merge && card.kind].filter(Boolean).join(" · ");
     return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Created / updated")}">${escape(clockText(card.clock))}</span></header>
       <h3>${label} requested${card.repo ? ` · ${escape(card.repo)}` : ""}</h3>
-      <dl class="call-context">${row("About", about)}${row("Decide", decide, ` class="call-clamp" data-call-clamp id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}`)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
+      <dl class="call-context">${row("About", about)}${row("Decide", decide, ` class="call-clamp" data-call-clamp id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}`)}${linkedAsksHtml(card)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
       <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden>
         ${shortened ? `<p>Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.</p>` : ""}
         <p class="call-meta">Task <code>${escape(card.task || "unknown")}</code></p>
@@ -92,6 +111,9 @@ window.bearingsView = (() => {
     }
     if (count(model.coverage?.captainOmitted)) parts.push(`${model.coverage.captainOmitted} merge calls not shown`);
     if (count(model.coverage?.unmeasuredHomes)) parts.push(`${model.coverage.unmeasuredHomes} homes unmeasured`);
+    if (model.chat?.state && model.chat.state !== "ready") parts.push(model.chat.error || "Chat asks unavailable");
+    if (count(model.chat?.omitted)) parts.push(`${model.chat.omitted} older chat asks not shown`);
+    if (model.chat?.behind) parts.push("Still reading the Firstmate transcript");
     return parts.join(" · ");
   }
   const heldText = (diff) => ["Captain's Call changed — updates when you're done", diff.added && `${diff.added} new`, diff.changed && `${diff.changed} changed`, diff.removed && `${diff.removed} resolved`].filter(Boolean).join(" · ");
