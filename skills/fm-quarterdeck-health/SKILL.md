@@ -19,8 +19,8 @@ When initializing/consuming Quarterdeck, select the explicit initialized `FM_HOM
    install -m 0700 "$QUARTERDECK_ROOT/scripts/quarterdeck-health-check.sh" "$FM_HOME/state/quarterdeck-health.check.sh"
    (cd "$FM_HOME" && bin/fm-check-register.sh quarterdeck-health)
    ```
-   `QUARTERDECK_ROOT` is the verified pinned source root. The copied script is self-contained. It uses `FM_HOME/state`, or its own directory when the watcher does not export `FM_HOME`. All copies in one state directory share a lock and ten-minute attempt stamp.
-3. Store private settings in `FM_HOME/state/quarterdeck-health.json`, a JSON object of the environment keys below; actual environment variables override it. Include the explicit `FM_HOME` so inbox checking still works when the watcher does not inherit it. This persists configuration across fresh Firstmate sessions without assuming the watcher inherits a launch shell. Use no private values in committed files.
+   `QUARTERDECK_ROOT` is the verified pinned source root. The copied script is self-contained. It uses `FM_HOME/state`, or its own directory when the watcher does not export `FM_HOME`. All copies in one state directory share a lock and attempt stamp; the interval comes from Quarterdeck Preferences (default ten minutes).
+3. Store private settings in `FM_HOME/state/quarterdeck-health.json`, a JSON object of the environment keys below; actual environment variables override it. Include the explicit `FM_HOME` so inbox checking still works when the watcher does not inherit it. Also include the server's exact `FM_QUARTERDECK_STATE_PATH` (or retained legacy `FM_AGENTOS_STATE_PATH`) so a copied script selects the same preference owner. For a server using the default owner, record the absolute `$QUARTERDECK_ROOT/prototype/data/agent-state.json` path in this private config; a copied script cannot infer its original repository. This persists configuration across fresh Firstmate sessions without assuming the watcher inherits a launch shell. Use no private values in committed files.
 4. Run the registered script once with `FM_QUARTERDECK_HEALTH_FORCE=1`, handle any overdue notes with the reply+ack loop below, then force it again and confirm it is silent. Confirm registration with the installed watcher's documented inspection procedure. A registration command succeeding is not evidence the service is healthy. Record the check id, exact owned route, process/launch method, source revision and config privately for the next Firstmate.
 
 Settings (environment or private JSON):
@@ -30,9 +30,11 @@ Settings (environment or private JSON):
 - `TAILSCALE_BIN`: optional Tailscale executable path, otherwise PATH `tailscale`.
 - `FM_HOME`: explicit initialized Firstmate home for guarded inbox reads; required in the environment or private JSON.
 - `FM_QUARTERDECK_HEALTH_MAX_AGE`: snapshot age seconds, default 900, range 1–86400.
-- `FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE`: open-note age seconds, default 900 (15 minutes), range 1–86400. Age comes from the Unix timestamp prefix of each note id.
+- `FM_QUARTERDECK_STATE_PATH` / `FM_AGENTOS_STATE_PATH`: same owner resolution as the server; conflicting paths fall back to default health preferences. The script reads sibling `quarterdeck-preferences.json` read-only on every run. In the repository, the default owner is `prototype/data/agent-state.json`; installed copies must record the original owner as above. Environment overrides private health config.
 - `FM_QUARTERDECK_HEALTH_STATE_DIR`: optional explicit bookkeeping/config directory; normally leave unset.
-- `FM_QUARTERDECK_HEALTH_FORCE=1`: manual post-repair verification, bypasses ten-minute throttle.
+- `FM_QUARTERDECK_HEALTH_FORCE=1`: manual post-repair verification, bypasses the saved interval throttle.
+
+In Quarterdeck **Preferences → Away supervision**, explicitly save **Away check-in interval** (minutes, default **10**) and **Open note alarm** (minutes, default **15**). Both accept whole minutes **1–1440**. Missing, malformed, unreadable or invalid saved values fall back to their respective defaults. Saves are atomic and apply on the next script invocation, including while throttled. The read-only `captain.md` view is unchanged. Open-note age comes from the Unix timestamp prefix of each note id; the former `FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE` knob is replaced by this saved preference.
 
 If Tailscale is unavailable and a port is explicitly configured, local-only checking is possible. Record that remote reachability is **unverified**, not healthy from the captain's side. To require remote checks, explicitly configure the URL; failure never falls back to local-only. The checker probes `/api/health` (`ok: true`) and `/api/bearings` on local and available remote origins. Bearings must have schema `fm-quarterdeck-call.v1`, no error or `stale: true`, and either idle `state: "loading"` (healthy: the server runs no snapshot without viewers) or `state: "ready"` with a timezone-bearing ISO `generatedAt` within the age limit (at most 60 seconds in the future). Stale, unavailable and error snapshots are unhealthy. Missing endpoint/schema is an actionable compatibility failure, not a successful check. Use the wire contract in `prototype/BEARINGS.md`; escalate a missing or incompatible producer rather than substituting a request-time timestamp or weakening readiness checks.
 
@@ -40,7 +42,7 @@ Dependencies: Bash, Python 3, `timeout`, `flock`; Tailscale only for discovery. 
 
 ## /afk and quiet supervision
 
-Keep the check registered while Quarterdeck is expected to be active, including `/afk`, away mode and quiet supervision. Reuse Firstmate's custom-check watcher; do not busy-poll or start another daemon. Its repeated invocation is throttled to about ten minutes. At occasional normal supervision checkpoints, confirm registration remains present and review fresh health evidence; local-only skips do not establish remote availability. Do not send routine healthy chatter or wake the captain for each check.
+Keep the check registered while Quarterdeck is expected to be active, including `/afk`, away mode and quiet supervision. Reuse Firstmate's custom-check watcher; do not busy-poll or start another daemon. The script is **model-free**: periodic watcher invocations do not call a model or wake Firstmate; only a printed problem line wakes Firstmate. Its repeated invocation is throttled to the saved Away check-in interval (default ten minutes). At occasional normal supervision checkpoints, confirm registration remains present and review fresh health evidence; local-only skips do not establish remote availability. Do not send routine healthy chatter or wake the captain for each check.
 
 ### Captain notes: act and close the loop
 

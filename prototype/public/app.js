@@ -1896,11 +1896,41 @@ async function refreshEndpoint(key) {
   }
 }
 
+let healthPreferencesLoaded = false;
+async function refreshHealthPreferences() {
+  try {
+    const value = await fetchJson("/api/preferences/health");
+    // Preserve edits during subsequent refreshes; a reload reads the saved owner.
+    if (!healthPreferencesLoaded) {
+      $("#away-check-in").value = value.awayCheckInMinutes;
+      $("#open-note-alarm").value = value.openNoteAlarmMinutes;
+      $("#health-preferences-status").textContent = "Saved settings loaded.";
+      healthPreferencesLoaded = true;
+      $("#health-preferences-form button").disabled = false;
+    }
+  } catch { $("#health-preferences-status").textContent = "Health preferences unavailable. Reload to retry."; }
+}
+$("#health-preferences-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("#health-preferences-form button");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/preferences/health", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ awayCheckInMinutes: Number($("#away-check-in").value), openNoteAlarmMinutes: Number($("#open-note-alarm").value) }),
+    });
+    if (!response.ok) throw new Error("Save failed");
+    $("#health-preferences-status").textContent = "Saved. Applies on the next health check.";
+  } catch { $("#health-preferences-status").textContent = "Could not save. Your edits are retained; retry."; }
+  finally { button.disabled = false; }
+});
 let preferencesRefreshing = false;
 async function refreshPreferences() {
   if (preferencesRefreshing) return;
   preferencesRefreshing = true;
-  try { renderPreferences(await fetchJson("/api/preferences")); }
+  try {
+    await Promise.all([refreshHealthPreferences(), (async () => renderPreferences(await fetchJson("/api/preferences")))()]);
+  }
   catch (error) { renderPreferences({ error: error.message }); }
   finally { preferencesRefreshing = false; }
 }

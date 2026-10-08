@@ -13,7 +13,8 @@ fi
 # Serialize attempts and keep all bookkeeping in the selected Firstmate state.
 exec 9>"$state/quarterdeck-health.lock" 2>/dev/null || { fail; exit 0; }
 flock -n 9 || exit 0
-if ! timeout 25 python3 - "$state" 2>/dev/null <<'PY'
+source_root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+if ! timeout 25 python3 - "$state" "$source_root/prototype/data/agent-state.json" 2>/dev/null <<'PY'
 import datetime
 import json
 import os
@@ -69,16 +70,34 @@ def snapshot(base, age):
     if elapsed < -60 or elapsed > age:
         reject("Captain's Call snapshot stale")
 
-def inbox(setting):
+def preferences(setting):
+    defaults = {'awayCheckInMinutes': 10, 'openNoteAlarmMinutes': 15}
+    try:
+        current = setting('FM_QUARTERDECK_STATE_PATH')
+        legacy = setting('FM_AGENTOS_STATE_PATH')
+        if current and legacy and current != legacy:
+            return defaults
+        owner = Path(current or legacy or sys.argv[2])
+        if not owner.is_absolute():
+            return defaults
+        file = owner.parent / 'quarterdeck-preferences.json'
+        fd = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd) as handle:
+            import stat
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+                return defaults
+            value = json.loads(handle.read(4097))
+        return {key: value[key] if isinstance(value, dict) and type(value.get(key)) is int and 1 <= value[key] <= 1440 else fallback
+                for key, fallback in defaults.items()}
+    except Exception:
+        return defaults
+
+def inbox(setting, alarm_minutes):
     home = setting('FM_HOME')
     if not isinstance(home, str) or not Path(home).is_absolute():
         reject('inbox unavailable (explicit FM_HOME required)')
-    try:
-        age = int(setting('FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE', '900'))
-        if not 1 <= age <= 86400:
-            raise ValueError()
-    except (TypeError, ValueError):
-        reject('inbox age limit invalid')
+    age = alarm_minutes * 60
     # Use the guarded read interface, not private endpoint files. Bound both
     # execution and output before parsing; never print bodies or diagnostics.
     try:
@@ -133,16 +152,17 @@ def main():
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
     def setting(key, default=''):
         return os.environ.get(key, config.get(key, default))
+    saved = preferences(setting)  # Read-only, every invocation, including throttled runs.
     stamp = state / 'quarterdeck-health.stamp'
     now = time.time()
     if setting('FM_QUARTERDECK_HEALTH_FORCE') != '1' and stamp.exists():
         elapsed = now - float(stamp.read_text())
-        if 0 <= elapsed < 600:
+        if 0 <= elapsed < saved['awayCheckInMinutes'] * 60:
             return
     stamp.write_text(str(now))  # Throttle failed attempts too; watcher wake owns recovery.
     issues = []
     try:
-        message = inbox(setting)
+        message = inbox(setting, saved['openNoteAlarmMinutes'])
         if message:
             issues.append(message)
     except Unhealthy as error:

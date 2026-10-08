@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,7 @@ function check(f, extra = {}) {
     const child = spawn('bash', [script], { env: {
       ...env, FM_HOME: f.state, FM_QUARTERDECK_HEALTH_STATE_DIR: f.state,
       FM_QUARTERDECK_HEALTH_PORT: String(f.port),
+      FM_QUARTERDECK_STATE_PATH: join(f.state, 'agent-state.json'), FM_AGENTOS_STATE_PATH: '',
       TAILSCALE_BIN: join(f.state, 'absent-tailscale'), ...extra,
     } });
     let stdout = '', stderr = '';
@@ -136,16 +137,33 @@ test('overdue notes wake once, name ids and demand reply plus ack; fresh notes s
   await notes(f, []);
   assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
 });
-test('inbox age is configurable in persistent config and environment overrides it', async t => {
+test('saved note alarm is reread on every forced run', async t => {
   const f = await fixture(t);
   await notes(f, [{ id: noteId(100) }]);
-  await writeFile(join(f.state, 'quarterdeck-health.json'), JSON.stringify({
-    FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: '60',
-  }));
+  await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: 10, openNoteAlarmMinutes: 1 }));
   failure(await check(f), /inbox notes overdue/);
-  assert.equal((await check(f, {
-    FM_QUARTERDECK_HEALTH_FORCE: '1', FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: '200',
-  })).stdout, '');
+  await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: 10, openNoteAlarmMinutes: 3 }));
+  assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
+});
+test('preference reads never modify saved contents; malformed/symlink records default', async t => {
+  const f = await fixture(t);
+  const file = join(f.state, 'quarterdeck-preferences.json');
+  const bytes = JSON.stringify({ awayCheckInMinutes: 10, openNoteAlarmMinutes: 15 });
+  await writeFile(file, bytes);
+  assert.equal((await check(f)).stdout, '');
+  assert.equal(await readFile(file, 'utf8'), bytes);
+  await writeFile(file, '{invalid');
+  assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
+  await rm(file); await symlink(join(f.state, 'receipts.json'), file);
+  assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
+});
+test('legacy storage owner and environment override resolve the server preference directory', async t => {
+  const f = await fixture(t);
+  await notes(f, [{ id: noteId(100) }]);
+  await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: 10, openNoteAlarmMinutes: 1 }));
+  await writeFile(join(f.state, 'quarterdeck-health.json'), JSON.stringify({ FM_AGENTOS_STATE_PATH: join(f.state, 'agent-state.json') }));
+  failure(await check(f, { FM_QUARTERDECK_STATE_PATH: '', FM_AGENTOS_STATE_PATH: undefined }), /inbox notes overdue/);
+  assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1', FM_QUARTERDECK_STATE_PATH: join(f.state, 'other', 'agent-state.json') })).stdout, '');
 });
 test('overdue inbox and dashboard failure share a single wake line', async t => {
   const f = await fixture(t, { state: 'unavailable' });
@@ -171,11 +189,24 @@ for (const [name, pending, extra] of [
     failure(await check(f), /inbox unavailable or invalid receipts/);
   });
 }
-for (const age of ['0', '86401', 'invalid']) {
-  test(`invalid inbox age ${age} fails closed`, async t => {
-    failure(await check(await fixture(t), { FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: age }), /inbox age limit invalid/);
+for (const value of [0, -1, 1441, 1.5, '1', true, null]) {
+  test(`invalid saved minutes ${value} fall back to defaults`, async t => {
+    const f = await fixture(t);
+    await notes(f, [{ id: noteId(100) }]);
+    await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: value, openNoteAlarmMinutes: value }));
+    await writeFile(join(f.state, 'quarterdeck-health.stamp'), String(Date.now() / 1000 - 120));
+    assert.equal((await check(f)).stdout, ''); assert.equal(f.calls(), 0);
+    assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
   });
 }
+test('saved away interval changes apply even while previously throttled', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.state, 'quarterdeck-health.stamp'), String(Date.now() / 1000 - 120));
+  await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: 3, openNoteAlarmMinutes: 15 }));
+  assert.equal((await check(f)).stdout, ''); assert.equal(f.calls(), 0);
+  await writeFile(join(f.state, 'quarterdeck-preferences.json'), JSON.stringify({ awayCheckInMinutes: 1, openNoteAlarmMinutes: 15 }));
+  assert.equal((await check(f)).stdout, ''); assert.equal(f.calls(), 2);
+});
 test('inbox requires an explicit home and never silently skips a missing interface', async t => {
   const f = await fixture(t);
   failure(await check(f, { FM_HOME: '' }), /explicit FM_HOME required/);

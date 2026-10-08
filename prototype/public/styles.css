@@ -865,6 +865,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   .metric-icon { display: none; }
 }
 #preferences-view > * { max-width: 1000px; margin-left: auto; margin-right: auto; }
+.health-preferences-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.health-preferences-form h2, .health-preferences-form p { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
+.health-preferences-form label { display: grid; gap: 4px; min-width: 0; }
+.health-preferences-form input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; }
+.health-preferences-form button { justify-self: start; max-width: 100%; white-space: normal; }
 .preferences-list { display: grid; gap: var(--space-3); max-width: 1000px; padding-bottom: var(--space-6); }
 .preference-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
 .scan-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 var(--space-4); }

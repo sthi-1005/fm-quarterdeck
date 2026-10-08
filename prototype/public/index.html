@@ -231,6 +231,14 @@
 
         <section id="preferences-view" class="product-view feature-view" aria-label="Firstmate preferences">
           <header class="feature-head compact-head"><div><h1>Working preferences</h1><p title="Read-only behaviors from the Firstmate home record. Dates and reasons are shown only when supported by that record.">Read-only behaviors from the Firstmate home record. Dates and reasons are shown only when supported by that record.</p></div><span id="preferences-source" class="source-badge">data/captain.md</span></header>
+          <form id="health-preferences-form" class="health-preferences-form">
+            <h2>Away supervision</h2>
+            <label for="away-check-in">Away check-in interval <span>(minutes)</span><input id="away-check-in" name="awayCheckInMinutes" type="number" min="1" max="1440" step="1" value="10" required></label>
+            <label for="open-note-alarm">Open note alarm <span>(minutes)</span><input id="open-note-alarm" name="openNoteAlarmMinutes" type="number" min="1" max="1440" step="1" value="15" required></label>
+            <p>Whole minutes, 1–1440. Defaults: 10 and 15. Changes apply on the next model-free health check.</p>
+            <button type="submit" disabled>Save health preferences</button>
+            <p id="health-preferences-status" role="status" aria-live="polite">Loading health preferences…</p>
+          </form>
           <p id="preferences-state" class="notice" role="status" aria-live="polite">Loading preferences…</p>
           <div class="scan-controls" aria-label="Preference navigation"><label>Show <select id="preferences-density"><option value="titles">Titles only</option><option value="reasons">Titles and reasons</option><option value="details" selected>Titles, reasons and details</option></select></label><label>Sort <select id="preferences-sort"><option value="source">Source order</option><option value="newest">Newest evidence</option><option value="oldest">Oldest evidence</option></select></label><button type="button" id="preferences-expand">Expand all</button><button type="button" id="preferences-collapse">Collapse all</button></div>
           <div id="preferences-list" class="preferences-list"></div>
