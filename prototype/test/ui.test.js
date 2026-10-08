@@ -82,6 +82,14 @@ test("unavailable work hides controls and empty sections, then restores them", (
   for (const selector of selectors) assert.equal(app.node(selector).hidden, false);
 });
 
+test("dashboard errors remain visible after Work Split clears its unavailable state", async () => {
+  const app = ui({ fetchImpl: url => url === '/api/dashboard' ? Promise.resolve({ok:false,status:503,json:async()=>({error:'Synthetic fleet unavailable'})}) : new Promise(()=>{}) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.node('#overview-state').classList.contains('hidden'), false);
+  assert.match(app.node('#overview-state').textContent, /Synthetic fleet unavailable/);
+  assert.match(app.node('#work-state').textContent, /Work split unavailable/);
+});
+
 test("request failures use readable HTTP or network messages", async () => {
   for (const [fetchImpl, expected] of [
     [async () => ({ok: false, status: 502, json: async () => { throw new SyntaxError('HTML'); }}), 'HTTP 502'],

@@ -20,7 +20,7 @@ const fixturePath = path.join(home, 'snapshot.json');
 let raw = JSON.parse(await readFile(new URL('../test/fixtures/bearings/two-calls.json', import.meta.url), 'utf8'));
 await writeFile(fixturePath, JSON.stringify(raw));
 await writeFile(path.join(home, 'data/backlog.md'), '# Synthetic backlog\n');
-await writeFile(path.join(home, 'data/projects.md'), '');
+await writeFile(path.join(home, 'data/projects.md'), '- synthetic-repository - Offline fixture\n');
 const script = path.join(home, 'bin/fm-bearings-snapshot.sh');
 await writeFile(script, '#!/bin/sh\ncat "$FM_HOME/snapshot.json"\n');
 await chmod(script, 0o755);
@@ -98,6 +98,11 @@ try {
   const report = { head, results, scheduler: server.bearings.stats(), visibility: 'synthetic visibility events; native phone/background acceptance remains pending' };
   await writeFile(path.join(proof,'captain-call-live.json'), JSON.stringify(report,null,2));
   console.log(`PASS Captain Call exact revision ${head}; proof ${proof}`);
+} catch (error) {
+  const snapshot = await browser('snapshot').catch(e => String(e));
+  const consoleLog = await browser('console').catch(e => String(e));
+  await writeFile(path.join(proof, 'captain-call-failure.json'), JSON.stringify({ head, error: String(error), results, snapshot, consoleLog, model: server.bearings.current(), scheduler: server.bearings.stats() }, null, 2));
+  throw error;
 } finally {
   clearTimeout(deadline);
   await browser('stop').catch(()=>{});

@@ -1831,11 +1831,9 @@ async function refreshEndpoint(key) {
   } catch (error) {
     item.error = error.message;
     if (key === "dashboard") {
-      if (!item.lastSuccess) {
-        $("#overview-state").textContent = `Could not load fleet: ${error.message}`;
-        $("#overview-state").classList.remove("hidden");
-        renderWorkSplit(null);
-      }
+      if (!item.lastSuccess) renderWorkSplit(null);
+      $("#overview-state").textContent = `Could not load fleet: ${error.message}`;
+      $("#overview-state").classList.remove("hidden");
     } else if (key === "quota" && !item.lastSuccess) renderQuota({ providers: [], readAt: null, stale: false, error: "Quota unavailable" });
     else if (key === "lanes" && !item.lastSuccess) renderLanesError(error.message);
   } finally {
