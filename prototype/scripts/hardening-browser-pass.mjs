@@ -54,7 +54,7 @@ try {
   };
   const navigation = await command("Page.navigate", { url: base });
   assert.equal(navigation.errorText, undefined, `Fixture navigation failed: ${JSON.stringify(navigation)}`);
-  await until("document.querySelector('#review-context')?.textContent.includes('Version') && document.querySelector('#projects')?.children.length > 0");
+  await until("document.querySelector('#review-context')?.textContent.includes('Version') && document.querySelector('#summary')?.children.length > 0");
   assert.equal(await evaluate("document.title"), "fm-quarterdeck");
   assert.equal(await evaluate("document.querySelector('.product-identity strong').textContent"), "Quarterdeck");
   const escape = async () => {
@@ -116,7 +116,7 @@ try {
     assert.equal(await evaluate("document.querySelector('#review-toggle').checked"), true, "outside dismissal preserves annotation mode");
     await evaluate("document.querySelector('#review-toggle').click()");
     assert.equal(await evaluate("document.querySelector('#review-toggle').checked"), false);
-    await evaluate("document.querySelector('#projects').dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1, altKey: true }))");
+    await evaluate("document.querySelector('#summary').dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1, altKey: true }))");
     await until("!document.querySelector('#review-annotation').hidden");
     await evaluate("document.querySelector('#review-message').value = 'Synthetic annotation draft'; document.querySelector('#review-message').dispatchEvent(new Event('input', { bubbles: true }))");
     await evaluate("document.querySelector('#review-gesture-help').focus(); document.querySelector('#review-gesture-help').click()");
@@ -230,7 +230,7 @@ try {
   });
   await command("Fetch.enable", { patterns: [{ urlPattern: "*/api/review", requestStage: "Response" }] });
   await reload();
-  await until("document.querySelector('#review-message') && document.querySelector('#projects').children.length > 0");
+  await until("document.querySelector('#review-message') && document.querySelector('#summary').children.length > 0");
   const configRequestId = await configPaused.promise;
   await evaluate("document.querySelector('#review-message').value = 'Synthetic lost response'; document.querySelector('#review-form').requestSubmit()");
   assert.equal(await evaluate("document.querySelector('#review-send').disabled"), true, "rendered board cannot send before review configuration arrives");

@@ -364,12 +364,9 @@ let workSplitData = null;
 let workGroupBy = "repository";
 let workRepository = "all";
 let workPhase = "all";
-let overviewProjects = [];
-let overviewSort = "name";
-let overviewStatus = "all";
+
 const ACTIVE_AGENT_STATES = new Set(["active", "working", "in-progress"]);
 const agentStatusGroup = (state) => ACTIVE_AGENT_STATES.has(state) ? "active" : state;
-const overviewOpen = new Map();
 let transcriptCoverage = { sessions: [], warnings: [], note: "" };
 let selectedTranscriptSession = "";
 let transcriptPage = null;
@@ -1077,7 +1074,7 @@ function workRow(item, scope) {
     </details></li>`;
 }
 function hierarchyHtml(items, scope) {
-  const ordered = groupHierarchy(items).sort((a, b) => overviewSort === "activity" ? statusCounts(b.items).active - statusCounts(a.items).active || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
+  const ordered = groupHierarchy(items).sort((a, b) => a.name.localeCompare(b.name));
   const disclosure = (key, title, rows, body, level) => `<details class="taxonomy-node taxonomy-${level} panel" data-tree-key="${key}" data-review-id="taxonomy:${reviewId(key)}" ${hierarchyOpen.get(key) === false ? "" : "open"}><summary><strong>${escapeHtml(title)}</strong><span class="taxonomy-counts">${countBadges(rows)}</span></summary>${body}</details>`;
   return ordered.map((repo) => {
     const lanes = [...repo.lanes.values()];
@@ -1186,74 +1183,6 @@ function renderWorkSplit(split = workSplitData) {
       <article class="work-card"><h3>${escapeHtml(project.name)}</h3><small>${escapeHtml(project.id)}</small>
         <p><b>Stage:</b> ${escapeHtml(project.stage)}</p><p><b>Waiting on:</b> ${escapeHtml(project.waitingOn)}</p></article>`).join("")}</div></section>`).join("")
     : '<p class="empty panel">No large projects match these filters.</p>';
-}
-
-function renderProjects(projects = overviewProjects) {
-  overviewProjects = projects;
-  if (workSplitData?.items) {
-    const choices = Object.keys(statusLabels);
-    $("#overview-status").innerHTML = '<option value="all">All statuses</option>' + choices.map((status) => `<option value="${status}">${escapeHtml(statusLabels[status])}</option>`).join("");
-    $("#overview-status").value = overviewStatus;
-    const counts = statusCounts(workSplitData.items);
-    renderStatusFilterButtons($("#overview-status-buttons"), [
-      { value: "all", label: "All", fullLabel: "All statuses", count: workSplitData.items.length },
-      ...choices.map((status) => ({
-        value: status,
-        label: (statusConciseLabels && statusConciseLabels[status]) || statusLabels[status],
-        fullLabel: statusLabels[status],
-        count: counts[status]
-      }))
-    ], overviewStatus);
-    const rows = workSplitData.items.filter((item) => overviewStatus === "all" || item.status === overviewStatus || item.completionAttention === overviewStatus);
-    $("#projects").innerHTML = hierarchyHtml(rows, "overview");
-    return;
-  }
-  const statuses = new Set(projects.flatMap((project) => (project.items || []).map((item) => agentStatusGroup(item.state))));
-  const choices = [...statuses].sort((a, b) => a === "active" ? -1 : b === "active" ? 1 : a.localeCompare(b));
-  // Keep an in-use filter visible across refreshes even if its last agent disappears.
-  if (overviewStatus !== "all" && !statuses.has(overviewStatus)) choices.push(overviewStatus);
-  $("#overview-status").innerHTML = '<option value="all">All statuses</option>' + choices.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(statusChoiceLabel(status))}</option>`).join("");
-  $("#overview-status").value = overviewStatus;
-  renderStatusFilterButtons($("#overview-status-buttons"), [
-    { value: "all", label: "All", fullLabel: "All statuses" },
-    ...choices.map((status) => ({
-      value: status,
-      label: (statusConciseLabels && statusConciseLabels[status]) || statusChoiceLabel(status),
-      fullLabel: statusChoiceLabel(status)
-    }))
-  ], overviewStatus);
-
-  const visible = projects.map((project) => ({
-    ...project,
-    items: overviewStatus === "all" ? project.items || [] : (project.items || []).filter((item) => agentStatusGroup(item.state) === overviewStatus),
-  })).filter((project) => overviewStatus === "all" || project.items.length);
-  const ordered = visible.sort((a, b) => overviewSort === "activity"
-    ? (overviewStatus === "all" ? b.agents - a.agents : b.items.length - a.items.length) || a.name.localeCompare(b.name)
-    : a.name.localeCompare(b.name));
-  if (!projects.length || !ordered.length) {
-    $("#projects").innerHTML = `<div class="empty panel">${projects.length ? "No agents match this status." : "No project fleets are reporting yet."}</div>`;
-    return;
-  }
-  $("#projects").innerHTML = ordered.map((project) => `
-    <article data-review-id="project:${reviewId(project.id)}" class="project-card panel">
-      <div class="project-head">
-        <div><span class="project-dot ${escapeHtml(project.status)}"></span><strong>${escapeHtml(project.name)}</strong></div>
-        <span class="state-chip">${escapeHtml(stateLabel(project.status))}</span>
-      </div>
-      <p class="lane-intent">${escapeHtml(project.intent || project.mission || "Fleet intent not recorded.")}</p>
-      <div class="progress-label"><span>${overviewStatus === "all" ? `${escapeHtml(project.agents)} active` : `${project.items.length} matching agent${project.items.length === 1 ? "" : "s"}`}</span><span>${escapeHtml(project.progress)}%</span></div>
-      <span class="progress"><i style="width:${Math.max(0, Math.min(100, Number(project.progress)))}%"></i></span>
-      <div class="project-open-row">
-        <button class="project-disclosure" type="button" data-toggle-project="${escapeHtml(project.id)}" aria-expanded="${overviewOpen.get(project.id) !== false}" aria-label="${overviewOpen.get(project.id) === false ? "Show" : "Hide"} tasks for ${escapeHtml(project.name)}">${overviewOpen.get(project.id) === false ? "Show tasks" : "Hide tasks"} · ${(project.items || []).length}</button>
-        <button class="project-open" type="button" data-open-lane="${escapeHtml(project.id)}" aria-label="Open ${escapeHtml(project.name)} fleet">Open Fleet Chat →</button>
-      </div>
-      <ul ${overviewOpen.get(project.id) === false ? "hidden" : ""}>${(project.items || []).map((item) => `
-        <li><button class="crew-task" type="button" data-open-lane="${escapeHtml(project.id)}" data-open-session="${escapeHtml(item.title)}" title="${escapeHtml(item.taskIntent || "Task intent not recorded.")}">
-          <span><i class="task-state ${escapeHtml(item.state)}"></i><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(stateLabel(item.state))}</small></span>
-          <span>${escapeHtml(item.taskIntent || "Task intent not recorded.")}</span>
-        </button></li>
-      `).join("")}</ul>
-    </article>`).join("");
 }
 
 function renderExpenseRows() {
@@ -1777,20 +1706,53 @@ function renderPreferenceList() {
     </details>`).join("") || '<p class="notice">No recorded preference sections found.</p>';
 }
 
-const freshness = Object.fromEntries(["dashboard", "quota", "lanes"].map((key) => [key, {
+const freshness = Object.fromEntries(["dashboard", "quota", "lanes", "bearings"].map((key) => [key, {
   lastSuccess: null, refreshing: false, duration: null, error: null, stale: false, started: null,
 }]));
-const freshLabels = { dashboard: "Overview", quota: "Quota", lanes: "Fleet Chats" };
+const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", bearings: "Captain's Call" };
+let callCount = 0;
+function renderCallBadge(model) {
+  const count = model.cards.length;
+  const badge = $("#call-badge");
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
+  badge.setAttribute("aria-label", `${count} Captain's Calls`);
+  if (count > callCount) $("#sr-announcer").textContent = `${count} Captain's Calls need your attention`;
+  callCount = count;
+}
+function observeBearings(data) {
+  const item = freshness.bearings;
+  item.state = data.state;
+  item.observedAt = data.observedAt;
+  item.checkedAt = data.checkedAt;
+  item.lastSuccess = data.observedAt ? Date.parse(data.observedAt) : null;
+  item.stale = Boolean(data.stale);
+  item.error = data.error || null;
+  renderFreshness();
+}
+const callPatcher = window.bearingsPatch?.createCallPatcher({
+  section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
+  view: window.bearingsView, scroller: $("#overview-view"),
+});
+const callLive = window.bearingsLive?.createBearingsLive({
+  onModel(model) { callPatcher.update(model); renderCallBadge(model); observeBearings(model); },
+  onObserved(data) { callPatcher.observe(data); observeBearings(data); },
+  onConnection({ state }) {
+    freshness.bearings.connection = state;
+    renderFreshness();
+  },
+});
 let refreshMs = 0;
 function activeFreshnessKey() {
   const view = $(".workspace").dataset.view;
-  return view === "conversations" || view === "closed" ? "lanes" : view === "quota" ? "quota" : "dashboard";
+  return view === "overview" ? "bearings" : view === "conversations" || view === "closed" ? "lanes" : view === "quota" ? "quota" : "dashboard";
 }
 function renderFreshness() {
   const key = activeFreshnessKey();
   const item = freshness[key];
-  const expired = item.lastSuccess && Date.now() - item.lastSuccess > Math.max(60000, 2 * refreshMs);
-  const condition = item.error ? "disconnected" : item.stale || expired ? "stale" : item.refreshing ? "refreshing" : item.lastSuccess ? "fresh" : "waiting";
+  const expired = key !== "bearings" && item.lastSuccess && Date.now() - item.lastSuccess > Math.max(60000, 2 * refreshMs);
+  const disconnected = key === "bearings" && ["disconnected", "reconnecting"].includes(item.connection);
+  const condition = disconnected || item.error ? "disconnected" : item.stale || expired ? "stale" : item.refreshing ? "refreshing" : item.lastSuccess ? "fresh" : "waiting";
   const last = item.lastSuccess ? `Last success ${new Date(item.lastSuccess).toLocaleString()}` : "No successful reading yet";
   const duration = item.refreshing ? ` · running ${((Date.now() - item.started) / 1000).toFixed(1)}s` : item.duration === null ? "" : ` · ${item.duration}ms`;
   const el = $("#view-freshness");
@@ -1848,7 +1810,6 @@ async function refreshEndpoint(key) {
     if (key === "dashboard") {
       renderSummary(data.fleet.summary);
       renderWorkSplit(data.fleet.workSplit);
-      renderProjects(data.fleet.projects);
       renderExpenses(data.expenses);
       $("#fleet-source").textContent = data.fleet.source;
       if (data.refreshMs && !refreshTimer) {
@@ -1871,7 +1832,8 @@ async function refreshEndpoint(key) {
     item.error = error.message;
     if (key === "dashboard") {
       if (!item.lastSuccess) {
-        $("#projects").innerHTML = `<div class="notice">Could not load fleet: ${escapeHtml(error.message)}</div>`;
+        $("#overview-state").textContent = `Could not load fleet: ${error.message}`;
+        $("#overview-state").classList.remove("hidden");
         renderWorkSplit(null);
       }
     } else if (key === "quota" && !item.lastSuccess) renderQuota({ providers: [], readAt: null, stale: false, error: "Quota unavailable" });
@@ -2474,12 +2436,6 @@ $("#session-history-list").addEventListener("click", (event) => {
   clearTaskFilter();
 });
 
-$("#projects").addEventListener("click", (event) => {
-  const control = event.target.closest("[data-open-lane]");
-  if (!control) return;
-  navigateToLane(control.dataset.openLane, control.dataset.openSession || "");
-});
-
 $("#task-filter-clear")?.addEventListener("click", clearTaskFilter);
 
 document.querySelector(".primary-nav").addEventListener("click", (event) => {
@@ -2494,7 +2450,7 @@ document.querySelector(".primary-nav").addEventListener("click", (event) => {
   showView(tab.dataset.view);
   if (tab.dataset.view === "conversations") renderFeed();
 });
-$("#refresh").addEventListener("click", loadDashboard);
+$("#refresh").addEventListener("click", () => { loadDashboard(); void callLive?.refresh(); });
 $("#quota-providers").addEventListener("toggle", (event) => {
   if (event.target.dataset?.provider && event.target.tagName === "DETAILS") {
     quotaOpen.set(event.target.dataset.provider, event.target.open);
@@ -2555,20 +2511,9 @@ for (const [id, open] of [["#preferences-expand", true], ["#preferences-collapse
 $("#preferences-list").addEventListener("toggle", (event) => {
   if (event.target?.dataset?.preference) preferenceOpen.set(event.target.dataset.preference, event.target.open);
 }, true);
-$("#overview-sort").addEventListener("change", (event) => { overviewSort = event.target.value; renderProjects(); });
 $("#work-group-by").addEventListener("change", (event) => { workGroupBy = event.target.value; renderWorkSplit(); });
 $("#work-repository").addEventListener("change", (event) => { workRepository = event.target.value; renderWorkSplit(); });
 $("#work-phase").addEventListener("change", (event) => { workPhase = event.target.value; renderWorkSplit(); });
-$("#overview-status-buttons")?.addEventListener("click", (event) => {
-  const button = event.target.closest(".status-filter-btn");
-  if (!button) return;
-  const val = button.dataset.statusValue;
-  if (!val) return;
-  overviewStatus = val;
-  const sel = $("#overview-status");
-  if (sel) sel.value = overviewStatus;
-  renderProjects();
-});
 $("#work-phase-buttons")?.addEventListener("click", (event) => {
   const button = event.target.closest(".status-filter-btn");
   if (!button) return;
@@ -2578,21 +2523,6 @@ $("#work-phase-buttons")?.addEventListener("click", (event) => {
   const sel = $("#work-phase");
   if (sel) sel.value = workPhase;
   renderWorkSplit();
-});
-$("#overview-status").addEventListener("change", (event) => { overviewStatus = event.target.value; renderProjects(); });
-for (const [id, open] of [["#overview-expand", true], ["#overview-collapse", false]]) {
-  $(id).addEventListener("click", () => {
-    for (const project of overviewProjects) overviewOpen.set(project.id, open);
-    if (workSplitData?.items) for (const node of $("#projects").querySelectorAll("details[data-tree-key]")) hierarchyOpen.set(node.dataset.treeKey, open);
-    renderProjects();
-  });
-}
-$("#projects").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-toggle-project]");
-  if (!button) return;
-  const id = button.dataset.toggleProject;
-  overviewOpen.set(id, overviewOpen.get(id) === false);
-  renderProjects();
 });
 async function saveWorkPresentation(body, control) {
   const view = control.closest(".feature-view");
@@ -2613,7 +2543,7 @@ async function saveWorkPresentation(body, control) {
     control.disabled = false;
   }
 }
-for (const selector of ["#projects", "#tight-work"]) {
+for (const selector of ["#tight-work"]) {
   $(selector).addEventListener("toggle", (event) => {
     if (!event.target.dataset?.treeKey) return;
     hierarchyOpen.set(event.target.dataset.treeKey, event.target.open);
@@ -2642,4 +2572,5 @@ window.addEventListener("hashchange", (event) => {
 });
 renderMessageTypeFilters();
 applyRoute();
+callLive?.start();
 loadDashboard();

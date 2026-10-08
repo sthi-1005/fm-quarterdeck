@@ -560,28 +560,19 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .work-card li small { display: block; color: var(--muted); }
 .work-card p { margin: var(--space-2) 0 0; line-height: 1.5; }
 .work-card > small { color: var(--muted); }
-.project-grid, .closed-lane-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3); }
-.project-card, .closed-lane-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-.project-card:hover, .closed-lane-card:hover { border-color: var(--line-strong); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); }
-.project-card .lane-intent { display: block; margin: var(--space-2) 0 var(--space-3); color: var(--muted); font-size: var(--text-ui); font-weight: 400; line-height: 1.65; overflow-wrap: anywhere; user-select: text; }
-.project-open-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-2); }
-.project-open { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 10px; min-height: 32px; border: 1px solid var(--accent); border-radius: 6px; background: var(--surface); color: var(--accent); font-size: var(--text-small); font-weight: 600; cursor: pointer; }
-.project-open:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
-.project-open:focus-visible, .crew-task:focus-visible { outline-offset: 4px; }
+.closed-lane-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3); }
+.closed-lane-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.closed-lane-card:hover { border-color: var(--line-strong); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); }
+.crew-task:focus-visible { outline-offset: 4px; }
 .crew-task { width: 100%; min-height: 0; padding: var(--space-2); border: 0; border-radius: 6px; background: transparent; color: inherit; text-align: left; }
 .crew-task:hover:not(:disabled) { border-color: transparent; background: var(--surface-soft); }
-.project-head, .project-head > div, .closed-lane-card > header, .closed-lane-card > header > div { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.project-head, .closed-lane-card > header { justify-content: space-between; flex-wrap: wrap; }
-.project-head strong, .closed-lane-card > header strong { font-size: var(--text-body); font-weight: 600; overflow-wrap: anywhere; }
-.project-card > p, .closed-lane-card > p { margin: var(--space-3) 0; color: var(--muted); font-size: var(--text-ui); line-height: 1.65; overflow-wrap: anywhere; }
+.closed-lane-card > header, .closed-lane-card > header > div { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.closed-lane-card > header { justify-content: space-between; flex-wrap: wrap; }
+.closed-lane-card > header strong { font-size: var(--text-body); font-weight: 600; overflow-wrap: anywhere; }
+.closed-lane-card > p { margin: var(--space-3) 0; color: var(--muted); font-size: var(--text-ui); line-height: 1.65; overflow-wrap: anywhere; }
 .progress-label { display: flex; justify-content: space-between; margin-bottom: var(--space-2); color: var(--muted); font-size: var(--text-small); }
 .progress { height: 4px; border-radius: 4px; background: var(--surface-soft); overflow: hidden; }
 .progress i { display: block; height: 100%; background: var(--accent); }
-.project-disclosure { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; margin-top: var(--space-3); padding: 4px 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--accent); font-size: var(--text-small); font-weight: 600; cursor: pointer; }
-.project-disclosure:hover:not(:disabled) { background: var(--surface-soft); border-color: var(--accent); }
-.project-disclosure:active:not(:disabled) { background: var(--accent-soft); }
-.project-card ul { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
-.project-card li { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: var(--space-1) var(--space-2); padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); margin-top: 6px; font-size: var(--text-ui); }
 .crew-task { min-width: 0; flex: 1 1 280px; padding: var(--space-2); }
 .crew-task > span { display: block; min-width: 0; overflow-wrap: anywhere; }
 .crew-task > span:last-child { margin: var(--space-1) 0 0 14px; color: var(--muted); font-size: var(--text-small); font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
@@ -864,7 +855,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   .context-drawer-head button { min-width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
   .lane-context { padding: var(--space-4); }
   .session-history { align-self: auto; }
-  .project-grid, .closed-lane-list { grid-template-columns: 1fr; }
+  .closed-lane-list { grid-template-columns: 1fr; }
   .summary-grid { gap: var(--space-2); }
   .metric-card { padding: var(--space-3); }
   .metric-icon { display: none; }
@@ -1221,7 +1212,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   .message-type-option { padding: var(--space-2); gap: 6px; }
   .feature-view { padding: var(--space-5) var(--space-3); overflow-y: auto; }
   .feature-head { margin-bottom: var(--space-4); }
-  .project-card, .closed-lane-card, .preference-card { padding: var(--space-3); }
+  .closed-lane-card, .preference-card { padding: var(--space-3); }
 }
 @media (prefers-reduced-motion: reduce) {
   .context-rail { transition: none; }
@@ -1766,9 +1757,35 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 #review-annotation .review-actions button { min-width: 0; }
 #review-annotation #review-form-close { min-height: 32px; margin-left: 0; }
 
+/* Live read-only Captain's Call: mute chrome, never editable or copyable content. */
+.call-cards { display: flex; flex-direction: column; gap: var(--space-3); overflow-anchor: auto; }
+.call-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.call-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.call-card h3 { margin: 12px 0 8px; font-size: var(--text-body); line-height: 1.5; overflow-wrap: anywhere; }
+.call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
+.call-read-only { font-weight: 400; margin-left: 8px; }
+.call-link { display: block; overflow-wrap: anywhere; }
+.call-note { display: block; margin-top: 16px; font-size: var(--text-small); }
+.call-note span { color: var(--muted); }
+.call-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
+.call-empty { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); }
+.call-status { position: sticky; top: 0; z-index: 4; margin-bottom: 12px; padding: 12px; border: 1px solid var(--amber); border-radius: 6px; background: var(--surface); color: var(--text); font-size: var(--text-small); }
+.call-status[hidden], .call-badge[hidden] { display: none; }
+.call-status button, .call-stub-actions button { min-height: 40px; margin: 4px 4px 0 0; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
+#captain-call[data-held="true"] .call-chrome { opacity: .65; filter: saturate(.5); }
+.call-card[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.call-card-new { animation: call-arrival 2.4s ease-out; }
+.call-card-leaving { opacity: 0; transition: opacity .32s ease; }
+.call-card-resolved { border-style: dashed; }
+.call-card-resolved pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; }
+.call-badge { display: inline-block; min-width: 1.6em; padding: 0 4px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 11px; text-align: center; }
+@keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
+@media (forced-colors: active) { #captain-call[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; } .call-status { border-color: Highlight; } }
+@media (max-width: 720.005px) { .call-card { padding: 12px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } }
+
 /* Taxonomy is presentation-only; compact native disclosures keep all slices usable.
    Cohesive 3-tier visual hierarchy: Repository (Deck) -> Lane (Workstream) -> Theme (Grouping) */
-#projects:has(.taxonomy-node),
 #tight-work:has(.taxonomy-node) {
   display: flex;
   flex-direction: column;
@@ -1779,7 +1796,6 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 }
 
 @media (min-width: 721px) {
-  #projects:has(.taxonomy-node),
   #tight-work:has(.taxonomy-node) {
     flex-direction: row;
     align-items: flex-start;
@@ -1796,21 +1812,17 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     scrollbar-color: var(--line-strong) var(--surface-soft);
   }
 
-  #projects:has(.taxonomy-node)::-webkit-scrollbar,
   #tight-work:has(.taxonomy-node)::-webkit-scrollbar {
     height: 8px;
   }
-  #projects:has(.taxonomy-node)::-webkit-scrollbar-track,
   #tight-work:has(.taxonomy-node)::-webkit-scrollbar-track {
     background: var(--surface-soft);
     border-radius: 4px;
   }
-  #projects:has(.taxonomy-node)::-webkit-scrollbar-thumb,
   #tight-work:has(.taxonomy-node)::-webkit-scrollbar-thumb {
     background: var(--line-strong);
     border-radius: 4px;
   }
-  #projects:has(.taxonomy-node)::-webkit-scrollbar-thumb:hover,
   #tight-work:has(.taxonomy-node)::-webkit-scrollbar-thumb:hover {
     background: var(--control-line);
   }

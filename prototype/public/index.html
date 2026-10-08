@@ -30,7 +30,7 @@
         </header>
         <nav class="primary-nav" aria-label="Quarterdeck sections">
           <p class="nav-caption">Workspace</p>
-          <button class="primary-tab active" type="button" data-view="overview" aria-pressed="true" title="Fleet"><span>Overview</span><small>Fleet</small></button>
+          <button class="primary-tab active" type="button" data-view="overview" aria-pressed="true" title="Captain's Call"><span>Overview <b id="call-badge" class="call-badge" hidden>0</b></span><small>Captain's Call</small></button>
           <button class="primary-tab" type="button" data-view="work" aria-pressed="false" title="Backlog &amp; projects"><span>Work split</span><small>Backlog &amp; projects</small></button>
           <div class="lane-chats-row">
             <button class="primary-tab lane-chats-tab" type="button" data-view="conversations" aria-pressed="false" aria-label="Chats" title="Transcript"><span>Fleet Chats</span><svg class="chats-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H8l-4 2v-5a7.5 7.5 0 1 1 16-4.5Z"/><path d="M8 11h8M8 14h5"/></svg><small>Transcript</small></button>
@@ -149,19 +149,23 @@
           </section>
           <div class="conversation-feed">
           <div id="transcript-window-status" class="transcript-window-status" hidden><span id="transcript-window-hint">Recent source windows · Search covers loaded records.</span><button id="transcript-load-more" type="button" aria-describedby="transcript-window-hint">Load more records</button></div>
-          <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
           <div id="messages" class="messages" aria-label="Conversation feed, oldest to newest" aria-busy="true"><div class="notice" role="status">Loading Fleet Chats… Reading recent messages. Older history is available on demand.</div></div>
           </div>
           <aside id="conversation-kind-panel" class="conversation-kind-panel" aria-label="Message kind filters"><div class="kind-panel-heading"><span>Message kinds</span><button id="kind-panel-toggle" class="desktop-panel-toggle" type="button" aria-controls="kind-filter-menu" aria-expanded="true" aria-label="Collapse Message kinds panel" title="Collapse Message kinds panel">›</button></div></aside>
           </div>
         </section>
 
+        <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
         <section id="overview-view" class="product-view feature-view active" aria-label="Fleet overview">
           <header class="feature-head compact-head"><div><h1>Fleet at a glance</h1></div><span id="fleet-source" class="source-badge"></span></header>
           <div id="summary" class="summary-grid"></div>
           <p id="overview-state" class="notice hidden" role="status"></p>
-          <div class="section-tools"><h2 class="section-heading">Repositories → fleets → voyages</h2><div class="scan-controls"><div id="overview-status-buttons" class="status-button-filter" role="group" aria-label="Filter work by status"></div><label class="sr-only-select">Work status <select id="overview-status" aria-label="Filter work by status"><option value="all">All statuses</option></select></label><label>Sort <select id="overview-sort"><option value="name">Name</option><option value="activity">Active crew</option></select></label><button type="button" id="overview-expand">Expand all</button><button type="button" id="overview-collapse">Collapse all</button></div></div>
-          <div id="projects" class="project-grid"></div>
+          <section id="captain-call" aria-labelledby="call-heading" aria-busy="false">
+            <h2 id="call-heading" class="section-heading">Captain's Call <span class="call-read-only">Read-only · live</span></h2>
+            <div id="call-status" class="call-status" role="status" hidden></div>
+            <div id="call-cards" class="call-cards"><p class="call-empty" data-call-empty>Checking for Captain's Calls…</p></div>
+            <p id="call-coverage" class="call-coverage"></p>
+          </section>
         </section>
 
         <section id="work-view" class="product-view feature-view" aria-label="Work split">
@@ -289,6 +293,9 @@
     <script src="/quota-view-model.js"></script>
     <script src="/cost-view-model.js"></script>
     <script type="module" src="/shell-width.js"></script>
+    <script src="/bearings-patch.js"></script>
+    <script src="/bearings-view.js"></script>
+    <script src="/bearings-live.js"></script>
     <script type="module" src="/app.js"></script>
     <script src="/review-target.js"></script>
     <script type="module" src="/review-client.js"></script>
