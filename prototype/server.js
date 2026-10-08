@@ -16,6 +16,7 @@ import { compactLanes } from "./lane-payload.js";
 import { readSupervisionOutcomes } from "./supervision.js";
 import { createQuotaReader } from "./quota.js";
 import { createBearingsHub } from "./bearings.js";
+import { AnswerRefused, MAX_BODY_BYTES as MAX_ANSWER_BODY_BYTES, createAnswerRelay } from "./bearings-answer.js";
 import { createConfiguredCostReader } from "./costs.js";
 import { readExpenseOverlay } from "./private-runtime.js";
 import { readPreferences } from "./preferences.js";
@@ -66,6 +67,8 @@ const STATIC_FILES = new Map([
   ["/bearings-patch.js", ["bearings-patch.js", "text/javascript; charset=utf-8"]],
   ["/bearings-live.js", ["bearings-live.js", "text/javascript; charset=utf-8"]],
   ["/bearings-view.js", ["bearings-view.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-answer-form.js", ["bearings-answer-form.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-overflow.js", ["bearings-overflow.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -946,7 +949,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), bearingsStream = {}, costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -990,7 +993,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     return (/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) && origin === `http://${host}`) ||
       Boolean(allowedReviewOrigin && host === allowedReviewOrigin.slice("https://".length) && origin === allowedReviewOrigin);
   };
-  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
   // Live Captain's Call streams (host only; previews poll /api/bearings?since).
   const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
   const streams = new Set();
@@ -1282,6 +1285,34 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
         if (streams.size >= streamOptions.maxStreams) { await sendJson(request, response, 503, { error: "Too many live streams; poll /api/bearings" }); return; }
         openBearingsStream(request, response);
+        return;
+      }
+      // Captain's Call answers: host only, an explicit captain submit relayed to Firstmate (BEARINGS.md "Answers").
+      if (url.pathname === "/api/bearings/answer" && request.method === "POST") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        if (!authorized(request)) { await sendJson(request, response, 403, { error: "Unauthorized origin", code: "origin" }); return; }
+        if (url.search || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 415, { error: "JSON required", code: "invalid" }); return; }
+        let text = "";
+        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > MAX_ANSWER_BODY_BYTES) { await sendJson(request, response, 413, { error: "Answer too large", code: "too-long" }); return; } }
+        let body = null;
+        try { body = JSON.parse(text); } catch {}
+        // A request spanning a fast-forward is refused rather than answered under a mixed identity.
+        if (await syncRevision(true) !== commit) { await sendJson(request, response, 409, { error: "Quarterdeck updated; reload to continue", code: "revision" }); return; }
+        try {
+          await sendJson(request, response, 202, await answerRelay.submit(body, bearingsSource.current()));
+        } catch (error) {
+          if (!(error instanceof AnswerRefused)) throw error;
+          await sendJson(request, response, error.status, { error: error.message, code: error.code });
+        }
+        return;
+      }
+      if (url.pathname === "/api/bearings/answer/status" && request.method === "GET") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        try {
+          await sendJson(request, response, 200, await answerRelay.status(String(url.searchParams.get("ids") || "").split(",")));
+        } catch (error) {
+          await sendJson(request, response, error instanceof AnswerRefused ? error.status : 502, { error: error instanceof AnswerRefused ? error.message : "Firstmate receipts unavailable" });
+        }
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/health") {

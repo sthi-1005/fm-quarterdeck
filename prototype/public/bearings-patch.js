@@ -114,7 +114,7 @@ window.bearingsPatch = (() => {
   }
 
   function createCallPatcher({ section, list, status, coverage = null, view = window.bearingsView || fallbackView, doc = window.document, win = window, storage = (() => { try { return win.sessionStorage; } catch { return null; } })(),
-    timers = win, holdDelayMs = 600, scroller = null, highlightMs = 2400, leaveMs = 320, onApply = () => {}, onHeld = () => {} } = {}) {
+    timers = win, holdDelayMs = 600, scroller = null, highlightMs = 2400, leaveMs = 320, onApply = () => {}, onHeld = () => {}, onRender = () => {} } = {}) {
     const render = { ...fallbackView, ...view };
     const drafts = createDraftStore(storage);
     const appliedRevs = new Map();
@@ -167,7 +167,9 @@ window.bearingsPatch = (() => {
       const saved = drafts.get(key);
       for (const field of node.querySelectorAll("[data-call-draft]")) {
         const name = field.getAttribute("data-call-draft");
-        if (typeof saved[name] === "string") field.value = saved[name];
+        // A radio group keeps its chosen value; every radio shares the field name.
+        if (field.getAttribute("type") === "radio") field.checked = saved[name] === field.getAttribute("value");
+        else if (typeof saved[name] === "string") field.value = saved[name];
       }
     }
     function fill(node, card) {
@@ -175,6 +177,8 @@ window.bearingsPatch = (() => {
       node.setAttribute("data-call-rev", card.rev);
       node.setAttribute("data-call-type", card.type);
       restoreDrafts(node, card.key);
+      // Per-card controllers (answer form, overflow) re-apply their own state to fresh markup.
+      try { onRender(node, card); } catch {}
     }
     function createCard(card) {
       const node = doc.createElement("article");
@@ -330,7 +334,9 @@ window.bearingsPatch = (() => {
     const onInput = (event) => {
       const field = event.target?.closest?.("[data-call-draft]");
       const card = field?.closest?.("[data-call-key]");
-      if (field && card) drafts.set(keyOf(card), field.getAttribute("data-call-draft"), field.value);
+      const radio = field?.getAttribute("type") === "radio";
+      if (!field || !card || (radio && !field.checked)) return;
+      drafts.set(keyOf(card), field.getAttribute("data-call-draft"), radio ? field.getAttribute("value") : field.value);
     };
     const onClick = (event) => {
       const target = event.target;
@@ -353,6 +359,7 @@ window.bearingsPatch = (() => {
       }
     };
     list.addEventListener("input", onInput);
+    list.addEventListener("change", onInput);
     section.addEventListener("click", onClick);
 
     return {
@@ -368,6 +375,7 @@ window.bearingsPatch = (() => {
         cancelRelease();
         tracker.destroy();
         list.removeEventListener("input", onInput);
+        list.removeEventListener("change", onInput);
         section.removeEventListener("click", onClick);
       },
     };

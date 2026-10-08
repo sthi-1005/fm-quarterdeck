@@ -1,12 +1,12 @@
 # Live Captain's Call
 
-Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. Phase 1 is read-only: cards say what is asked; answers still go through chat or the `/bearings` board.
+Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves the call.
 
-Code: `bearings.js` (server), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
+Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases) and `public/bearings-overflow.js` (More details). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
 
 ## Source and authority
 
-- Quarterdeck runs exactly one Firstmate interface: `$FM_HOME/bin/fm-bearings-snapshot.sh --json` (never `--include-prs`), with `FM_HOME` set, nice 10, a 45 s process-group kill, 2 MiB stdout and 4 KiB stderr caps. Concurrent callers share one run.
+- Calls come from exactly one Firstmate interface: `$FM_HOME/bin/fm-bearings-snapshot.sh --json` (never `--include-prs`), with `FM_HOME` set, nice 10, a 45 s process-group kill, 2 MiB stdout and 4 KiB stderr caps. Concurrent callers share one run.
 - It never reads backlog, meta or status records to build calls, and writes nothing under `FM_HOME`. The snapshot's own documented observational cache refresh is the only fleet-side write, the same as a plain `/bearings`.
 - Validation fails closed: `schema` must be `fm-bearings.v1`, and `decisions_open`, `omitted` and `contributions` (`captain[]`, `known`, `checked`, `proven_clear`) must have the expected types. A missing home or script, a failed run or invalid output never synthesizes calls: with a previous good model it stays visible as `state: "stale"`; without one the model is `state: "unavailable"` with no cards.
 
@@ -21,8 +21,9 @@ Code: `bearings.js` (server), `public/bearings-live.js` (transport), `public/bea
 - `state`: `loading` (no run yet), `ready`, `stale` (last good calls; `error` says why the latest run failed) or `unavailable`.
 - `observedAt`: when these calls were last produced. `checkedAt`: the latest run attempt. `generatedAt`: the snapshot clock.
 - `cards[]`, in snapshot order:
-  - `decision:<task>` for each `decisions_open` row: `{key, type:"decision", task, verb, summary, url, owner, repo, rev}`. Credentials appear only as decisions.
-  - `merge:<task>` for each `contributions.captain` row without a live decision for the same task: `{key, type:"merge", task, kind, url, reason, owner, repo, checkedAt, rev}`. `url` is `https:` only, otherwise `null`.
+  - `decision:<task>` for each `decisions_open` row: `{key, type:"decision", task, verb, summary, url, owner, repo, answer, rev}`. Credentials appear only as decisions.
+  - `merge:<task>` for each `contributions.captain` row without a live decision for the same task: `{key, type:"merge", task, kind, url, reason, owner, repo, checkedAt, answer, rev}`. `url` is `https:` only, otherwise `null`.
+  - `answer` is `null` (answer in chat) or `{question, options[{value,label,hint}], recommend, close, freeform:true}`; see Answers.
   - `rev` is a 16-hex sha256 of the card's canonical JSON; an unchanged card keeps its `rev`.
 - `coverage`: `{known, checked, complete, provenClear, captainOmitted, unmeasuredHomes}`. Say "Nothing needs your action right now" only when `provenClear`; otherwise "No decision is recorded · checked X of Y".
 - `omitted[]`: `{kind:"deferred-holds", count}` (blocked, dated or aged holds not shown), `{kind:"decisions-bound", shown, total}`, `{kind:"invalid-rows", count}`.
@@ -72,15 +73,62 @@ Card markup from the view must carry nothing the patcher owns. The patcher creat
 
 ## Rich cards and upstream data gap
 
-Cards have a short type/repository heading, an **About** row (repository, owner, and contribution kind when present), and a **Decide** row containing the complete decision summary or merge reason. Free text remains path-redacted but is no longer shortened to 400/200 characters: embedded options, hints and recommendations stay expanded and selectable. A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card. All displayed links come from snapshot contribution rows; no URL is guessed.
+Cards have a short type/repository heading, an **About** row (repository, owner, and contribution kind when present), and a **Decide** row containing the complete decision summary or merge reason. Free text remains path-redacted and is never shortened by Quarterdeck: the server serves all of it, and long text is only clamped visually behind More details (see Long text). A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card. All displayed links come from snapshot contribution rows; no URL is guessed.
 
-Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask/reason is the fallback, not a collapsed disclosure. The About row is source metadata, not an invented work description.
+Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose decision options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask/reason, one More details click away when long, is the fallback. The About row is source metadata, not an invented work description.
 
-Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or read extra task records. Rich rendering leaves engagement hold, draft protection and the read-only boundary unchanged.
+Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit and unshortened `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, a card-declared `close`, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. Quarterdeck already consumes `options`, `recommend_value` and `close` on `decisions_open` rows when present (see Answers). These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or read extra task records. Rich rendering leaves engagement hold and draft protection unchanged.
 
-## Later: answers (v1.1)
+## Long text
 
-Not built. Answers will be relayed only, through the guarded `fm-inbox.sh note --request-id quarterdeck-call:<uuid> --json -`, carrying a `fm-bearings-answer.v1` envelope `{schema, question:<task>, selection:""|"merge", note, channel:"quarterdeck", type, observedRev}`. The key must still be in the current model; `reconcile` is refused. Quarterdeck never runs `fm-captain-hold.sh`, `fm-pr-merge.sh` or any GitHub mutation; a card leaves only when a later snapshot drops it.
+The Decide text (decision ask or merge reason) is clamped to 4 lines (6 at phone width). A **More details** button (`[data-call-more]`, `aria-expanded`, `aria-controls` naming the Decide text and the detail region) appears only when something is actually cut:
+
+- the clamp is hiding lines at the current width (`scrollHeight > clientHeight`, re-measured after every fill and on list resize, so rotation, panel resizes and the view becoming visible are covered), or
+- Firstmate's snapshot itself shortened the text: it ends in `…` (decision summaries are cut at about 90 characters upstream). The detail region then says so and names the task id to ask about in chat; Quarterdeck shows everything it received and never reads the backlog for more.
+
+Expanding works in place, is kept per card key across patches (pruned when the call leaves), and never selects or holds the card beyond the ordinary focus rule. The full text of a source-shortened ask needs an upstream snapshot field; see "Upstream data gap".
+
+## Answers
+
+Quarterdeck relays the captain's explicit answer; it adds no authority. The answer is the same `fm-bearings-answer.v1` context the `/bearings` lavish board queues, so Firstmate routes it exactly like a board answer (bearings skill, "Handling a board wake") into `fm-captain-hold.sh`'s one keyed-answer intake, and the merge-click ruling for merges. Quarterdeck never runs `fm-captain-hold.sh`, `fm-pr-merge.sh` or any GitHub mutation, never answers by itself, and never removes a card: a card leaves only when a later snapshot drops it.
+
+**What can be answered** (`card.answer`, built by `bearings.js`):
+
+- `question` is the board's intake key: the task id for a decision, `merge.<task>` for a merge ask. A key that fails the intake's slug shape (`[A-Za-z0-9._-]{1,128}`) gives `answer: null`, and the card keeps "Answer in chat" plus a private note-to-self.
+- Decision `options`, `recommend` and `close` come only from optional Firstmate row fields `options[{value,label,hint}]`, `recommend_value` and `close` (`done`|`release`). Today's snapshot provides none, so decisions are **freeform only**. One invalid option (bad slug, duplicate, missing label, `reconcile`, more than 8) voids them all; `recommend` must name an option.
+- A merge ask offers the board's single **Merge now** option (`merge`), never a recommendation. A merge answer with only a note is instruction text for Firstmate, never a merge.
+
+**Captain flow** (`public/bearings-answer-form.js`; state per card key in memory and `sessionStorage` under `fm-quarterdeck-call-answer.v1:<key>`):
+
+1. *compose*: pick an option (radios, `data-call-draft="selection"`) and/or write text (`data-call-draft="answer"`). Both are drafts, restored on every refill.
+2. **Review answer** checks locally (non-empty; `selection - note` at most 512 UTF-8 bytes, the board's cap) and moves to *confirm*: the fields lock and the exact text to be sent is shown. Nothing has been sent.
+3. **Send to Firstmate** (the only sending control) moves to *sending*, then:
+   - `202` → *sent*: answer drafts are cleared (so a resolved card shows no "unsent text" stub) and a receipt line follows Firstmate's inbox receipts: waiting → received → replied (polled every 15 s while visible and not yet replied).
+   - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note.
+   - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock; a new review gets a new request id.
+4. **Edit** returns from *confirm*/*failed* to *compose*; **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
+
+Typing protection is unchanged: the form lives inside the held section, so focus, typing, a selection or a press holds updates. If the card's `rev` changes while its answer is in *confirm* or *failed*, the next render moves it to *refused* ("changed while you were reviewing") and the captain reviews again; the server refuses a stale `cardRev` too. Answer state for calls that leave the model is forgotten on the next applied update, so a re-held task starts fresh.
+
+**`POST /api/bearings/answer`** (host only; 404 through a preview path):
+
+- Same-origin `authorized()` request (403), `application/json` with no query (415), body at most 4 KiB (413), and a served revision still equal to the process commit (409 `revision`).
+- Body exactly `{requestId, key, cardRev, selection, note}`: `requestId` a lowercase UUID, `cardRev` the 16-hex card rev shown. The note keeps the captain's words (line endings normalised, other control characters refused).
+- Refusals, each with `{error, code}` and no Firstmate call: `reconcile` selection (422, never an answer), empty (422), over 512 bytes (422), model not `ready` (409 `not-current`), key not open (409 `gone`), `cardRev` differs (409 `changed`), `answer: null` (409 `not-answerable`), selection not among the card's options (422 `bad-option`), request id reused for a different answer (409), no `FM_HOME` (503).
+- Delivery: `$FM_HOME/bin/fm-inbox.sh note --request-id quarterdeck-call:<requestId> --json -` (repairing a missing wake with `announce`), the same guarded, idempotent path review notes use. `202 {state:"accepted", requestId, key, noteId, replay, sentAt, envelope}`; an unconfirmed note is `502 unconfirmed`. The process remembers the last 200 relayed request ids, so a retry resends the identical note even after the card has left.
+
+The note body is one human line, a routing line, and the envelope in a ```` ```json fm-bearings-answer ```` fence (backticks inside JSON strings are escaped, so captain text cannot close it):
+
+```
+{ schema:"fm-bearings-answer.v1", question, selection, note, close?,          // the board context
+  channel:"quarterdeck", type, task, label, cardRev, observedRev }           // provenance
+```
+
+Firstmate's lavish adapter rule maps it to one keyed line: `<question>\t<selection or, when empty, note>\t<label>[\t<close>]`; it ignores the provenance fields.
+
+**`GET /api/bearings/answer/status?ids=<uuid>,…`** (host only, at most 20 ids): `{answers:{<uuid>:{state:"accepted"|"received"|"replied"|"unknown", reply?}}}` from `fm-inbox.sh receipts`; `502` when receipts are unavailable.
+
+**Firstmate follow-up (separate repository, not done here):** the bearings skill must route an inbox note carrying a `json fm-bearings-answer` block with `channel:"quarterdeck"` exactly like a board answer — feed `<question>\t<answer>\t<label>[\t<close>]` to `fm-captain-hold.sh answers`, handle `merge.<task>` through the merge-click ruling, and record "later" as `hold --until`. Until then Firstmate reads the note as an ordinary captain note.
 
 ## Validation
 

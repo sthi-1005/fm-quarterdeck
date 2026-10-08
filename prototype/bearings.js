@@ -60,6 +60,38 @@ export function validateSnapshot(raw) {
   return raw;
 }
 
+// How a card may be answered from Quarterdeck (BEARINGS.md "Answers"). The question is
+// the same key the /bearings board sends to Firstmate's keyed-answer intake: the task id
+// for a decision, merge.<task> for a merge ask. Options, a recommendation and a close
+// mode appear only when Firstmate's row supplies them; otherwise the answer is freeform.
+// No option is ever composed here except the board's own "Merge now" for a merge ask.
+export const ANSWER_SLUG = /^[A-Za-z0-9._-]{1,128}$/;
+const MAX_OPTIONS = 8;
+function sourceOptions(row) {
+  if (!Array.isArray(row.options) || !row.options.length || row.options.length > MAX_OPTIONS) return [];
+  const options = [];
+  for (const entry of row.options) {
+    const value = object(entry) && typeof entry.value === "string" && ANSWER_SLUG.test(entry.value) ? entry.value : null;
+    const label = object(entry) ? publicText(entry.label, 120) : null;
+    // reconcile is never an answer (captain-hold-lifecycle); one bad option voids them all.
+    if (!value || !label || value === "reconcile" || options.some((option) => option.value === value)) return [];
+    options.push({ value, label, hint: publicText(entry.hint, 240) });
+  }
+  return options;
+}
+function decisionAnswer(row, task) {
+  if (!ANSWER_SLUG.test(task)) return null;
+  const options = sourceOptions(row);
+  const recommend = options.some((option) => option.value === row.recommend_value) ? row.recommend_value : null;
+  const close = row.close === "done" || row.close === "release" ? row.close : null;
+  return { question: task, options, recommend, close, freeform: true };
+}
+function mergeAnswer(task) {
+  const question = `merge.${task}`;
+  if (!ANSWER_SLUG.test(question)) return null;
+  return { question, options: [{ value: "merge", label: "Merge now", hint: "Firstmate re-checks that the pull request is open and green before merging." }], recommend: null, close: null, freeform: true };
+}
+
 // Sections are pluggable so Underway, Landed and Charted Next can join later without
 // changing the transport. Phase 1 enables only the Captain's Call.
 function callSection(raw) {
@@ -77,7 +109,7 @@ function callSection(raw) {
     if (!id || !summary || decided.has(id)) { invalid += 1; continue; }
     decided.add(id);
     const contribution = raw.contributions.captain.find((entry) => object(entry) && entry.task === id && httpsUrl(entry.url));
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null }));
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, answer: decisionAnswer(row, id) }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {
@@ -86,7 +118,7 @@ function callSection(raw) {
     // A live decision for the same task already asks the captain; one card per call.
     if (decided.has(task) || merges.has(task)) continue;
     merges.add(task);
-    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at) }));
+    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at), answer: mergeAnswer(task) }));
   }
   const c = raw.contributions;
   const coverage = { known: c.known, checked: c.checked, complete: c.complete === true, provenClear: c.proven_clear,

@@ -1738,10 +1738,16 @@ function observeBearings(data) {
   item.error = data.error || null;
   renderFreshness();
 }
+// Answer and overflow controllers re-apply their per-card state after every patcher fill.
+let callAnswers = null, callOverflow = null;
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"),
+  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); },
+  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); },
 });
+callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts });
+callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
 const callLive = window.bearingsLive?.createBearingsLive({
   onModel(model) { callPatcher.update(model); renderCallBadge(model); observeBearings(model); },
   onObserved(data) { callPatcher.observe(data); observeBearings(data); },

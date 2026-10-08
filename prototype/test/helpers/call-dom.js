@@ -35,6 +35,7 @@ export function callDom() {
     hasAttribute(name) { return this.attrs.has(name); }
     setAttribute(name, value) { mutations += 1; this.attrs.set(name, String(value)); }
     removeAttribute(name) { if (this.attrs.delete(name)) mutations += 1; }
+    toggleAttribute(name, force) { const on = force ?? !this.hasAttribute(name); if (on && !this.hasAttribute(name)) this.setAttribute(name, ""); else if (!on) this.removeAttribute(name); return on; }
     get className() { return this.getAttribute("class") || ""; }
     set className(value) { this.setAttribute("class", value); }
     get classList() {

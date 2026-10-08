@@ -26,13 +26,44 @@ test('rich context expands source choices without inventing controls, risk or a 
   const html = view.cardHtml({ type: 'decision', summary, repo: 'example-app', owner: 'acme-mate', url: 'https://example.invalid/acme/example-app/pull/42' });
   assert.match(html, /<h3>Decision requested · example-app<\/h3>/);
   assert.match(html, /<dt>About<\/dt><dd>example-app · acme-mate/);
-  assert.ok(html.includes(`<dt>Decide</dt><dd>${summary}</dd>`));
+  assert.ok(html.includes(`data-call-clamp id="call-decide-${view.idFor('Decision')}">${summary}</dd>`));
   assert.match(html, /href="https:\/\/example.invalid\/acme\/example-app\/pull\/42"/);
   assert.doesNotMatch(html, /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
   const merge = view.cardHtml({ type: 'merge', reason: summary, kind: 'pr', repo: 'example-app' });
   assert.ok(merge.includes(summary));
   assert.match(merge, /<dt>Risk<\/dt><dd>Not provided by the snapshot/);
   assert.doesNotMatch(merge, /risk low|risk high|checks green/i);
+});
+
+test('long text is clamped with a More details control; Firstmate shortening is detected and disclosed', () => {
+  const card = { key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick the alpha rollout window: staged or immediate, with the…' };
+  const html = view.cardHtml(card);
+  const id = view.idFor(card.key);
+  assert.match(html, new RegExp(`<dd class="call-clamp" data-call-clamp id="call-decide-${id}" data-call-truncated>`));
+  assert.match(html, new RegExp(`<button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>`));
+  assert.match(html, new RegExp(`id="call-more-${id}" data-call-more-detail hidden`));
+  assert.match(html, /snapshot shortened this ask[\s\S]*<code>alpha-call<\/code>/);
+  const whole = view.cardHtml({ ...card, summary: 'Pick the alpha rollout window' });
+  assert.doesNotMatch(whole, /data-call-truncated|snapshot shortened/);
+  assert.notEqual(view.idFor('decision:a.b'), view.idFor('decision:a-b'), 'ids stay distinct when keys sanitize alike');
+});
+test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
+  const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
+  assert.match(freeform, /<form class="call-answer" data-call-answer novalidate/);
+  assert.match(freeform, /No structured options for this call yet/);
+  assert.match(freeform, /data-call-draft="answer" data-call-answer-text/);
+  assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
+  for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);
+  assert.match(freeform, /data-call-answer-confirm role="group" aria-label="Confirm answer" hidden/);
+  const options = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick', answer: { question: 'alpha-call', options: [{ value: 'staged', label: '<b>Staged</b>', hint: 'Fewer users' }, { value: 'now', label: 'Now', hint: null }], recommend: 'staged', close: null, freeform: true } });
+  assert.equal((options.match(/type="radio" name="selection"/g) || []).length, 2);
+  assert.equal((options.match(/call-opt-rec/g) || []).length, 1, 'only the recommended option is marked');
+  assert.match(options, /value="staged"[^>]*data-call-option-label="&lt;b&gt;Staged&lt;\/b&gt;"[\s\S]*?Fewer users[\s\S]*?Recommended/);
+  assert.match(options, /Add a note/);
+  assert.doesNotMatch(options, /<b>Staged/);
+  const merge = view.cardHtml({ key: 'merge:beta-merge', task: 'beta-merge', type: 'merge', reason: 'checks green', answer: { question: 'merge.beta-merge', options: [{ value: 'merge', label: 'Merge now', hint: 'Firstmate re-checks' }], recommend: null, close: null, freeform: true } });
+  assert.match(merge, /value="merge"[\s\S]*Merge now/);
+  assert.doesNotMatch(merge, /Recommended/);
 });
 
 test('a captain-hold asking for a credential is labelled Credentials', () => {

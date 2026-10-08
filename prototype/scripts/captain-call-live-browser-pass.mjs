@@ -27,6 +27,16 @@ await writeFile(path.join(home, 'data/projects.md'), '- synthetic-repository - O
 const script = path.join(home, 'bin/fm-bearings-snapshot.sh');
 await writeFile(script, '#!/bin/sh\ncat "$FM_HOME/snapshot.json"\n');
 await chmod(script, 0o755);
+// Synthetic guarded inbox: records the relayed answer note; never a real Firstmate home.
+const inbox = path.join(home, 'bin/fm-inbox.sh');
+await writeFile(inbox, `#!/bin/sh
+case "$1" in
+  note) printf '%s' "$3" > "$FM_HOME/answer-request-id"; cat > "$FM_HOME/answer-note.txt"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"note-1","announced":true,"outcome":"created"}\\n' "$3" ;;
+  receipts) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[]}\\n' "$(cat "$FM_HOME/answer-request-id" 2>/dev/null)" ;;
+  *) exit 2 ;;
+esac
+`);
+await chmod(inbox, 0o755);
 const env = { ...process.env, HOME: temp, CHROME_DEVTOOLS_AXI_SESSION: `quarterdeck-call-${process.pid}`, CHROME_DEVTOOLS_AXI_HEADED: '0', CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, 'profile'), CHROME_DEVTOOLS_AXI_IDLE_TIMEOUT_MS: '60000' };
 for (const name of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BROWSER_URL', 'CHROME_DEVTOOLS_AXI_MCP_SERVER_URL']) delete env[name];
 // Launch exactly one bounded fixture browser; all page operations go through axi.
@@ -67,10 +77,20 @@ try {
   await until("document.querySelectorAll('[data-call-key]').length===3 && document.querySelectorAll('#summary .metric-card').length===3");
   for (const width of [1280,360,390]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||decision.querySelector('input[type=radio],form,select,details'))throw Error('source information lost or invented'); return {width:innerWidth,richCards:true}; }`);
+    await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||decision.querySelector('input[type=radio],select,details,.call-opt-rec')||!decision.querySelector('form[data-call-answer] textarea[data-call-draft=answer]')||merge.querySelectorAll('input[type=radio]').length!==1||merge.querySelector('input[type=radio]').value!=='merge'||merge.querySelector('.call-opt-rec'))throw Error('source information lost or answer options invented'); const more=c=>c.querySelector('[data-call-more]'); const gamma=document.querySelector('[data-call-key="decision:gamma-credential"]'); if(more(decision).hidden||more(merge).hidden||!more(gamma).hidden)throw Error('More details must show exactly when text is cut'); const clamp=decision.querySelector('[data-call-clamp]'); if(clamp.scrollHeight<=clamp.clientHeight+1)throw Error('long ask not clamped'); more(decision).click(); if(more(decision).getAttribute('aria-expanded')!=='true'||clamp.scrollHeight>clamp.clientHeight+1||decision.getAttribute('aria-current'))throw Error('More details did not expand in place'); more(decision).click(); if(more(decision).getAttribute('aria-expanded')!=='false'||clamp.scrollHeight<=clamp.clientHeight+1)throw Error('Fewer details did not collapse'); more(decision).blur(); return {width:innerWidth,richCards:true}; }`);
     await browser('screenshot', path.join(proof, `captain-call-rich-${width}.png`));
   }
   await browser('resize', '1280', '844');
+  // Answer: Review never sends; only Send to Firstmate relays one note through the guarded inbox.
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); const field=card.querySelector('[data-call-answer-text]'); field.focus(); field.value='Synthetic credential is in the vault'; field.dispatchEvent(new Event('input',{bubbles:true})); card.querySelector('.call-answer-review').click(); if(card.querySelector('[data-call-answer-confirm]').hidden||card.querySelector('[data-call-answer-preview]').textContent!=='Synthetic credential is in the vault'||document.activeElement!==card.querySelector('[data-call-answer-send]'))throw Error('review must confirm before sending'); return 'reviewed'; }`);
+  await new Promise(r => setTimeout(r, 300));
+  assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'Review answer never sends');
+  await evaluate(`() => { document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-answer-send]').click(); return 'sent'; }`);
+  await until(`!document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-answer-receipt]').hidden`);
+  const note = await readFile(path.join(home, 'answer-note.txt'), 'utf8');
+  const envelope = JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(note)[1]);
+  assert.deepEqual([envelope.schema, envelope.question, envelope.selection, envelope.note, envelope.channel], ['fm-bearings-answer.v1', 'gamma-credential', '', 'Synthetic credential is in the vault', 'quarterdeck']);
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); if(!card.querySelector('[data-call-answer-receipt]').innerText.includes('Sent to Firstmate: Synthetic credential is in the vault'))throw Error('receipt missing'); document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'PASS confirmed answer relayed once'; }`);
   await evaluate(`() => { window.proof={}; proof.alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); proof.beta=document.querySelector('[data-call-key="merge:beta-merge"]'); proof.alphaField=proof.alpha.querySelector('textarea'); proof.betaField=proof.beta.querySelector('textarea'); proof.rebuilds=0; new MutationObserver(ms=>proof.rebuilds+=ms.filter(m=>m.target===proof.alpha&&m.type==='childList').length).observe(proof.alpha,{childList:true}); return {revision:window.FM_BOOT_REVISION, noTree:!document.querySelector('#projects')}; }`);
   raw.decisions_open[0].summary = 'Changed rollout question'; await change();
   await until("proof.alpha.innerText.includes('Changed rollout question')");

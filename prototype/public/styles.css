@@ -1787,6 +1787,39 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-status[hidden], .call-badge[hidden] { display: none; }
 .call-status button, .call-stub-actions button { min-height: 40px; margin: 4px 4px 0 0; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
 #captain-call[data-held="true"] .call-chrome { opacity: .65; filter: saturate(.5); }
+/* Long text: clamp until More details; the control shows only when text is actually cut (BEARINGS.md "Long text"). */
+.call-card { --call-clamp-lines: 4; }
+.call-card:not([data-call-expanded]) .call-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--call-clamp-lines); line-clamp: var(--call-clamp-lines); overflow: hidden; }
+.call-more { min-height: 40px; margin: 0 0 8px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
+.call-more[hidden], .call-more-detail[hidden] { display: none; }
+.call-more-detail { margin: 0 0 12px; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
+.call-more-detail p { margin: 0 0 6px; }
+.call-more-detail p:last-child { margin-bottom: 0; }
+/* Answer form (BEARINGS.md "Answers"): nothing sends without Review answer, then Send to Firstmate. */
+.call-answer { display: grid; gap: 10px; margin-top: 16px; }
+.call-answer-fields { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.call-answer-fields[hidden], .call-answer-actions[hidden], .call-answer-confirm[hidden], .call-answer-receipt[hidden], .call-answer-error[hidden] { display: none; }
+.call-answer-legend { padding: 0; font-size: var(--text-small); font-weight: 600; }
+.call-answer-gap { margin: 0; color: var(--muted); font-size: var(--text-small); }
+.call-opts { display: grid; gap: 8px; }
+.call-opt { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); cursor: pointer; }
+.call-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.call-opt input { flex: none; margin-top: 4px; }
+.call-opt-body { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; overflow-wrap: anywhere; }
+.call-opt-label { font-weight: 600; }
+.call-opt-hint { color: var(--muted); font-size: var(--text-small); }
+.call-opt-rec { flex: none; align-self: center; padding: 2px 6px; border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.call-answer-note { display: block; font-size: var(--text-small); }
+.call-answer-note span { color: var(--muted); }
+.call-answer-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
+.call-answer-fields:disabled { opacity: .75; }
+.call-answer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.call-answer-actions button, .call-answer-receipt button { min-height: 40px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
+.call-answer-send { border-color: var(--accent) !important; }
+.call-answer-send[aria-disabled="true"] { cursor: progress; opacity: .7; }
+.call-answer-confirm, .call-answer-receipt { padding: 10px; border: 1px solid var(--accent); border-radius: 6px; background: var(--surface); font-size: var(--text-small); overflow-wrap: anywhere; }
+.call-answer-confirm p, .call-answer-receipt p { margin: 0 0 8px; white-space: pre-wrap; }
+.call-answer-error { margin: 0; color: var(--danger); font-size: var(--text-small); }
 .call-card[aria-current="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
 .call-card-new { animation: call-arrival 2.4s ease-out; }
 .call-card-leaving { opacity: 0; transition: opacity .32s ease; }
@@ -1797,8 +1830,8 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .mobile-dock .call-badge { position: absolute; top: 2px; right: max(2px, calc(50% - 32px)); font-size: 10px; line-height: 1.5; }
 @keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
-@media (forced-colors: active) { #captain-call[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; } .call-status { border-color: Highlight; } }
-@media (max-width: 720.005px) { .call-card { padding: 12px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } }
+@media (forced-colors: active) { #captain-call[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; } .call-opt:has(input:checked), .call-answer-confirm, .call-answer-receipt { border-color: Highlight; } .call-status { border-color: Highlight; } }
+@media (max-width: 720.005px) { .call-card { padding: 12px; --call-clamp-lines: 6; } .call-answer-actions button { flex: 1 1 auto; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } }
 
 /* Taxonomy is presentation-only; compact native disclosures keep all slices usable.
    Cohesive 3-tier visual hierarchy: Repository (Deck) -> Lane (Workstream) -> Theme (Grouping) */
