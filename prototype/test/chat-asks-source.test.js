@@ -16,8 +16,9 @@ function fixture() {
     asks: () => asks,
     view: () => ({ state: 'ready', sources: [], checkedAt: String(scans) }),
     async scan() { scans++; },
-    async applySnapshot(tasks, fresh) {
-      links.push([tasks, fresh]);
+    async applySnapshot(cards, fresh) {
+      const tasks = cards.map(card => card.task).filter(Boolean);
+      links.push([cards, fresh]);
       asks = asks.map(entry => ({ ...entry, linkedTasks: tasks.includes('sample-task') ? ['sample-task'] : entry.linkedTasks }));
     },
     async resolve(key) { const before = asks.length; asks = asks.filter(entry => entry.key !== key); return asks.length !== before; },
@@ -60,7 +61,7 @@ test('hub model events re-apply linking before publishing; own resolutions push 
   f.setAsks([ask]); const stop = f.source.subscribe(event => events.push(event)); await flush();
   assert.equal(f.source.current().cards[0].type, 'chat');
   await f.publish({ ...f.base(), cards: [{ key: 'decision:sample-task', rev: 'hold-rev', task: 'sample-task', type: 'decision', summary: 'Approve sample rollout' }] });
-  assert.deepEqual(f.links.at(-1), [['sample-task'], true]);
+  assert.deepEqual(f.links.at(-1), [f.base().cards, true]);
   assert.equal(events.at(-1).type, 'model');
   assert.equal(events.at(-1).model.cards.length, 1);
   assert.equal(events.at(-1).model.cards[0].chatAsks[0].key, ask.key);

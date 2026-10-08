@@ -130,6 +130,68 @@ test("keys are stable, dismissals survive a rewritten transcript, re-asks supers
   assert.deepEqual(scanner.asks().map((entry) => entry.recordId), ["f-3"]);
 });
 
+test("later captain messages resolve case and punctuation variants anywhere as whole phrases", async (context) => {
+  const env = await claudeHome(context);
+  await writeFile(env.transcript, lines(
+    captain("before", 0, "archive sample notes"),
+    firstmate("case", 1, 'DECISION NEEDED: Choose the sample host. Shortest reply: "keep it on Vega".'),
+    captain("case-answer", 2, "keep it on vega"),
+    firstmate("long", 3, 'ACTION NEEDED: Retire the sample notes. Reply "archive sample notes".'),
+    captain("not-words", 4, "archive sample notesbook"),
+    captain("earlier-clock", 2, "archive sample notes"),
+  ));
+  const scanner = scannerFor(env);
+  await scanner.scan();
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["long"]);
+  await appendFile(env.transcript, lines(captain("long-answer", 5, "Please ARCHIVE\t sample, notes ---- then check the sample preview.")));
+  await scanner.scan();
+  assert.deepEqual(scanner.asks(), []);
+  const restarted = scannerFor(env);
+  await restarted.scan();
+  assert.deepEqual(restarted.asks(), []);
+});
+
+test("same-marker replies supersede older asks despite changed prose, not different markers", async (context) => {
+  const env = await claudeHome(context);
+  await writeFile(env.transcript, lines(
+    firstmate("older", 1, 'APPROVAL NEEDED: Retire idle sample workers. Reply "retire both".'),
+    firstmate("different-marker", 2, 'ACTION NEEDED: Verify sample workers. Reply "retire both".'),
+    firstmate("newer", 3, 'APPROVAL NEEDED: The sample workers are still idle; shortest reply: "RETIRE, both".'),
+  ));
+  const scanner = scannerFor(env);
+  await scanner.scan();
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker", "newer"]);
+  await appendFile(env.transcript, lines(captain("answer", 4, "Please retire both -- inspect the logs too.")));
+  await scanner.scan();
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker"], "a reply resolves only the newest matching ask");
+});
+
+test("an upgraded scanner replays a bounded window to repair persisted open asks and repeats", async (context) => {
+  const env = await claudeHome(context);
+  await writeFile(env.transcript, lines(
+    firstmate("answered", 1, 'ACTION NEEDED: Archive the sample notes. Reply "archive notes".'),
+    firstmate("older", 2, 'APPROVAL NEEDED: Publish the sample manual. Reply "publish manual".'),
+  ));
+  const scanner = scannerFor(env);
+  await scanner.scan();
+  const legacy = JSON.parse(await readFile(chatAsksPath(env.statePath), "utf8"));
+  await appendFile(env.transcript, lines(
+    captain("answer", 3, "archive notes --- then inspect the preview"),
+    firstmate("newer", 4, 'APPROVAL NEEDED: The sample manual is ready now. Reply "publish manual".'),
+  ));
+  await scanner.scan();
+  const current = JSON.parse(await readFile(chatAsksPath(env.statePath), "utf8"));
+  legacy.cursors = current.cursors;
+  const latest = Object.values(current.asks).find(ask => ask.recordId === "newer");
+  legacy.asks[latest.key] = latest;
+  delete legacy.matchingVersion;
+  await writeFile(chatAsksPath(env.statePath), JSON.stringify(legacy));
+  const upgraded = scannerFor(env);
+  await upgraded.scan();
+  assert.deepEqual(upgraded.asks().map(ask => ask.recordId), ["newer"]);
+  assert.equal(await upgraded.scan(), false, "repair is one-off; idle scans remain cheap");
+});
+
 test("oversized records are skipped to their newline without stalling the cursor", async (context) => {
   const env = await claudeHome(context);
   await writeFile(env.transcript, lines(
@@ -183,6 +245,36 @@ test("an ask naming a filed hold is shown inside that card, not twice, and resol
   assert.equal(scanner.asks().length, 2);
   await scanner.applySnapshot([], true);
   assert.deepEqual(scanner.asks().map((ask) => ask.recordId), ["f-2"]);
+});
+
+test("filed holds win by quoted replies in titles or reasons without task-id mentions", async (context) => {
+  const env = await claudeHome(context);
+  await writeFile(env.transcript, lines(
+    firstmate("choice", 1, 'DECISION NEEDED: Choose a sample plan. Shortest reply: "path 2".'),
+    firstmate("release", 2, 'APPROVAL NEEDED: Publish the sample package. Reply "publish the 2.3.4 preview".'),
+    firstmate("unquoted", 3, 'APPROVAL NEEDED: Restart a sample server. Reply "restart server".'),
+    firstmate("partial", 4, 'DECISION NEEDED: Choose a different sample plan. Reply "path 3".'),
+  ));
+  const scanner = scannerFor(env);
+  const held = base([
+    { id: "choice-hold", verb: "decide", summary: "Choose the sample plan", title: "Captain choice: 'PATH 2'", owner: "(main)" },
+    { id: "release-hold", verb: "approve", summary: "Release the sample package", reason: 'Waiting for “publish the 2.3.4 preview”', owner: "(main)" },
+    { id: "unquoted-hold", verb: "approve", summary: "Please restart server", owner: "(main)" },
+    { id: "partial-hold", verb: "decide", summary: 'Choose "path 30"', owner: "(main)" },
+  ]);
+  const hub = { current: () => held };
+  const source = createCallSource({ hub, chat: scanner });
+  await source.refresh();
+  const model = source.current();
+  assert.equal(model.cards.length, 6);
+  assert.equal(model.chat.linked, 2);
+  assert.deepEqual(model.cards[0].chatAsks.map(ask => ask.replies), [["path 2"]]);
+  assert.deepEqual(model.cards[1].chatAsks.map(ask => ask.replies), [["publish the 2.3.4 preview"]]);
+  assert.deepEqual(model.cards.filter(card => card.type === "chat").map(card => card.replies), [["path 3"], ["restart server"]]);
+  await scanner.applySnapshot([], false);
+  assert.equal(scanner.asks().length, 4, "stale disappearance cannot close linked asks");
+  await scanner.applySnapshot([], true);
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["unquoted", "partial"]);
 });
 
 test("chat cards answer through the keyed relay as the captain's own reply, even while the snapshot is unavailable", async (context) => {

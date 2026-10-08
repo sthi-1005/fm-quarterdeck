@@ -152,7 +152,9 @@ function callSection(raw) {
     if (!id || !summary || decided.has(id)) { invalid += 1; continue; }
     decided.add(id);
     const contribution = raw.contributions.captain.find((entry) => object(entry) && entry.task === id && httpsUrl(entry.url));
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
+    // Optional source title/reason retain quoted replies for chat-ask deduplication.
+    const title = publicText(row.title, Infinity), reason = publicText(row.reason, Infinity);
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {

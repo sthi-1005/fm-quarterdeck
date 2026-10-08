@@ -16,6 +16,7 @@ const MAX_ASK_CHARS = 4000;
 const MAX_REPLIES = 6;
 const MAX_OPEN = 100;
 const MAX_TOMBSTONES = 5000;
+const MATCHING_VERSION = 2;
 const MiB = 1024 * 1024;
 
 // ---------------------------------------------------------------------------------------
@@ -90,16 +91,35 @@ export function extractAsks(text) {
   return asks;
 }
 
-// Exact reply matching after removing only presentation: case, surrounding quotes and
-// emphasis, repeated whitespace and trailing sentence punctuation.
-export const normalizeReply = (text) => String(text).normalize("NFKC").replace(/[*_`"“”]/g, "").replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").trim().toLowerCase();
-export function replyCandidates(text) {
-  const candidates = new Set();
-  for (const value of [text, ...String(text).split(/\r?\n/)]) {
-    const normal = normalizeReply(value);
-    if (normal) candidates.add(normal);
-  }
-  return candidates;
+// Case-folded words with punctuation/whitespace as separators. Padding enforces whole
+// phrases ("path 2" cannot match "path 20"), including inside a longer captain prompt.
+export const normalizeReply = (text) => String(text).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim();
+const hasReply = (text, reply) => {
+  const phrase = normalizeReply(reply);
+  return Boolean(phrase) && ` ${normalizeReply(text)} `.includes(` ${phrase} `);
+};
+const HOLD_QUOTE = /"([^"\n]{1,200})"|“([^”\n]{1,200})”|`([^`\n]{1,200})`|'([^'\n]{1,200})'|‘([^’\n]{1,200})’/g;
+function matchesHold(ask, card) {
+  if (!card.task) return false;
+  if (mentionsTask(ask.text, card.task)) return true;
+  if (card.type !== "decision") return false;
+  const replies = new Set(ask.replies.map(normalizeReply).filter(Boolean));
+  return [card.summary, card.title, card.reason].some(text => typeof text === "string" &&
+    [...text.matchAll(HOLD_QUOTE)].some(match => replies.has(normalizeReply(match.slice(1).find(value => value !== undefined)))));
+}
+// In-source byte order proves "later" even without clocks; known reversed clocks fail.
+// Across sources only a strictly newer clock proves order. Equal timestamps alone do not.
+function isLater(later, earlier) {
+  if (later.at && earlier.at && later.at < earlier.at) return false;
+  if (later.source === earlier.source) return later.offset > earlier.offset ||
+    (later.offset === earlier.offset && later.recordId === earlier.recordId && later.part > earlier.part);
+  return Boolean(later.at && earlier.at && later.at > earlier.at);
+}
+function repeatsAsk(later, earlier) {
+  if (later.marker !== earlier.marker) return false;
+  const replies = new Set(later.replies.map(normalizeReply).filter(Boolean));
+  return earlier.replies.some(reply => replies.has(normalizeReply(reply))) ||
+    normalizeReply(later.text) === normalizeReply(earlier.text);
 }
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -183,7 +203,7 @@ export async function discoverPrimarySources(home, { claudeConfigDir = null, rea
 //   asks{key → ask}                         open and recently resolved asks
 //   tombstones{key → resolvedAt}            resolved keys, so a re-read never revives them
 export const chatAsksPath = (agentStatePath) => `${agentStatePath}.chat-asks.json`;
-export const emptyChatState = () => ({ schema: CHAT_ASKS_SCHEMA, cursors: {}, asks: {}, tombstones: {} });
+export const emptyChatState = () => ({ schema: CHAT_ASKS_SCHEMA, matchingVersion: MATCHING_VERSION, cursors: {}, asks: {}, tombstones: {} });
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 function validState(state) {
   return isObject(state) && state.schema === CHAT_ASKS_SCHEMA && isObject(state.cursors) && isObject(state.asks) && isObject(state.tombstones) ? state : null;
@@ -296,7 +316,7 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
   }
 
   // Apply one parsed record. Asks open; captain prompts resolve the newest earlier open ask
-  // whose quoted reply they repeat exactly; a re-asked identical ask supersedes the older one.
+  // whose quoted reply occurs as a whole phrase; repeated marker+reply supersedes an older ask.
   function applyRecord(target, record, { source, origin, offset, backfill }, toolNames) {
     const at = (() => { const value = new Date(record.timestamp ?? record.message?.timestamp); return Number.isNaN(value.valueOf()) ? null : value.toISOString(); })();
     const recordId = (origin === "claude" ? record.uuid : record.id) || `${source}@${offset}`;
@@ -305,27 +325,32 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
       if (turn.role === "firstmate") {
         for (const found of extractAsks(turn.text)) {
           const key = `chat:${shortHash([recordId, turn.part, found.line])}`;
-          if (target.asks[key] || target.tombstones[key]) continue;
-          const ask = { key, kind: found.kind, marker: found.marker, text: found.text, replies: found.replies, source, offset, part: turn.part, recordId, at, status: "open", linkedTasks: [] };
+          if (target.tombstones[key] || (target.asks[key] && target.asks[key].status !== "open")) continue;
+          const existing = target.asks[key];
+          const ask = existing || { key, kind: found.kind, marker: found.marker, text: found.text, replies: found.replies, source, offset, part: turn.part, recordId, at, status: "open", linkedTasks: [] };
           // A backfill of a long-lived transcript must not resurface asks from days ago.
-          if (backfill && at && now() - Date.parse(at) > backfillMaxAgeMs) {
+          if (!existing && backfill && at && now() - Date.parse(at) > backfillMaxAgeMs) {
             target.tombstones[key] = new Date(now()).toISOString();
             changed = true;
             continue;
           }
-          const same = normalizeReply(`${found.kind} ${found.text}`);
           for (const older of Object.values(target.asks)) {
-            if (older.status === "open" && normalizeReply(`${older.kind} ${older.text}`) === same) resolveAsk(target, older, "superseded", { supersededBy: key });
+            if (older.status === "open" && isLater(ask, older) && repeatsAsk(ask, older)) changed = resolveAsk(target, older, "superseded", { supersededBy: key }) || changed;
           }
-          target.asks[key] = ask;
-          changed = true;
+          if (!existing) { target.asks[key] = ask; changed = true; }
         }
       } else if (turn.text.length <= maxCaptainLineBytes) {
-        for (const candidate of replyCandidates(turn.text)) {
-          const earlier = Object.values(target.asks)
-            .filter((ask) => ask.status === "open" && (!at || !ask.at || ask.at <= at) && ask.replies.some((reply) => normalizeReply(reply) === candidate))
-            .sort((a, b) => String(b.at).localeCompare(String(a.at)) || b.offset - a.offset)[0];
-          if (earlier) changed = resolveAsk(target, earlier, "reply", { resolvedReply: candidate, resolvedByRecord: (origin === "claude" ? record.uuid : record.id) || `${source}@${offset}` }) || changed;
+        const prompt = { source, offset, part: turn.part, recordId, at };
+        const matching = Object.values(target.asks)
+          .filter(ask => ask.status === "open" && isLater(prompt, ask))
+          .sort((a, b) => String(b.at).localeCompare(String(a.at)) || b.offset - a.offset);
+        // One newest ask per distinct suggested phrase, not one per occurrence or line.
+        const answered = new Set();
+        for (const ask of matching) {
+          const reply = ask.replies.find(reply => !answered.has(normalizeReply(reply)) && hasReply(turn.text, reply));
+          if (!reply) continue;
+          answered.add(normalizeReply(reply));
+          changed = resolveAsk(target, ask, "reply", { resolvedReply: normalizeReply(reply), resolvedByRecord: recordId }) || changed;
         }
       }
     }
@@ -346,6 +371,15 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
     try {
       const active = await sourcesNow();
       state ||= await store.read();
+      // One bounded replay repairs already-open cards when matching rules change. Keep
+      // asks and tombstones: accepted answers/dismissals must never be revived.
+      if (state.matchingVersion !== MATCHING_VERSION) {
+        ({ state } = await store.update(target => {
+          target.cursors = {};
+          target.matchingVersion = MATCHING_VERSION;
+          return { write: true };
+        }));
+      }
       // Cheap path: nothing grew since the cursor and the state file is ours.
       const grown = [];
       for (const entry of active) {
@@ -405,19 +439,20 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
     scan: () => (scanning ||= scanOnce().finally(() => { scanning = null; })),
     view: () => view,
     asks: () => openAsks(),
-    // Link open asks to the snapshot's open calls by exact task-id mention. A linked ask is
-    // shown inside that call's card; once every linked call has left a fresh snapshot, the
-    // hold it matched is closed and so is the ask.
-    async applySnapshot(tasks, fresh) {
+    // Link by task id or a filed decision's quoted reply. String task ids remain supported
+    // for callers with no card text. A linked ask closes only on fresh hold disappearance.
+    async applySnapshot(cards, fresh) {
       if (!state) return false;
-      const work = openAsks().some((ask) => tasks.some((task) => !ask.linkedTasks.includes(task) && mentionsTask(ask.text, task)))
+      cards = cards.map(card => typeof card === "string" ? { task: card } : card);
+      const tasks = cards.map(card => card.task).filter(Boolean);
+      const work = openAsks().some((ask) => cards.some(card => !ask.linkedTasks.includes(card.task) && matchesHold(ask, card)))
         || (fresh && openAsks().some((ask) => ask.linkedTasks.length && !ask.linkedTasks.some((task) => tasks.includes(task))));
       if (!work) return false;
       return (await mutate((target) => {
         let dirty = false;
         for (const ask of Object.values(target.asks)) {
           if (ask.status !== "open") continue;
-          for (const task of tasks) if (!ask.linkedTasks.includes(task) && mentionsTask(ask.text, task)) { ask.linkedTasks.push(task); dirty = true; }
+          for (const card of cards) if (!ask.linkedTasks.includes(card.task) && matchesHold(ask, card)) { ask.linkedTasks.push(card.task); dirty = true; }
           if (fresh && ask.linkedTasks.length && !ask.linkedTasks.some((task) => tasks.includes(task))) dirty = resolveAsk(target, ask, "hold-closed") || dirty;
         }
         return { dirty, write: dirty };
@@ -488,7 +523,7 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
     if (base !== composedBase || signature !== composedFrom) { composed = composeCallModel(base, asks, view); composedBase = base; composedFrom = signature; }
     return composed;
   }
-  const baseTasks = () => hub.current().cards.map((card) => card.task).filter(Boolean);
+  const baseCards = () => hub.current().cards;
   const fresh = () => hub.current().state === "ready";
   let lastRev = null;
   function emit() {
@@ -501,7 +536,7 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
   let refreshing = null;
   const refresh = () => (refreshing ||= (async () => {
     await chat.scan();
-    await chat.applySnapshot(baseTasks(), fresh()).catch(() => false);
+    await chat.applySnapshot(baseCards(), fresh()).catch(() => false);
   })().finally(() => { refreshing = null; }));
   // A scan publishes only new content. Unchanged scans stay silent: every observed event
   // costs each stream a revision check and an activity read, and the stream's own
@@ -520,7 +555,7 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
       listeners.add(listener);
       lastRev ??= current().rev;
       unsubscribeHub ||= hub.subscribe(async (event) => {
-        if (event.type === "model") await chat.applySnapshot(baseTasks(), fresh()).catch(() => false);
+        if (event.type === "model") await chat.applySnapshot(baseCards(), fresh()).catch(() => false);
         emit();
       });
       timer ||= timers.setInterval(() => { void tick(); }, scanEveryMs);
