@@ -863,6 +863,17 @@ test("preference density, sorting and expansion persist through rendering", () =
   assert.match(css, /\.density-reasons \.preference-content[^}]+display: none/);
 });
 
+test("phone source-window controls move as one stateful item into Fleet Chat options", async () => {
+  const shell = await readFile(new URL('../public/shell-panel.js', import.meta.url), 'utf8');
+  const shellCss = await readFile(new URL('../public/shell-panel.css', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.equal(shell.split('moveControl(document.querySelector("#transcript-window-status"), chatTools);').length - 1, 2, 'rehome on phone setup and immediately before opening options');
+  assert.match(shell, /anchor\.replaceWith\(node\)/, 'desktop restores the original node');
+  assert.match(shellCss, /\.mobile-chat-tools \.transcript-window-status button \{ min-height: 44px; width: 100%; \}/);
+  assert.match(html, /id="transcript-load-more"[^>]*aria-describedby="transcript-window-hint"/);
+  assert.equal(html.split('id="transcript-load-more"').length - 1, 1, 'no duplicated stateful button');
+});
+
 test("full history is retained across bounded pages and disk-session selection", () => {
   const app = ui();
   const messages = Array.from({ length: 451 }, (_, i) => record({ text: `Turn ${i}`, recordId: `session:${i}`, transcriptSessionId: i < 250 ? "old.jsonl" : "new.jsonl" }));
