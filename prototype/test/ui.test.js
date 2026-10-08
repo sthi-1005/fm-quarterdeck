@@ -111,6 +111,7 @@ test("Overview retains KPIs, replaces only the project tree with accessible live
   const app = ui();
   app.run('renderCallBadge({cards:[{},{}]})');
   assert.equal(app.node('#call-badge').textContent, '2');
+  assert.equal(app.node('#call-mobile-badge').textContent, '2');
   assert.match(app.node('#sr-announcer').textContent, /2 Captain's Calls/);
   app.node('#sr-announcer').textContent = '';
   app.run('renderCallBadge({cards:[{}]})');
@@ -1731,9 +1732,9 @@ test("open header details popovers dismiss on Escape and outside click", () => {
 test("Phase 2.5 responsive, typography, and accessibility polish constraints", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
 
-  // Overview summary and projects do not have live-region attributes
+  // Overview KPI summary does not have live-region attributes
   assert.doesNotMatch(html, /id="summary"[^>]*aria-live/);
-  assert.doesNotMatch(html, /id="projects"[^>]*aria-live/);
+  assert.doesNotMatch(html, /id="call-cards"[^>]*aria-live/);
 
   // Terminology disambiguation: transcript picker refers to disk transcript files, context rail refers to task history
   assert.match(html, /Disk transcript file/);
@@ -2424,7 +2425,7 @@ test("visible taxonomy siblings independently control lane and theme wrappers wi
   assert.equal(render([]), '<p class="empty panel">No work matches these filters.</p>');
 });
 
-test("Overview and Work Split visual organization: horizontal repository scrolling, clear hierarchy, card item separation, and responsive containment", () => {
+test("Work Split visual organization: horizontal repository scrolling, clear hierarchy, card item separation, and responsive containment", () => {
   // Horizontal repository scrolling deck on desktop/tablet
   assert.match(css, /#tight-work:has\(\.taxonomy-node\) \{[\s\S]*?display: flex;/);
   assert.match(css, /@media \(min-width: 721px\) \{[\s\S]*?#tight-work:has\(\.taxonomy-node\) \{[\s\S]*?flex-direction: row;[\s\S]*?overflow-x: auto;[\s\S]*?scroll-snap-type: x proximity;/);
