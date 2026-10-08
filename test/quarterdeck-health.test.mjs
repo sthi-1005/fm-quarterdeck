@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,11 @@ import { fileURLToPath } from 'node:url';
 const script = fileURLToPath(new URL('../scripts/quarterdeck-health-check.sh', import.meta.url));
 async function fixture(t, bearings = {}) {
   const state = await mkdtemp(join(tmpdir(), 'quarterdeck-health-'));
+  await mkdir(join(state, 'bin'));
+  await writeFile(join(state, 'receipts.json'), JSON.stringify({
+    schema: 'fm-inbox-receipts.v1', pending: [], omitted: [],
+  }));
+  await writeFile(join(state, 'bin', 'fm-inbox.sh'), '#!/usr/bin/env bash\n[[ "$*" == "receipts --all-pending" ]] || exit 1\nexec python3 -c \'import os; from pathlib import Path; print((Path(os.environ["FM_HOME"]) / "receipts.json").read_text())\'\n', { mode: 0o700 });
   let calls = 0;
   const server = createServer((req, res) => {
     calls++;
@@ -28,9 +33,9 @@ async function fixture(t, bearings = {}) {
 function check(f, extra = {}) {
   return new Promise((resolve, reject) => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-      !key.startsWith('FM_QUARTERDECK_HEALTH_')));
+      !key.startsWith('FM_QUARTERDECK_HEALTH_') && key !== 'FM_HOME'));
     const child = spawn('bash', [script], { env: {
-      ...env, FM_QUARTERDECK_HEALTH_STATE_DIR: f.state,
+      ...env, FM_HOME: f.state, FM_QUARTERDECK_HEALTH_STATE_DIR: f.state,
       FM_QUARTERDECK_HEALTH_PORT: String(f.port),
       TAILSCALE_BIN: join(f.state, 'absent-tailscale'), ...extra,
     } });
@@ -66,7 +71,9 @@ test('down server produces exactly one private-data-free line', async t => {
 for (const [name, snapshot, match] of [
   ['stale timestamp', { generatedAt: '2000-01-01T00:00:00Z' }, /snapshot stale/],
   ['explicit stale', { stale: true }, /snapshot stale/],
-  ['not ready', { state: 'loading' }, /not ready/],
+  ['loading with stale flag', { state: 'loading', stale: true }, /snapshot stale/],
+  ['loading with error', { state: 'loading', error: 'synthetic failure' }, /snapshot error/],
+  ['error state', { state: 'error' }, /not ready/],
   ['unavailable', { state: 'unavailable' }, /not ready/],
   ['unknown schema', { schema: 'unknown.v1' }, /not ready/],
   ['missing timestamp', { generatedAt: null }, /timestamp missing/],
@@ -77,6 +84,7 @@ for (const [name, snapshot, match] of [
 test('persistent private config supplies port without inherited environment', async t => {
   const f = await fixture(t);
   await writeFile(join(f.state, 'quarterdeck-health.json'), JSON.stringify({
+    FM_HOME: f.state,
     FM_QUARTERDECK_HEALTH_PORT: String(f.port),
   }));
   // An absent environment key allows private JSON config to supply it.
@@ -100,4 +108,91 @@ test('configured remote failure is not hidden by healthy loopback', async t => {
 test('missing port and unavailable discovery fail closed', async t => {
   const f = await fixture(t);
   failure(await check(f, { FM_QUARTERDECK_HEALTH_PORT: '' }), /discovery unavailable/);
+});
+test('idle loading without a snapshot clock is healthy', async t => {
+  const f = await fixture(t, { state: 'loading', generatedAt: null });
+  assert.deepEqual(await check(f), { code: 0, stdout: '', stderr: '' });
+});
+async function notes(f, pending, extra = {}) {
+  await writeFile(join(f.state, 'receipts.json'), JSON.stringify({
+    schema: 'fm-inbox-receipts.v1', pending, omitted: [], ...extra,
+  }));
+}
+const noteId = (age, suffix = 'synthetic') => `${Math.floor(Date.now() / 1000) - age}-${suffix}`;
+test('overdue notes wake once, name ids and demand reply plus ack; fresh notes stay silent', async t => {
+  const f = await fixture(t);
+  const old = noteId(1000), fresh = noteId(30), future = noteId(-120);
+  await notes(f, [{ id: old, body: 'DO NOT PRINT THIS' }, { id: fresh }, { id: future }]);
+  const result = await check(f);
+  failure(result, /inbox notes overdue/);
+  assert.ok(result.stdout.includes(old));
+  assert.ok(!result.stdout.includes(fresh));
+  assert.ok(!result.stdout.includes(future));
+  assert.ok(!result.stdout.includes('DO NOT PRINT THIS'));
+  assert.match(result.stdout, /reply <id> <text>.*drain --ack <id> required/);
+  assert.equal((await check(f)).stdout, '');
+  // A reply alone does not close pending intake; removal after ack stops wakes.
+  failure(await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' }), /inbox notes overdue/);
+  await notes(f, []);
+  assert.equal((await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' })).stdout, '');
+});
+test('inbox age is configurable in persistent config and environment overrides it', async t => {
+  const f = await fixture(t);
+  await notes(f, [{ id: noteId(100) }]);
+  await writeFile(join(f.state, 'quarterdeck-health.json'), JSON.stringify({
+    FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: '60',
+  }));
+  failure(await check(f), /inbox notes overdue/);
+  assert.equal((await check(f, {
+    FM_QUARTERDECK_HEALTH_FORCE: '1', FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: '200',
+  })).stdout, '');
+});
+test('overdue inbox and dashboard failure share a single wake line', async t => {
+  const f = await fixture(t, { state: 'unavailable' });
+  await notes(f, [{ id: noteId(1000) }]);
+  failure(await check(f), /inbox notes overdue.*snapshot not ready/);
+});
+test('many overdue ids are bounded with a remaining count', async t => {
+  const f = await fixture(t);
+  await notes(f, Array.from({ length: 25 }, (_, i) => ({ id: noteId(1000, `synthetic-${i}`) })));
+  const result = await check(f);
+  failure(result, /\(\+5 more; list inbox\)/);
+  assert.ok(result.stdout.length < 3000);
+});
+for (const [name, pending, extra] of [
+  ['unsafe id', [{ id: '123-unsafe\nline' }], {}],
+  ['missing id', [{}], {}],
+  ['wrong schema', [], { schema: 'unknown.v1' }],
+  ['omitted receipts', [], { omitted: ['synthetic'] }],
+]) {
+  test(`inbox ${name} fails closed without printing data`, async t => {
+    const f = await fixture(t);
+    await notes(f, pending, extra);
+    failure(await check(f), /inbox unavailable or invalid receipts/);
+  });
+}
+for (const age of ['0', '86401', 'invalid']) {
+  test(`invalid inbox age ${age} fails closed`, async t => {
+    failure(await check(await fixture(t), { FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE: age }), /inbox age limit invalid/);
+  });
+}
+test('inbox requires an explicit home and never silently skips a missing interface', async t => {
+  const f = await fixture(t);
+  failure(await check(f, { FM_HOME: '' }), /explicit FM_HOME required/);
+  await rm(join(f.state, 'bin', 'fm-inbox.sh'));
+  failure(await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' }), /inbox unavailable/);
+});
+test('oversized and failed inbox reads are sanitized failures', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.state, 'receipts.json'), 'x'.repeat(1024 * 1024 + 1));
+  failure(await check(f), /inbox unavailable/);
+  await writeFile(join(f.state, 'bin', 'fm-inbox.sh'), '#!/usr/bin/env bash\necho private-diagnostic >&2\nexit 1\n');
+  failure(await check(f, { FM_QUARTERDECK_HEALTH_FORCE: '1' }), /inbox unavailable/);
+});
+test('hung inbox reads have a bounded deadline', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.state, 'bin', 'fm-inbox.sh'), '#!/usr/bin/env bash\nexec sleep 30\n');
+  const start = Date.now();
+  failure(await check(f), /inbox unavailable/);
+  assert.ok(Date.now() - start < 6000);
 });

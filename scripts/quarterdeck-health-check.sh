@@ -18,6 +18,8 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
+import selectors
 import subprocess
 import sys
 import time
@@ -46,10 +48,17 @@ def probe(url):
 
 def snapshot(base, age):
     data = probe(base + '/api/bearings')
-    if not isinstance(data, dict) or data.get('schema') != 'fm-quarterdeck-call.v1' or data.get('state') != 'ready':
+    if not isinstance(data, dict) or data.get('schema') != 'fm-quarterdeck-call.v1':
         reject("Captain's Call snapshot not ready")
-    if data.get('stale') is True:
+    if data.get('stale') is True or data.get('state') == 'stale':
         reject("Captain's Call snapshot stale")
+    if data.get('error'):
+        reject("Captain's Call snapshot error")
+    # No viewers means no run yet; loading is a valid idle snapshot.
+    if data.get('state') == 'loading':
+        return
+    if data.get('state') != 'ready':
+        reject("Captain's Call snapshot not ready")
     try:
         stamp = datetime.datetime.fromisoformat(data['generatedAt'].replace('Z', '+00:00'))
         if stamp.tzinfo is None:
@@ -59,6 +68,64 @@ def snapshot(base, age):
         reject("Captain's Call snapshot timestamp missing or invalid")
     if elapsed < -60 or elapsed > age:
         reject("Captain's Call snapshot stale")
+
+def inbox(setting):
+    home = setting('FM_HOME')
+    if not isinstance(home, str) or not Path(home).is_absolute():
+        reject('inbox unavailable (explicit FM_HOME required)')
+    try:
+        age = int(setting('FM_QUARTERDECK_HEALTH_INBOX_MAX_AGE', '900'))
+        if not 1 <= age <= 86400:
+            raise ValueError()
+    except (TypeError, ValueError):
+        reject('inbox age limit invalid')
+    # Use the guarded read interface, not private endpoint files. Bound both
+    # execution and output before parsing; never print bodies or diagnostics.
+    try:
+        with subprocess.Popen(
+                [str(Path(home) / 'bin/fm-inbox.sh'), 'receipts', '--all-pending'],
+                cwd=home, env={**os.environ, 'FM_HOME': home},
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as process:
+            try:
+                data = bytearray()
+                deadline = time.monotonic() + 3
+                with selectors.DefaultSelector() as selector:
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0 or not selector.select(remaining):
+                            raise ValueError()
+                        chunk = os.read(process.stdout.fileno(), 65536)
+                        if not chunk:
+                            break
+                        data.extend(chunk)
+                        if len(data) > 1024 * 1024:
+                            raise ValueError()
+                if process.wait(timeout=max(0.001, deadline - time.monotonic())) != 0:
+                    raise ValueError()
+            finally:
+                if process.poll() is None:
+                    process.kill()
+            receipts = json.loads(data)
+        if receipts.get('schema') != 'fm-inbox-receipts.v1' or not isinstance(receipts.get('pending'), list) or receipts.get('omitted'):
+            raise ValueError()
+        overdue = []
+        now = time.time()
+        for note in receipts['pending']:
+            note_id = note['id']
+            match = re.fullmatch(r'([0-9]{1,12})(?:[-_.][A-Za-z0-9_.-]{1,100})?', note_id) if isinstance(note_id, str) else None
+            if not match:
+                raise ValueError()
+            if now - int(match[1]) > age:
+                overdue.append(note_id)
+    except Exception:
+        reject('inbox unavailable or invalid receipts')
+    if overdue:
+        ids = ', '.join(sorted(set(overdue))[:20])
+        extra = max(0, len(set(overdue)) - 20)
+        suffix = f' (+{extra} more; list inbox)' if extra else ''
+        return f'inbox notes overdue: {ids}{suffix}; act safely, then bin/fm-inbox.sh reply <id> <text> and bin/fm-inbox.sh drain --ack <id> required'
+    return None
 
 def main():
     state = Path(sys.argv[1])
@@ -73,6 +140,23 @@ def main():
         if 0 <= elapsed < 600:
             return
     stamp.write_text(str(now))  # Throttle failed attempts too; watcher wake owns recovery.
+    issues = []
+    try:
+        message = inbox(setting)
+        if message:
+            issues.append(message)
+    except Unhealthy as error:
+        issues.append(str(error))
+    try:
+        dashboard(setting)
+    except Unhealthy as error:
+        issues.append(str(error))
+    except Exception:
+        issues.append('invalid dashboard configuration or state')
+    if issues:
+        print('Quarterdeck health: ' + '; '.join(issues))
+
+def dashboard(setting):
     port = str(setting('FM_QUARTERDECK_HEALTH_PORT'))
     tailnet = setting('FM_QUARTERDECK_HEALTH_URL')
     if not port or not tailnet:
