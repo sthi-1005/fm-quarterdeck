@@ -530,6 +530,9 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .compact-head h1 { flex: 0 0 auto; margin: 0; font-size: 22px; white-space: nowrap; }
 .compact-head p:not(.eyebrow) { min-width: 0; max-width: none; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-small); }
 .compact-head .source-badge, .compact-head > button { flex: 0 0 auto; min-height: 32px; padding: 2px 10px; font-size: var(--text-small); }
+.feature-head:has(#fleet-source) { flex-wrap: wrap; }
+.feature-head #fleet-source { flex: 1 1 100%; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; line-height: 1.5; }
+.feature-head #fleet-source[data-state="warning"] { color: var(--amber); }
 .section-heading { margin-top: var(--space-5); margin-bottom: var(--space-3); font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
 .metric-card { position: relative; min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

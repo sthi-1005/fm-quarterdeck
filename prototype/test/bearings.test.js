@@ -440,8 +440,10 @@ test("GET /api/bearings serves the cached model, ?since answers unchanged, and n
   assert.equal(model.cards.length, 3);
   assert.doesNotMatch(JSON.stringify(model), /\/srv\/|synthetic\/home/);
   const unchanged = await (await fetch(`${base}/api/bearings?since=${model.rev}`)).json();
-  assert.deepEqual(Object.keys(unchanged).sort(), ["checkedAt", "error", "observedAt", "rev", "stale", "state", "unchanged"]);
+  assert.deepEqual(Object.keys(unchanged).sort(), ["checkedAt", "error", "firstmateActivity", "observedAt", "rev", "stale", "state", "unchanged"]);
   assert.equal(unchanged.unchanged, true);
+  assert.equal(unchanged.firstmateActivity.lastTurnAt, null);
+  assert.ok(Number.isFinite(Date.parse(unchanged.firstmateActivity.readAt)));
   const changed = await (await fetch(`${base}/api/bearings?since=outdated`)).json();
   assert.equal(changed.cards.length, 3);
   assert.equal(hub.stats().runs, 1);
@@ -497,7 +499,8 @@ test("a served-revision change mid-stream sends event: revision and closes", asy
   const { port, moveHead } = await liveServer(context, { options: { bearingsStream: { heartbeatMs: 40 } } });
   const client = streamClient(port);
   context.after(() => client.stop());
-  await client.until(() => client.events.some((event) => event.comment), "heartbeat");
+  await client.until(() => client.events.some((event) => event.event === "observed" && event.data.firstmateActivity), "activity heartbeat");
+  assert.equal(client.events.find((event) => event.event === "observed").data.firstmateActivity.lastWakeAt, null);
   moveHead("b".repeat(40));
   await client.until(() => client.ended, "stream end");
   assert.equal(client.events.at(-1).event, "revision");

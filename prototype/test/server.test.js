@@ -541,6 +541,12 @@ test("live lanes and fleet are derived from a fake FM_HOME", async (context) => 
 
   const dashboard = await fetch(`http://127.0.0.1:${port}/api/dashboard`).then((response) => response.json());
   assert.equal(dashboard.fleet.source, "Firstmate home");
+  for (const activity of [data.firstmateActivity, dashboard.firstmateActivity]) {
+    assert.deepEqual(Object.keys(activity).sort(), ["heartbeatAt", "lastTurnAt", "lastWakeAt", "readAt", "watcherBeatAt"]);
+    assert.equal(activity.lastWakeAt, null);
+    assert.equal(activity.watcherBeatAt, null);
+    assert.ok(Number.isFinite(Date.parse(activity.readAt)));
+  }
   assert.equal(dashboard.fleet.summary.activeAgents, 0, "meta files and captain decisions are not executing workers");
   assert.equal(dashboard.fleet.summary.openDecisions, 1);
   assert.equal(dashboard.fleet.projects[0].name, "Alpha");

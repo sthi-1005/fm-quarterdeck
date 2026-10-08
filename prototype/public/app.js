@@ -1724,6 +1724,11 @@ function renderCallBadge(model) {
   callCount = count;
 }
 function observeBearings(data) {
+  if (data.firstmateActivity) {
+    firstmateActivity = data.firstmateActivity;
+    activityFetchedAt = Date.now();
+    renderFirstmateActivity();
+  }
   const item = freshness.bearings;
   item.state = data.state;
   item.observedAt = data.observedAt;
@@ -1772,6 +1777,34 @@ function renderFreshness() {
   pill.setAttribute("aria-label", full);
 }
 
+let firstmateActivity = null;
+let activityFetchedAt = null;
+function renderFirstmateActivity(now = Date.now()) {
+  const node = $("#fleet-source");
+  if (!node) return;
+  const time = (value) => value ? Date.parse(value) : NaN;
+  const relative = (value) => {
+    const stamp = time(value);
+    if (!Number.isFinite(stamp)) return "unknown";
+    const seconds = Math.floor((now - stamp) / 1000);
+    if (seconds < 0) return "in the future (clock skew)";
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+  };
+  const local = (value) => Number.isFinite(time(value)) ? new Date(value).toLocaleString() : "unknown";
+  const activity = firstmateActivity || {};
+  const latest = [activity.lastTurnAt, activity.lastWakeAt, activity.watcherBeatAt, activity.heartbeatAt]
+    .filter((value) => Number.isFinite(time(value))).sort((a, b) => time(b) - time(a))[0];
+  const watcher = time(activity.watcherBeatAt);
+  const stale = activityFetchedAt !== null && now - activityFetchedAt > 60000;
+  node.dataset.state = stale || (Number.isFinite(watcher) && (now - watcher > 300000 || watcher > now)) ? "warning" : Number.isFinite(watcher) ? "fresh" : "unknown";
+  const status = stale ? "stale reading" : !Number.isFinite(watcher) ? "unknown" : now - watcher > 300000 ? "stale" : watcher > now ? "clock skew" : "live";
+  node.textContent = `Last activity seen ${relative(latest)} (${local(latest)}) · ${status} · watcher ${relative(activity.watcherBeatAt)}${stale ? ` · as of ${local(activity.readAt)} (fetch ${relative(new Date(activityFetchedAt).toISOString())})` : ""}`;
+  node.title = `Last turn: ${local(activity.lastTurnAt)} · Wake queue: ${local(activity.lastWakeAt)} · Watcher: ${local(activity.watcherBeatAt)} · Heartbeat: ${local(activity.heartbeatAt)} · Read: ${local(activity.readAt)}`;
+}
+
 function lanesQuery() {
   const params = new URL("http://localhost/api/lanes").searchParams;
   params.set("windowBytes", transcriptWindowBytes);
@@ -1814,7 +1847,9 @@ async function refreshEndpoint(key) {
       renderSummary(data.fleet.summary);
       renderWorkSplit(data.fleet.workSplit);
       renderExpenses(data.expenses);
-      $("#fleet-source").textContent = data.fleet.source;
+      firstmateActivity = data.firstmateActivity || null;
+      activityFetchedAt = Date.now();
+      renderFirstmateActivity();
       if (data.refreshMs && !refreshTimer) {
         refreshMs = data.refreshMs;
         refreshTimer = window.setInterval(loadDashboard, refreshMs);
@@ -1827,6 +1862,9 @@ async function refreshEndpoint(key) {
       if (taskOlderPages) for (const lane of data.lanes) for (const session of lane.sessions) if (session.loaded && retainedSessions.size < 60) retainedSessions.add(session.id);
       if (diskOlderPages) for (const session of data.transcript.sessions) if (session.loaded && retainedDisk.size < 60) retainedDisk.add(session.id);
       renderLanes(data);
+      firstmateActivity = data.firstmateActivity || null;
+      activityFetchedAt = Date.now();
+      renderFirstmateActivity();
     }
     if (key !== "quota" || !data.error) item.error = null;
     if (key !== "quota" || !data.error) item.stale = false;
@@ -2564,7 +2602,8 @@ for (const selector of ["#tight-work"]) {
     void saveWorkPresentation(body, form.querySelector("button"));
   });
 }
-window.setInterval?.(renderFreshness, 1000);
+renderFirstmateActivity();
+window.setInterval?.(() => { renderFreshness(); renderFirstmateActivity(); }, 1000);
 window.addEventListener("hashchange", (event) => {
   const next = event?.newURL ? new URL(event.newURL).hash : window.location.hash;
   const own = ownRouteChanges.indexOf(next);

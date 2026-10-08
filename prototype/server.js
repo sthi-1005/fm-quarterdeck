@@ -11,6 +11,7 @@ import { PreviewLifecycle } from "./preview-lifecycle.js";
 import { gzip } from "node:zlib";
 import { promisify } from "node:util";
 import { readConversationTranscript } from "./transcript.js";
+import { readFirstmateActivity } from "./firstmate-activity.js";
 import { compactLanes } from "./lane-payload.js";
 import { readSupervisionOutcomes } from "./supervision.js";
 import { createQuotaReader } from "./quota.js";
@@ -916,13 +917,14 @@ export async function loadExpenses(env = {}, { canonicalPath = CANONICAL_LEDGER_
 }
 
 export async function dashboardData(env = process.env, agentStateOwner = createAgentStateOwner(configuredStatePath(env)), durability = verifyDurability, expenseReader = loadExpenses) {
-  const [fleet, expenses] = await Promise.all([loadFleet(env, agentStateOwner, durability), expenseReader(env)]);
+  const [fleet, expenses, firstmateActivity] = await Promise.all([loadFleet(env, agentStateOwner, durability), expenseReader(env), readFirstmateActivity(env.FM_HOME, { claudeConfigDir: claudeConfigDir(env) })]);
   const configuredRefresh = Number(env.FM_REFRESH_MS || 0);
   return {
     generatedAt: new Date().toISOString(),
     refreshMs: Number.isFinite(configuredRefresh) && configuredRefresh >= 5000 ? configuredRefresh : 0,
     fleet,
     expenses,
+    firstmateActivity,
   };
 }
 
@@ -1223,6 +1225,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         await sendJson(request, response, 200, {
           generatedAt: new Date().toISOString(),
           source: firstmate.source,
+          firstmateActivity: await readFirstmateActivity(env.FM_HOME, { claudeConfigDir: claudeConfigDir(env) }),
           ...(url.searchParams.get("format") === "refs.v1" ? compactLanes(firstmate.lanes) : { lanes: firstmate.lanes }),
           transcript: firstmate.transcript,
         });
@@ -1251,7 +1254,9 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         bearingsSource.touch();
         const since = url.searchParams.get("since");
         const freshness = bearingsSource.freshness();
-        await sendJson(request, response, 200, since && since === freshness.rev ? { unchanged: true, ...freshness } : bearingsSource.current());
+        const model = since && since === freshness.rev ? { unchanged: true, ...freshness } : bearingsSource.current();
+        const firstmateActivity = await readFirstmateActivity(env.FM_HOME, { claudeConfigDir: claudeConfigDir(env) });
+        await sendJson(request, response, 200, { ...model, firstmateActivity });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/bearings/stream") {
@@ -1312,7 +1317,10 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
   // SSE framing is written by hand: sendJson gzips, which would buffer events.
   function openBearingsStream(request, response) {
     response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
-    const send = (event, data, id) => response.write(`${id ? `id: ${id}\n` : ""}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const send = async (event, data, id) => {
+      if (event === "model" || event === "observed") data = { ...data, firstmateActivity: await readFirstmateActivity(env.FM_HOME, { claudeConfigDir: claudeConfigDir(env) }) };
+      if (!response.writableEnded && !response.destroyed) response.write(`${id ? `id: ${id}\n` : ""}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
     const stream = { end: (event) => { if (!response.writableEnded) { send(event, {}); response.end(); } } };
     streams.add(stream);
     // Every push and heartbeat re-checks the served revision; old code never streams.
@@ -1329,7 +1337,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     const unsubscribe = bearingsSource.subscribe((event) => {
       void guarded(() => event.type === "model" ? send("model", event.model, event.model.rev) : send("observed", { rev: event.rev, state: event.state, observedAt: event.observedAt, checkedAt: event.checkedAt, stale: event.stale, error: event.error }));
     });
-    const heartbeat = setInterval(() => { void guarded(() => response.write(": hb\n\n")); }, streamOptions.heartbeatMs);
+    const heartbeat = setInterval(() => { void guarded(() => { response.write(": hb\n\n"); void send("observed", bearingsSource.freshness()); }); }, streamOptions.heartbeatMs);
     const recycle = setTimeout(() => stream.end("bye"), streamOptions.recycleMs);
     response.on("close", () => { streams.delete(stream); unsubscribe(); clearInterval(heartbeat); clearTimeout(recycle); });
   }
