@@ -16,7 +16,7 @@ const MAX_ASK_CHARS = 4000;
 const MAX_REPLIES = 6;
 const MAX_OPEN = 100;
 const MAX_TOMBSTONES = 5000;
-const MATCHING_VERSION = 2;
+const MATCHING_VERSION = 3;
 const MiB = 1024 * 1024;
 
 // ---------------------------------------------------------------------------------------
@@ -42,7 +42,7 @@ function markerLine(line) {
 // Quoted alternatives after the word "reply": Reply **"yes"**, reply `ship` or `hold`,
 // shortest reply: "go". Unquoted replies are ambiguous and are never guessed.
 const REPLY = /\breply(?:\s+(?:with|exactly))?\s*:?\s*/gi;
-const QUOTED = /^[*_]{0,3}\s*(?:"([^"\n]{1,200})"|“([^”\n]{1,200})”|`([^`\n]{1,200})`)\s*[*_]{0,3}/;
+const QUOTED = /^[*_]{0,3}\s*(?:"([^"\n]{1,200})"|“([^”\n]{1,200})”|`([^`\n]{1,200})`|'([^'\n]{1,200})'|‘([^’\n]{1,200})’)\s*[*_]{0,3}/;
 const SEPARATOR = /^\s*(?:,|\/|\||\bor\b)\s*/i;
 export function extractReplies(text) {
   const replies = [];
@@ -51,13 +51,21 @@ export function extractReplies(text) {
     for (;;) {
       const quoted = QUOTED.exec(rest);
       if (!quoted) break;
-      const reply = (quoted[1] ?? quoted[2] ?? quoted[3]).trim();
+      const reply = quoted.slice(1).find(value => value !== undefined).trim();
       if (reply && !replies.includes(reply) && replies.length < MAX_REPLIES) replies.push(reply);
       rest = rest.slice(quoted[0].length);
       const separator = SEPARATOR.exec(rest);
       if (!separator) break;
       rest = rest.slice(separator[0].length);
     }
+  }
+  // Explicit option labels at the start of an ask/list line also supply replies:
+  // - "stay here": continue; or "plan A" keeps the current setup.
+  for (const line of String(text).split(/\r?\n/)) {
+    const quoted = QUOTED.exec(line.slice(LEAD.exec(line)[0].length));
+    if (!quoted) continue;
+    const reply = quoted.slice(1).find(value => value !== undefined).trim();
+    if (reply && !replies.includes(reply) && replies.length < MAX_REPLIES) replies.push(reply);
   }
   return replies;
 }
@@ -275,7 +283,7 @@ async function readNewLines(file, cursor, { maxBytes, maxLineBytes, backfillByte
       for (let newline = data.indexOf(10); newline >= 0; newline = data.indexOf(10, start)) {
         if (skip) { skip = false; start = newline + 1; carry = Buffer.alloc(0); carryStart = base + start; offset = carryStart; continue; }
         const line = carry.length ? Buffer.concat([carry, data.subarray(start, newline)]) : data.subarray(start, newline);
-        await onLine(line, carry.length ? carryStart : base + start);
+        if (line.length <= maxLineBytes) await onLine(line, carry.length ? carryStart : base + start);
         carry = Buffer.alloc(0);
         start = newline + 1;
         carryStart = base + start;
@@ -295,7 +303,7 @@ async function readNewLines(file, cursor, { maxBytes, maxLineBytes, backfillByte
 // The scanner owns the chat-ask state. scan() is cheap when nothing grew (stat only).
 export function createChatAskScanner({ home, claudeConfigDir = null, statePath = null, store = statePath ? createStateFile(statePath) : memoryStateFile(),
   now = Date.now, discover = discoverPrimarySources, discoverEveryMs = 30000, backfillBytes = 4 * MiB, backfillMaxAgeMs = 24 * 3600 * 1000,
-  maxScanBytes = 4 * MiB, maxLineBytes = 2 * MiB, maxCaptainLineBytes = 64 * 1024 } = {}) {
+  maxScanBytes = 4 * MiB, maxLineBytes = 2 * MiB } = {}) {
   let state = null;
   let view = { state: home ? "loading" : "unavailable", error: home ? null : "FM_HOME is not configured", checkedAt: null, sources: [], warnings: [] };
   let sources = null, discoveredAt = -Infinity, scanning = null;
@@ -315,8 +323,8 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
     for (const [key] of tombs.slice(MAX_TOMBSTONES)) delete target.tombstones[key];
   }
 
-  // Apply one parsed record. Asks open; captain prompts resolve the newest earlier open ask
-  // whose quoted reply occurs as a whole phrase; repeated marker+reply supersedes an older ask.
+  // Apply one parsed record. Captain prompts test every earlier open ask; repeated
+  // marker+reply supersedes an older ask. All matching stays within the record byte cap.
   function applyRecord(target, record, { source, origin, offset, backfill }, toolNames) {
     const at = (() => { const value = new Date(record.timestamp ?? record.message?.timestamp); return Number.isNaN(value.valueOf()) ? null : value.toISOString(); })();
     const recordId = (origin === "claude" ? record.uuid : record.id) || `${source}@${offset}`;
@@ -328,6 +336,11 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
           if (target.tombstones[key] || (target.asks[key] && target.asks[key].status !== "open")) continue;
           const existing = target.asks[key];
           const ask = existing || { key, kind: found.kind, marker: found.marker, text: found.text, replies: found.replies, source, offset, part: turn.part, recordId, at, status: "open", linkedTasks: [] };
+          // Replay refreshes extraction on existing open cards, not just their cursors.
+          if (existing && JSON.stringify(existing.replies) !== JSON.stringify(found.replies)) {
+            existing.replies = found.replies;
+            changed = true;
+          }
           // A backfill of a long-lived transcript must not resurface asks from days ago.
           if (!existing && backfill && at && now() - Date.parse(at) > backfillMaxAgeMs) {
             target.tombstones[key] = new Date(now()).toISOString();
@@ -339,17 +352,14 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
           }
           if (!existing) { target.asks[key] = ask; changed = true; }
         }
-      } else if (turn.text.length <= maxCaptainLineBytes) {
+      } else {
         const prompt = { source, offset, part: turn.part, recordId, at };
         const matching = Object.values(target.asks)
           .filter(ask => ask.status === "open" && isLater(prompt, ask))
           .sort((a, b) => String(b.at).localeCompare(String(a.at)) || b.offset - a.offset);
-        // One newest ask per distinct suggested phrase, not one per occurrence or line.
-        const answered = new Set();
         for (const ask of matching) {
-          const reply = ask.replies.find(reply => !answered.has(normalizeReply(reply)) && hasReply(turn.text, reply));
+          const reply = ask.replies.find(reply => hasReply(turn.text, reply));
           if (!reply) continue;
-          answered.add(normalizeReply(reply));
           changed = resolveAsk(target, ask, "reply", { resolvedReply: normalizeReply(reply), resolvedByRecord: recordId }) || changed;
         }
       }
@@ -398,8 +408,10 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
             const backfill = prior.ino === null;
             const toolNames = new Map();
             const outcome = await readNewLines(entry.file, prior, { maxBytes: maxScanBytes, maxLineBytes, backfillBytes, onLine: async (line, offset) => {
-              // Parse only lines that can carry a marker or a captain prompt.
-              if (!line.includes("NEEDED") && !(line.length <= maxCaptainLineBytes && line.includes('"user"'))) return;
+              // Human mid-turn prompts may be queued_command attachments, not user
+              // records. The whole-record cap, not a separate 64 KiB prompt cap, bounds
+              // parsing. Adapters still exclude tool output, hooks and machine traffic.
+              if (!line.includes("NEEDED") && !line.includes('"user"') && !line.includes('"queued_command"')) return;
               let record;
               try { record = JSON.parse(line.toString("utf8")); } catch { return; }
               if (applyRecord(target, record, { source: entry.source, origin: entry.origin, offset, backfill }, toolNames)) asksChanged = true;
@@ -487,7 +499,9 @@ export function composeCallModel(base, asks, chatView) {
   const linked = new Map();
   const unlinked = [];
   for (const ask of asks) {
-    const task = ask.linkedTasks.find((name) => tasks.has(name));
+    // The snapshot can finish between a scan and a cache read (including cold GETs
+    // without a stream subscription). Dedup at composition too, before any publication.
+    const task = ask.linkedTasks.find((name) => tasks.has(name)) || base.cards.find(card => matchesHold(ask, card))?.task;
     if (task) linked.set(task, [...(linked.get(task) || []), ask]);
     else unlinked.push(ask);
   }

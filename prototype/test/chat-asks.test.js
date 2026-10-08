@@ -163,7 +163,7 @@ test("same-marker replies supersede older asks despite changed prose, not differ
   assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker", "newer"]);
   await appendFile(env.transcript, lines(captain("answer", 4, "Please retire both -- inspect the logs too.")));
   await scanner.scan();
-  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker"], "a reply resolves only the newest matching ask");
+  assert.deepEqual(scanner.asks(), [], "a reply tests every earlier open ask, including different markers");
 });
 
 test("an upgraded scanner replays a bounded window to repair persisted open asks and repeats", async (context) => {

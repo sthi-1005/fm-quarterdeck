@@ -7,7 +7,8 @@ import path from "node:path";
 
 // Live Captain's Call. Contract: BEARINGS.md. Quarterdeck runs only Firstmate's own
 // bounded bearings projection to build calls. A bounded read of the selected home's
-// backlog adds durable clocks only; it never creates calls or writes under FM_HOME.
+// backlog adds durable clocks and existing main-home hold reasons only; it never creates
+// calls or writes under FM_HOME.
 export const MODEL_SCHEMA = "fm-quarterdeck-call.v1";
 const SOURCE_SCHEMA = "fm-bearings.v1";
 const MIN_GAP_FLOOR_MS = 15000;
@@ -72,7 +73,30 @@ export function backlogClocks(text) {
   }
   return clocks;
 }
-async function addBacklogClocks(output, home) {
+// Legacy snapshots shorten summary and omit reason. Decode only the versioned captain
+// hold field on unchecked items, never body prose or another home's records. Duplicate
+// ids and malformed/noncanonical UTF-8/base64 fail closed.
+export function backlogHoldReasons(text) {
+  const reasons = new Map(), seen = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const item = line.match(/^\s*-\s+\[ \]\s+(\S+)\s+-\s+(.+)$/);
+    if (!item || !TASK_ID.test(item[1])) continue;
+    const [, id, fields] = item;
+    if (seen.has(id)) { reasons.delete(id); continue; }
+    seen.add(id);
+    if (!fields.includes("(hold-kind: captain)")) continue;
+    const encoded = fields.match(/\(hold: fm-hold-v1:([A-Za-z0-9+/=]{1,22000})\)/)?.[1];
+    if (!encoded) continue;
+    const bytes = Buffer.from(encoded, "base64");
+    if (bytes.toString("base64") !== encoded || bytes.length > 16 * 1024) continue;
+    try {
+      const reason = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (reason.trim()) reasons.set(id, reason);
+    } catch {}
+  }
+  return reasons;
+}
+async function addBacklogEvidence(output, home) {
   let file;
   try {
     file = await open(path.join(home, "data", "backlog.md"), "r");
@@ -82,9 +106,13 @@ async function addBacklogClocks(output, home) {
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
     if (bytesRead === buffer.length) return output;
     const raw = JSON.parse(output);
-    const clocks = backlogClocks(buffer.subarray(0, bytesRead).toString("utf8"));
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    const clocks = backlogClocks(text), reasons = backlogHoldReasons(text);
     if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
-      object(row) && row.owner === "(main)" ? { ...clocks.get(row.id), ...row } : row);
+      object(row) && row.owner === "(main)" ? {
+        ...clocks.get(row.id), ...row,
+        ...(typeof row.reason !== "string" && reasons.has(row.id) ? { reason: reasons.get(row.id) } : {}),
+      } : row);
     return JSON.stringify(raw);
   } catch { return output; } finally { await file?.close(); }
 }
@@ -226,7 +254,7 @@ export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = acc
       });
     });
   };
-  return () => (pending ||= once().then((output) => addBacklogClocks(output, home)).finally(() => { pending = null; }));
+  return () => (pending ||= once().then((output) => addBacklogEvidence(output, home)).finally(() => { pending = null; }));
 }
 
 // Reads mtimes and sizes only (never contents) of the two record kinds whose change
