@@ -75,10 +75,15 @@ try {
     const note = await readFile(path.join(home, "inbox", `${batch.id}.note`), "utf8");
     assert.match(note, new RegExp(`request_id=agentos-review:${batch.id}`)); assert.match(note, /```json fm-review/);
     await evaluate("document.querySelector('#review-close').click(); getSelection().removeAllRanges(); document.querySelector('#refresh').click()");
-    await until("document.querySelector('.review-prompts')");
-    const key = await evaluate("document.querySelector('.review-prompts').closest('article').dataset.recordKey");
+    await until(`Array.from(document.querySelectorAll('article.message')).some(node => node.querySelector('.message-source')?.textContent.includes(${JSON.stringify(batch.id)}))`);
+    const key = await evaluate(`Array.from(document.querySelectorAll('article.message')).find(node => node.querySelector('.message-source')?.textContent.includes(${JSON.stringify(batch.id)})).dataset.recordKey`);
     const noteSelector = `[data-record-key=${JSON.stringify(key)}]`;
-    await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}).scrollIntoView({block:'center'})`);
+    await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}).scrollIntoView({block:'start'})`);
+    if (process.env.SCREENSHOT_DIR) {
+      await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
+      const { data } = await command('Page.captureScreenshot', { format: 'png' });
+      await writeFile(path.join(process.env.SCREENSHOT_DIR, `review-annotation-collapsed-${width}.png`), Buffer.from(data, 'base64'));
+    }
     assert.equal(await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}+' .review-meta').open`), false);
     assert.equal(await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}+' .message-content').innerText.includes('Quarterdeck review:')`), false);
     const summary = noteSelector + ' [data-review-chip="note-0"] > summary';
@@ -94,6 +99,7 @@ try {
     await evaluate("document.querySelector('#refresh').click()");
     await until(`document.querySelector(${JSON.stringify(noteSelector)}+' [data-review-chip="note-0"]').open && document.querySelector('#messages').innerText.includes('Refresh marker at ${width}px')`);
     if (process.env.SCREENSHOT_DIR) {
+      await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}).scrollIntoView({block:'start'})`);
       await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
       const { data } = await command("Page.captureScreenshot", { format: "png" });
       await writeFile(path.join(process.env.SCREENSHOT_DIR, `review-annotation-${width}.png`), Buffer.from(data, "base64"));

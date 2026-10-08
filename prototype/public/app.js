@@ -124,7 +124,16 @@ function messageRecordKey(message) { return message.recordId || reviewId([messag
 function reviewChip(glyph, key, title, value, query) {
   const json = JSON.stringify(value, null, 2);
   const match = query.trim() && json.toLowerCase().includes(query.trim().toLowerCase());
-  return `<details class="review-meta" data-review-chip="${key}"${match ? " open" : ""}><summary aria-label="${escapeHtml(title)}" title="${escapeHtml(title)}">${glyph}</summary><div class="review-meta-card"><pre>${highlightSearchMatches(escapeHtml(json), query)}</pre><button type="button" class="review-copy-target" data-review-copy="${escapeHtml(JSON.stringify(value))}">Copy ${glyph === "a" ? "target" : "information"}</button></div></details>`;
+  let content = `<pre>${highlightSearchMatches(escapeHtml(json), query)}</pre>`;
+  if (glyph === "a") {
+    const record = value.record;
+    const context = record?.recordId || (record ? [record.lanes?.join(", ") || record.quoteLanes?.join(", "), record.at || record.quoteTime, record.source, record.sha256].filter(Boolean).join(" · ") : "");
+    const excerpt = value.target?.text || value.text || record?.quoteExcerpt || "";
+    const quote = value.target?.type === "text-range" ? `${value.target.prefix}[${excerpt}]${value.target.suffix}` : excerpt;
+    const readable = [value.label || `<${value.tag}>`, context, quote, value.selector].filter(Boolean).join("\n");
+    content = `<pre>${highlightSearchMatches(escapeHtml(readable), query)}</pre><details class="review-target-exact" data-review-chip="${key}-exact"${match ? " open" : ""}><summary>Exact target metadata</summary><pre>${highlightSearchMatches(escapeHtml(json), query)}</pre></details>`;
+  }
+  return `<details class="review-meta" data-review-chip="${key}"${match ? " open" : ""}><summary aria-label="${escapeHtml(title)}" title="${escapeHtml(title)}">${glyph}</summary><div class="review-meta-card">${content}<button type="button" class="review-copy-target" data-review-copy="${escapeHtml(JSON.stringify(value))}">Copy ${glyph === "a" ? "target" : "information"}</button></div></details>`;
 }
 function renderReviewContent(review, query) {
   const { prompts, ...batch } = review;
