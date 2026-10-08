@@ -1713,10 +1713,13 @@ const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", 
 let callCount = 0;
 function renderCallBadge(model) {
   const count = model.cards.length;
-  const badge = $("#call-badge");
-  badge.textContent = String(count);
-  badge.hidden = count === 0;
-  badge.setAttribute("aria-label", `${count} Captain's Calls`);
+  for (const id of ["#call-badge", "#call-mobile-badge"]) {
+    const badge = $(id);
+    if (!badge) continue;
+    badge.textContent = String(count);
+    badge.hidden = count === 0;
+    badge.setAttribute("aria-label", `${count} Captain's Calls`);
+  }
   if (count > callCount) $("#sr-announcer").textContent = `${count} Captain's Calls need your attention`;
   callCount = count;
 }

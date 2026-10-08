@@ -1779,6 +1779,8 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-card-resolved { border-style: dashed; }
 .call-card-resolved pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; }
 .call-badge { display: inline-block; min-width: 1.6em; padding: 0 4px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 11px; text-align: center; }
+.mobile-dock [data-mobile-view="overview"] { position: relative; }
+.mobile-dock .call-badge { position: absolute; top: 2px; right: max(2px, calc(50% - 32px)); font-size: 10px; line-height: 1.5; }
 @keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
 @media (forced-colors: active) { #captain-call[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; } .call-status { border-color: Highlight; } }
