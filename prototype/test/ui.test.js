@@ -880,6 +880,25 @@ test("full history is retained across bounded pages and disk-session selection",
   assert.doesNotMatch(app.node("#messages").innerHTML, /Turn 250</);
 });
 
+test("review notes show prompts with accessible native metadata chips and prompt compact previews", () => {
+  const app = ui();
+  const review = { batch: "123e4567-e89b-12d3-a456-426614174000", route: "#lanes/alpha", end: false, version: "a".repeat(40), preview: "uat", prompts: [{ prompt: "Fix the value", tag: "span", selector: "#secret-selector", text: "target" }, { prompt: "Looks good", tag: "message", selector: "", text: "" }] };
+  seed(app, [lane("alpha", [record({ role: "captain", text: "Quarterdeck review: raw metadata", review })])]);
+  app.run("renderFeed()");
+  const html = app.node("#messages").innerHTML;
+  assert.match(html, /Fix the value/);
+  assert.match(html, /Looks good/);
+  assert.match(html, /<details class="review-meta" data-review-chip="batch"/);
+  assert.match(html, /aria-label="Review batch information"/);
+  assert.match(html, /aria-label="Annotation target for note 1:/);
+  assert.doesNotMatch(html, /Annotation target for note 2:/);
+  assert.doesNotMatch(html, /Quarterdeck review: raw metadata/);
+  app.run('compactViews.add(renderedReadingScope); renderFeed()');
+  assert.match(app.node("#messages").innerHTML, /compact-line-preview[^]*Fix the value; Looks good/);
+  app.run('messageFormat = "raw"; renderFeed()');
+  assert.match(app.node("#messages").innerHTML, /Quarterdeck review: raw metadata/);
+});
+
 test("Lane Chat renders original IDs and exact quote snapshots without fabricating identities", () => {
   const app = ui();
   const one = record({ recordId: "main-pi-session/a.jsonl:12:0", text: "First message" });
@@ -892,7 +911,7 @@ test("Lane Chat renders original IDs and exact quote snapshots without fabricati
     { type: "record", recordId: one.recordId }, { type: "record", recordId: two.recordId },
   ]);
   assert.equal(targets.length, 4, "identical no-ID events in one lane remain separate rows");
-  assert.deepEqual(targets.slice(2), Array(2).fill({ type: "quote", time: "12:00", text: "working: repeated", lanes: ["alpha", "general"] }));
+  assert.deepEqual(targets.slice(2), Array(2).fill({ source: "state/alpha.status", occurredAt: "2026-02-01T12:00:00.000Z", text: "working: repeated", lanes: ["alpha", "general"] }));
   assert.match(app.node("#messages").innerHTML, /data-lane-message-index="3"/);
   assert.doesNotMatch(app.node("#messages").innerHTML, /data-review-id="record:/);
 });
