@@ -16,7 +16,7 @@ function setup(fetchImpl) {
   section.append(status, list); document.body.append(section, outside);
   let controller;
   const patcher = window.bearingsPatch.createCallPatcher({ section, list, status, timers, win: window, onRender: node => controller?.render(node), onApply: m => controller?.prune(m.cards.map(c => c.key)) });
-  controller = window.bearingsDismiss.createDismissController({ list, fetchImpl, focusTarget: outside, doc: document, onDismiss: key => { if (patcher.tracker.state().selected === key) patcher.tracker.deselect(); } });
+  controller = window.bearingsDismiss.createDismissController({ list, fetchImpl, focusTarget: () => outside, doc: document, onDismiss: key => { if (patcher.tracker.state().selected === key) patcher.tracker.deselect(); } });
   patcher.update(model([chat, hold]));
   const node = key => list.children.find(n => n.getAttribute('data-call-key') === key);
   return { document, timers, list, outside, patcher, controller, node, button: name => node(chat.key).querySelector(`[data-call-dismiss${name ? `-${name}` : ''}]`) };

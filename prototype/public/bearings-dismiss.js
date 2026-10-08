@@ -40,7 +40,7 @@ window.bearingsDismiss = (() => {
         states.delete(key);
         const current = nodeFor(key);
         // Do not steal focus if the captain moved to another card during delivery.
-        if (current?.contains(doc.activeElement)) focusTarget?.focus();
+        if (current?.contains(doc.activeElement)) (typeof focusTarget === "function" ? focusTarget() : focusTarget)?.focus();
         onDismiss(key);
       } catch (failure) {
         if (destroyed) return;

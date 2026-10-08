@@ -1750,7 +1750,8 @@ callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
 // Focus leaves the held section only after a confirmed dismissal; drafts remain protected.
 callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
-  list: $("#call-cards"), focusTarget: $('.primary-tab[data-view="overview"]'),
+  list: $("#call-cards"),
+  focusTarget: () => [...document.querySelectorAll('.primary-tab[data-view="overview"], [data-mobile-view="overview"]')].find((node) => node.getClientRects().length),
   onDismiss(key) { if (callPatcher.tracker.state().selected === key) callPatcher.tracker.deselect(); },
 });
 const callLive = window.bearingsLive?.createBearingsLive({

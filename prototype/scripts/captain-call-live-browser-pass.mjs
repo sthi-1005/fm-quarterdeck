@@ -105,7 +105,7 @@ try {
   await browser('screenshot', path.join(proof, 'captain-chat-dismiss-confirm-390.png'));
   await evaluate(`() => { document.querySelector('[data-call-dismiss-send]').click(); return 'confirmed dismissal'; }`);
   await until(`!document.querySelector('[data-call-type="chat"]')`);
-  await evaluate(`() => { if(!document.activeElement.matches('.primary-tab[data-view="overview"]'))throw Error('dismiss focus destination'); return 'dismiss focus retained on Overview'; }`);
+  await evaluate(`() => { if(!document.activeElement.matches('.primary-tab[data-view="overview"], [data-mobile-view="overview"]'))throw Error('dismiss focus destination'); return 'dismiss focus retained on Overview'; }`);
   assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'Dismiss never sends an inbox note');
   await appendFile(transcriptPath, chatRecord('synthetic-ask-two', 'ACTION NEEDED: Rotate the sample token. Reply "rotated".'));
   await until(`!!document.querySelector('[data-call-type="chat"]')`);
