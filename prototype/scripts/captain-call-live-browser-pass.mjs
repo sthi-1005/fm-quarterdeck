@@ -1,12 +1,13 @@
 // Offline exact-revision acceptance. One isolated axi browser, synthetic snapshot only.
 import assert from 'node:assert/strict';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, chmod, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer } from '../server.js';
 import { captureKpiGeometry } from './kpi-geometry.mjs';
+import { waitForBrowserPort, cleanupBrowserProfile } from './browser-harness.mjs';
 const root = path.resolve(import.meta.dirname, '../..');
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim(), '', 'serve a clean committed candidate');
@@ -25,6 +26,14 @@ await writeFile(script, '#!/bin/sh\ncat "$FM_HOME/snapshot.json"\n');
 await chmod(script, 0o755);
 const env = { ...process.env, HOME: temp, CHROME_DEVTOOLS_AXI_SESSION: `quarterdeck-call-${process.pid}`, CHROME_DEVTOOLS_AXI_HEADED: '0', CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, 'profile'), CHROME_DEVTOOLS_AXI_IDLE_TIMEOUT_MS: '60000' };
 for (const name of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BROWSER_URL', 'CHROME_DEVTOOLS_AXI_MCP_SERVER_URL']) delete env[name];
+// Launch exactly one bounded fixture browser; all page operations go through axi.
+// Explicit CDP attachment avoids MCP's implicit Chrome/startup-tab discovery.
+const profile = path.join(temp, 'profile');
+await mkdir(profile, { recursive: true });
+const chrome = spawn(process.env.CHROMIUM || 'chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+let spawnError, diagnostics = '';
+chrome.on('error', error => { spawnError = error; });
+chrome.stderr.on('data', chunk => { diagnostics = (diagnostics + chunk.toString()).slice(-2000); });
 const exec = promisify(execFile);
 const browser = async (...args) => (await exec('chrome-devtools-axi', args, { env, timeout: 45000, maxBuffer: 1024 * 1024 })).stdout;
 const results = [];
@@ -49,7 +58,9 @@ const server = createServer({ FM_HOME: home, FM_BEARINGS_MIN_GAP_MS: '15000', FM
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const deadline = setTimeout(() => { console.error('Captain Call browser deadline exceeded'); process.exit(1); }, 240000);
 try {
-  await browser('open', `http://127.0.0.1:${server.address().port}/#overview`);
+  const port = await waitForBrowserPort(chrome, profile, { spawnError: () => spawnError, diagnostics: () => diagnostics });
+  env.CHROME_DEVTOOLS_AXI_BROWSER_URL = `http://127.0.0.1:${port}`;
+  await browser('newpage', `http://127.0.0.1:${server.address().port}/#overview`);
   await until("document.querySelectorAll('[data-call-key]').length===3 && document.querySelectorAll('#summary .metric-card').length===3");
   await evaluate(`() => { window.proof={}; proof.alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); proof.beta=document.querySelector('[data-call-key="merge:beta-merge"]'); proof.alphaField=proof.alpha.querySelector('textarea'); proof.betaField=proof.beta.querySelector('textarea'); proof.rebuilds=0; new MutationObserver(ms=>proof.rebuilds+=ms.filter(m=>m.target===proof.alpha&&m.type==='childList').length).observe(proof.alpha,{childList:true}); return {revision:window.FM_BOOT_REVISION, noTree:!document.querySelector('#projects')}; }`);
   raw.decisions_open[0].summary = 'Changed rollout question'; await change();
@@ -90,6 +101,7 @@ try {
 } finally {
   clearTimeout(deadline);
   await browser('stop').catch(()=>{});
+  await cleanupBrowserProfile(chrome, profile);
   await new Promise(resolve=>server.close(resolve));
   await rm(temp,{recursive:true,force:true,maxRetries:3,retryDelay:100});
 }

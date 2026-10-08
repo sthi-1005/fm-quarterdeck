@@ -16,7 +16,9 @@ test("default document is the full-height conversation product", async () => {
   assert.match(html, /class="[^"]*\bconversation\b/);
   assert.match(html, /class="context-rail"/);
   assert.match(html, /data-view="overview"/);
-  assert.match(html, /<span>Overview<\/span>/);
+  assert.match(html, /<span>Overview <b id="call-badge"/);
+  assert.match(html, /<small>Captain's Call<\/small>/);
+  for (const name of ['patch', 'view', 'live']) assert.ok(html.includes(`<script src="/bearings-${name}.js"></script>`));
   assert.match(html, /data-view="work"/);
   assert.match(html, /id="tight-work"/);
   assert.match(html, /id="large-work"/);
