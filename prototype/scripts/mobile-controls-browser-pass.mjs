@@ -240,7 +240,7 @@ try {
       await evaluate('document.querySelector("#review-queue").click()');
       const queued = await evaluate('JSON.parse(sessionStorage.getItem("fm-agentos-review-draft-v1")).queue.at(-1)');
       assert.notEqual(queued.tag, 'message');
-      assert.equal(queued.text, 'Draft survives dismissal');
+      assert.equal(queued.prompt, 'Draft survives dismissal');
       assert.ok(queued.region?.id, 'queued draft carries the selected page target');
       await evaluate('document.querySelector("#review-history-tab").click()');
       await evaluate('[...document.querySelectorAll("#review-thread .review-batch")].find(batch => batch.querySelector("summary").textContent.startsWith("Queued batch")).open = true');
