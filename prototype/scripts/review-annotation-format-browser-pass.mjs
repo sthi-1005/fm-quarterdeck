@@ -86,7 +86,7 @@ try {
     await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
     await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     assert.equal(await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}+' [data-review-chip="note-0"]').open`), true);
-    assert.ok(await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}+' .review-meta-card').innerText.includes('CI is green')`));
+    assert.ok(await evaluate(`document.querySelector(${JSON.stringify(noteSelector)}+' [data-review-chip="note-0"] .review-meta-card').innerText.includes('CI is green')`));
     const geometry = await evaluate(`(() => { const chip=document.querySelector(${JSON.stringify(summary)}), r=chip.getBoundingClientRect(); return {width:r.width,height:r.height,overflow:document.documentElement.scrollWidth>innerWidth,feedOverflow:document.querySelector('#messages').scrollWidth>document.querySelector('#messages').clientWidth}; })()`);
     assert.equal(geometry.overflow, false); assert.equal(geometry.feedOverflow, false);
     if (width < 720) { assert.ok(geometry.width >= 32); assert.ok(geometry.height >= 32); }
