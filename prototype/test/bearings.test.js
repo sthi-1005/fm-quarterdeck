@@ -283,6 +283,28 @@ test("the record watch reacts to backlog.md and *.meta only, never to other stat
   assert.equal(source.calls.length, 3);
 });
 
+test("30 minutes of default cadence: quiet, churning, then backgrounded", async () => {
+  const quiet = fakeClock();
+  const still = controlledRunner(await fixture("two-calls"));
+  hubFor(quiet, still).hub.subscribe(() => {});
+  await quiet.advance(30 * 60_000);
+  assert.equal(still.calls.length, 7, "first watcher plus one ceiling run every 5 min");
+
+  // Records change every 5 s for 30 min, then the only tab goes to the background.
+  const busy = fakeClock();
+  const churn = controlledRunner(await fixture("two-calls"));
+  const { hub, change } = hubFor(busy, churn);
+  const leave = hub.subscribe(() => {});
+  for (let elapsed = 0; elapsed < 30 * 60_000; elapsed += 5000) { change(); await busy.advance(5000); }
+  assert.ok(churn.calls.length <= 61, `${churn.calls.length} runs is within the 30 s gap budget`);
+  assert.ok(churn.calls.length >= 55, "steady churn keeps calls current");
+  leave();
+  const foreground = churn.calls.length;
+  for (let elapsed = 0; elapsed < 30 * 60_000; elapsed += 5000) { change(); await busy.advance(5000); }
+  assert.equal(churn.calls.length, foreground, "no runs while nobody watches");
+  assert.equal(busy.pending(), 0);
+});
+
 test("a poll counts as a watcher only for its time-to-live", async () => {
   const clock = fakeClock();
   const source = controlledRunner(await fixture("two-calls"));

@@ -11,7 +11,8 @@ window.bearingsView = (() => {
     const merge = card.type === "merge";
     let url = null;
     try { const parsed = new URL(card.url); if (parsed.protocol === "https:" && !parsed.username && !parsed.password) url = parsed.href; } catch {}
-    const credential = !merge && /credential|authentication|access|login/i.test(card.verb || "");
+    // Firstmate holds credentials as ordinary captain-hold decisions, so the ask text decides the chip.
+    const credential = !merge && /credential|authentication|access|login/i.test(`${card.verb || ""} ${card.summary || ""}`);
     return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${merge ? "Merge" : credential ? "Credentials" : "Decision"}</span>${merge ? `<span class="call-age" title="${escape(card.checkedAt || "Check time unknown")}">Checked ${escape(age(card.checkedAt))}</span>` : ""}</header>
       <h3>${escape(merge ? card.reason || "Merge requested" : card.summary || "Decision requested")}</h3>
       <p class="call-meta">${escape(card.owner || "Owner not recorded")} · ${escape(card.repo || "Repository not recorded")}</p>

@@ -21,6 +21,10 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.doesNotMatch(view.cardHtml({ type: 'merge', url }), /href=/);
   }
 });
+test('a captain-hold asking for a credential is labelled Credentials', () => {
+  assert.match(view.cardHtml({ type: 'decision', verb: 'captain-hold', summary: 'Provide the gamma sandbox credential' }), />Credentials</);
+  assert.match(view.cardHtml({ type: 'decision', verb: 'captain-hold', summary: 'Pick the alpha rollout window' }), />Decision</);
+});
 test('honest empty states and coverage disclose stale, missing and omitted evidence', () => {
   assert.equal(view.emptyHtml({ state: 'ready', coverage: { provenClear: true } }), 'Nothing needs your action right now');
   assert.equal(view.emptyHtml({ state: 'ready', coverage: { checked: 2, known: 5 } }), 'No decision is recorded · checked 2 of 5');
