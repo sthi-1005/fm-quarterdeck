@@ -21,6 +21,20 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.doesNotMatch(view.cardHtml({ type: 'merge', url }), /href=/);
   }
 });
+test('rich context expands source choices without inventing controls, risk or a recommendation', () => {
+  const summary = `Pick a release. ${'Full context. '.repeat(60)}Recommended: staged — fewer users affected. Immediate — faster.`;
+  const html = view.cardHtml({ type: 'decision', summary, repo: 'example-app', owner: 'acme-mate', url: 'https://example.invalid/acme/example-app/pull/42' });
+  assert.match(html, /<h3>Decision requested · example-app<\/h3>/);
+  assert.match(html, /<dt>About<\/dt><dd>example-app · acme-mate/);
+  assert.ok(html.includes(`<dt>Decide</dt><dd>${summary}</dd>`));
+  assert.match(html, /href="https:\/\/example.invalid\/acme\/example-app\/pull\/42"/);
+  assert.doesNotMatch(html, /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
+  const merge = view.cardHtml({ type: 'merge', reason: summary, kind: 'pr', repo: 'example-app' });
+  assert.ok(merge.includes(summary));
+  assert.match(merge, /<dt>Risk<\/dt><dd>Not provided by the snapshot/);
+  assert.doesNotMatch(merge, /risk low|risk high|checks green/i);
+});
+
 test('a captain-hold asking for a credential is labelled Credentials', () => {
   assert.match(view.cardHtml({ type: 'decision', verb: 'captain-hold', summary: 'Provide the gamma sandbox credential' }), />Credentials</);
   assert.match(view.cardHtml({ type: 'decision', verb: 'captain-hold', summary: 'Pick the alpha rollout window' }), />Decision</);

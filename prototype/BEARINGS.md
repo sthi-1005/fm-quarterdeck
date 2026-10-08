@@ -21,7 +21,7 @@ Code: `bearings.js` (server), `public/bearings-live.js` (transport), `public/bea
 - `state`: `loading` (no run yet), `ready`, `stale` (last good calls; `error` says why the latest run failed) or `unavailable`.
 - `observedAt`: when these calls were last produced. `checkedAt`: the latest run attempt. `generatedAt`: the snapshot clock.
 - `cards[]`, in snapshot order:
-  - `decision:<task>` for each `decisions_open` row: `{key, type:"decision", task, verb, summary, owner, repo, rev}`. Credentials appear only as decisions.
+  - `decision:<task>` for each `decisions_open` row: `{key, type:"decision", task, verb, summary, url, owner, repo, rev}`. Credentials appear only as decisions.
   - `merge:<task>` for each `contributions.captain` row without a live decision for the same task: `{key, type:"merge", task, kind, url, reason, owner, repo, checkedAt, rev}`. `url` is `https:` only, otherwise `null`.
   - `rev` is a 16-hex sha256 of the card's canonical JSON; an unchanged card keeps its `rev`.
 - `coverage`: `{known, checked, complete, provenClear, captainOmitted, unmeasuredHomes}`. Say "Nothing needs your action right now" only when `provenClear`; otherwise "No decision is recorded · checked X of Y".
@@ -69,6 +69,14 @@ Drafts: every `input` on a `[data-call-draft="<field>"]` inside a card is kept p
 ## Rendering hooks
 
 Card markup from the view must carry nothing the patcher owns. The patcher creates `<article class="call-card" data-call-key data-call-rev data-call-type>` and fills it with `view.cardHtml(card)`, which must escape all card text. Typed fields use `data-call-draft="<field>"`. The empty state lives in `[data-call-empty]` inside the list; the stub's text holder is `[data-call-stub-text]` (filled with `textContent`), its buttons `[data-call-stub-copy]` and `[data-call-stub-dismiss]`.
+
+## Rich cards and upstream data gap
+
+Cards have a short type/repository heading, an **About** row (repository, owner, and contribution kind when present), and a **Decide** row containing the complete decision summary or merge reason. Free text remains path-redacted but is no longer shortened to 400/200 characters: embedded options, hints and recommendations stay expanded and selectable. A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card. All displayed links come from snapshot contribution rows; no URL is guessed.
+
+Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask/reason is the fallback, not a collapsed disclosure. The About row is source metadata, not an invented work description.
+
+Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or read extra task records. Rich rendering leaves engagement hold, draft protection and the read-only boundary unchanged.
 
 ## Later: answers (v1.1)
 

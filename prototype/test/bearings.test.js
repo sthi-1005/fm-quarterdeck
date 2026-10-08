@@ -75,6 +75,29 @@ test("normalizer keys calls, dedupes merges behind live decisions, and serves no
   assert.doesNotMatch(JSON.stringify(content), /\/srv\/|synthetic\/home/);
 });
 
+test("rich cards preserve full source asks and reasons, and link an exact decision subject", async () => {
+  const raw = await fixture("two-calls");
+  const ask = `Choose the release window. ${'Source context. '.repeat(60)}Recommended: staged — smaller blast radius. Alternative: immediate — faster delivery.`;
+  const reason = `Review the change. ${'Review context. '.repeat(40)}Risk remains for older clients.`;
+  raw.decisions_open[0].summary = ask;
+  raw.contributions.captain.find(row => row.task === 'beta-merge').reason = reason;
+  const decisionRow = raw.contributions.captain.find(row => row.task === 'alpha-call');
+  decisionRow.url = 'https://example.invalid/acme/example-app/pull/42';
+  const model = normalizeSnapshot(raw);
+  assert.equal(model.cards[0].summary, ask);
+  assert.equal(model.cards[0].url, decisionRow.url);
+  assert.equal(model.cards.find(card => card.type === 'merge').reason, reason);
+  assert.equal(model.cards.filter(card => card.task === 'alpha-call').length, 1);
+  assert.equal(model.cards[0].options, undefined);
+  assert.equal(model.cards[0].recommend_value, undefined);
+  assert.equal(model.cards.find(card => card.type === 'merge').risk, undefined);
+  const rev = model.cards[0].rev;
+  raw.decisions_open[0].summary += ' Changed at the end.';
+  assert.notEqual(normalizeSnapshot(raw).cards[0].rev, rev, 'changes beyond the former truncation boundary trigger a patch');
+  decisionRow.url = 'https://user:secret@example.invalid/unsafe';
+  assert.equal(normalizeSnapshot(raw).cards[0].url, null);
+});
+
 test("normalizer drops unsafe URLs and invalid rows with a disclosed count", async () => {
   const raw = await fixture("two-calls");
   raw.contributions.captain[0].url = "http://example.invalid/insecure";

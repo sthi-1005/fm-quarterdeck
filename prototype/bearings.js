@@ -72,10 +72,12 @@ function callSection(raw) {
   const decided = new Set();
   for (const row of raw.decisions_open) {
     const id = object(row) && typeof row.id === "string" && TASK_ID.test(row.id) ? row.id : null;
-    const summary = id && publicText(row.summary);
+    // Keep the complete ask: choices and recommendations may exist only in this text.
+    const summary = id && publicText(row.summary, Infinity);
     if (!id || !summary || decided.has(id)) { invalid += 1; continue; }
     decided.add(id);
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, owner: token(row.owner), repo: repos.get(id) ?? null }));
+    const contribution = raw.contributions.captain.find((entry) => object(entry) && entry.task === id && httpsUrl(entry.url));
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {
@@ -84,7 +86,7 @@ function callSection(raw) {
     // A live decision for the same task already asks the captain; one card per call.
     if (decided.has(task) || merges.has(task)) continue;
     merges.add(task);
-    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, 200), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at) }));
+    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at) }));
   }
   const c = raw.contributions;
   const coverage = { known: c.known, checked: c.checked, complete: c.complete === true, provenClear: c.proven_clear,

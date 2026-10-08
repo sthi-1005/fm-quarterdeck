@@ -1765,6 +1765,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
 .call-read-only { font-weight: 400; margin-left: 8px; }
 .call-link { display: block; overflow-wrap: anywhere; }
+.call-context { display: grid; gap: 10px; margin: 12px 0; }
+.call-context-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.call-context dt { color: var(--muted); font-size: var(--text-small); font-weight: 600; text-transform: uppercase; }
+.call-context dd { margin: 0; min-width: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.call-source-gap { margin: 12px 0; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); color: var(--muted); font-size: var(--text-small); line-height: 1.6; }
 .call-note { display: block; margin-top: 16px; font-size: var(--text-small); }
 .call-note span { color: var(--muted); }
 .call-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }

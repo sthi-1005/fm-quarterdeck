@@ -18,6 +18,9 @@ const home = path.join(temp, 'home');
 for (const dir of ['bin', 'data', 'state']) await mkdir(path.join(home, dir), { recursive: true });
 const fixturePath = path.join(home, 'snapshot.json');
 let raw = JSON.parse(await readFile(new URL('../test/fixtures/bearings/two-calls.json', import.meta.url), 'utf8'));
+raw.decisions_open[0].summary = `Choose the example-app release window. ${'The staged release limits exposure while validation continues. '.repeat(8)}Recommended: staged — smaller blast radius. Immediate — faster delivery.`;
+raw.contributions.captain.find(row => row.task === 'alpha-call').url = 'https://example.invalid/acme/example-app/pull/42';
+raw.contributions.captain.find(row => row.task === 'beta-merge').reason = `Review example-app compatibility. ${'The change is ready for review but older clients need attention. '.repeat(6)}Risk: older clients may require a migration.`;
 await writeFile(fixturePath, JSON.stringify(raw));
 await writeFile(path.join(home, 'data/backlog.md'), '# Synthetic backlog\n');
 await writeFile(path.join(home, 'data/projects.md'), '- synthetic-repository - Offline fixture\n');
@@ -62,6 +65,12 @@ try {
   env.CHROME_DEVTOOLS_AXI_BROWSER_URL = `http://127.0.0.1:${port}`;
   await browser('newpage', `http://127.0.0.1:${server.address().port}/#overview`);
   await until("document.querySelectorAll('[data-call-key]').length===3 && document.querySelectorAll('#summary .metric-card').length===3");
+  for (const width of [1280,360,390]) {
+    await browser('resize', String(width), '844');
+    await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||decision.querySelector('input[type=radio],form,select,details'))throw Error('source information lost or invented'); return {width:innerWidth,richCards:true}; }`);
+    await browser('screenshot', path.join(proof, `captain-call-rich-${width}.png`));
+  }
+  await browser('resize', '1280', '844');
   await evaluate(`() => { window.proof={}; proof.alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); proof.beta=document.querySelector('[data-call-key="merge:beta-merge"]'); proof.alphaField=proof.alpha.querySelector('textarea'); proof.betaField=proof.beta.querySelector('textarea'); proof.rebuilds=0; new MutationObserver(ms=>proof.rebuilds+=ms.filter(m=>m.target===proof.alpha&&m.type==='childList').length).observe(proof.alpha,{childList:true}); return {revision:window.FM_BOOT_REVISION, noTree:!document.querySelector('#projects')}; }`);
   raw.decisions_open[0].summary = 'Changed rollout question'; await change();
   await until("proof.alpha.innerText.includes('Changed rollout question')");

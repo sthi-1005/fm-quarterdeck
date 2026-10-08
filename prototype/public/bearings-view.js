@@ -13,10 +13,14 @@ window.bearingsView = (() => {
     try { const parsed = new URL(card.url); if (parsed.protocol === "https:" && !parsed.username && !parsed.password) url = parsed.href; } catch {}
     // Firstmate holds credentials as ordinary captain-hold decisions, so the ask text decides the chip.
     const credential = !merge && /credential|authentication|access|login/i.test(`${card.verb || ""} ${card.summary || ""}`);
-    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${merge ? "Merge" : credential ? "Credentials" : "Decision"}</span>${merge ? `<span class="call-age" title="${escape(card.checkedAt || "Check time unknown")}">Checked ${escape(age(card.checkedAt))}</span>` : ""}</header>
-      <h3>${escape(merge ? card.reason || "Merge requested" : card.summary || "Decision requested")}</h3>
-      <p class="call-meta">${escape(card.owner || "Owner not recorded")} · ${escape(card.repo || "Repository not recorded")}</p>
-      ${merge ? url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : '<p class="call-meta">Merge link unavailable</p>' : ""}
+    const label = merge ? "Merge" : credential ? "Credentials" : "Decision";
+    const row = (name, text) => `<div class="call-context-row"><dt>${name}</dt><dd>${escape(text)}</dd></div>`;
+    const about = [card.repo || "Repository not recorded", card.owner || "Owner not recorded", merge && card.kind].filter(Boolean).join(" · ");
+    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span>${merge ? `<span class="call-age" title="${escape(card.checkedAt || "Check time unknown")}">Checked ${escape(age(card.checkedAt))}</span>` : ""}</header>
+      <h3>${label} requested${card.repo ? ` · ${escape(card.repo)}` : ""}</h3>
+      <dl class="call-context">${row("About", about)}${row("Decide", merge ? card.reason || "Merge requested; reason not recorded" : card.summary || "Decision requested; ask not recorded")}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
+      ${url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : merge ? '<p class="call-meta">Merge link unavailable</p>' : ""}
+      <p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>
       <p class="call-answer-hint">Answer in chat or on the /bearings lavish board.</p></div>
       <label class="call-note">Note to self <span>(saved in this tab · not sent)</span><textarea data-call-draft="note" rows="2" placeholder="Private reminder…"></textarea></label>`;
   }
