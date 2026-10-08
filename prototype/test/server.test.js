@@ -16,6 +16,11 @@ test("default document is the full-height conversation product", async () => {
   assert.match(html, /class="[^"]*\bconversation\b/);
   assert.match(html, /class="context-rail"/);
   assert.match(html, /data-view="overview"/);
+  assert.match(html, /id="fleet-source" class="source-badge" aria-label="Firstmate activity"/);
+  const activityView = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  assert.match(activityView, /seen\.textContent = `Last seen/);
+  assert.match(activityView, /beat\.textContent = `Watcher/);
+  assert.doesNotMatch(activityView, /Last activity seen/);
   assert.match(html, /<span>Overview <b id="call-badge"/);
   assert.match(html, /<small>Captain's Call<\/small>/);
   for (const name of ['patch', 'view', 'live']) assert.ok(html.includes(`<script src="/bearings-${name}.js"></script>`));

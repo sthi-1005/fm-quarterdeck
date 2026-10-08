@@ -57,25 +57,30 @@ test("primary Claude and Pi transcript clocks exclude unrelated newer sessions",
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("Overview activity ticks, warns on old watcher and discloses frozen fetch without fabricating clocks", async () => {
+test("Overview compact activity ticks and warns without visible status or fabricated clocks", async () => {
   const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   const code = source.slice(source.indexOf("let firstmateActivity ="), source.indexOf("function lanesQuery()"));
-  const node = { dataset: {} };
-  const context = vm.createContext({ $: () => node, Date });
+  const node = { dataset: {}, replaceChildren(...children) { this.children = children; this.textContent = children.map((child) => child.textContent).join(" "); } };
+  const context = vm.createContext({ $: () => node, Date, document: { createElement: () => ({ textContent: "" }) } });
   vm.runInContext(code, context);
   vm.runInContext("renderFirstmateActivity()", context);
-  assert.match(node.textContent, /Last activity seen unknown \(unknown\) · unknown · watcher unknown/);
+  assert.equal(node.textContent, "Last seen unknown unknown Watcher unknown");
   const now = Date.parse(stamp);
   context.now = now;
   context.activity = { lastTurnAt: stamp, lastWakeAt: null, watcherBeatAt: stamp, heartbeatAt: null, readAt: stamp };
   vm.runInContext("firstmateActivity = activity; activityFetchedAt = now; renderFirstmateActivity(now)", context);
-  assert.match(node.textContent, /Last activity seen 0s ago/);
+  assert.equal(node.children[0].textContent, `Last seen ${new Date(stamp).toLocaleTimeString([], { hour12: false })} 0s`);
+  assert.equal(node.children[1].textContent, "Watcher 0s");
   assert.equal(node.dataset.state, "fresh");
   vm.runInContext("renderFirstmateActivity(now + 301000)", context);
-  assert.match(node.textContent, /Last activity seen 5m ago/);
-  assert.match(node.textContent, /as of/);
+  assert.match(node.children[0].textContent, /Last seen \d{2}:\d{2}:\d{2} 5m/);
+  assert.equal(node.children[1].textContent, "Watcher 5m");
+  assert.doesNotMatch(node.textContent, /activity|ago|live|stale|as of/);
+  assert.match(node.title, /Read:/);
   assert.equal(node.dataset.state, "warning");
   vm.runInContext("activityFetchedAt = now + 301000; renderFirstmateActivity(now + 301000)", context);
   assert.equal(node.dataset.state, "warning");
   assert.doesNotMatch(node.textContent, /as of/);
+  const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
+  assert.match(css, /#fleet-source \{[^}]*display: flex;[^}]*justify-content: space-between;[^}]*white-space: nowrap;/);
 });

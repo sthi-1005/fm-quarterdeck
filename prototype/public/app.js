@@ -1787,11 +1787,11 @@ function renderFirstmateActivity(now = Date.now()) {
     const stamp = time(value);
     if (!Number.isFinite(stamp)) return "unknown";
     const seconds = Math.floor((now - stamp) / 1000);
-    if (seconds < 0) return "in the future (clock skew)";
-    if (seconds < 60) return `${seconds}s ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
+    if (seconds < 0) return "future";
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    return `${Math.floor(seconds / 86400)}d`;
   };
   const local = (value) => Number.isFinite(time(value)) ? new Date(value).toLocaleString() : "unknown";
   const activity = firstmateActivity || {};
@@ -1800,8 +1800,12 @@ function renderFirstmateActivity(now = Date.now()) {
   const watcher = time(activity.watcherBeatAt);
   const stale = activityFetchedAt !== null && now - activityFetchedAt > 60000;
   node.dataset.state = stale || (Number.isFinite(watcher) && (now - watcher > 300000 || watcher > now)) ? "warning" : Number.isFinite(watcher) ? "fresh" : "unknown";
-  const status = stale ? "stale reading" : !Number.isFinite(watcher) ? "unknown" : now - watcher > 300000 ? "stale" : watcher > now ? "clock skew" : "live";
-  node.textContent = `Last activity seen ${relative(latest)} (${local(latest)}) · ${status} · watcher ${relative(activity.watcherBeatAt)}${stale ? ` · as of ${local(activity.readAt)} (fetch ${relative(new Date(activityFetchedAt).toISOString())})` : ""}`;
+  const seen = document.createElement("span");
+  const beat = document.createElement("span");
+  const clock = Number.isFinite(time(latest)) ? new Date(latest).toLocaleTimeString([], { hour12: false }) : "unknown";
+  seen.textContent = `Last seen ${clock} ${relative(latest)}`;
+  beat.textContent = `Watcher ${relative(activity.watcherBeatAt)}`;
+  node.replaceChildren(seen, beat);
   node.title = `Last turn: ${local(activity.lastTurnAt)} · Wake queue: ${local(activity.lastWakeAt)} · Watcher: ${local(activity.watcherBeatAt)} · Heartbeat: ${local(activity.heartbeatAt)} · Read: ${local(activity.readAt)}`;
 }
 
