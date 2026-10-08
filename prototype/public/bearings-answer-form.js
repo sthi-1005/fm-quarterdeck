@@ -21,7 +21,7 @@ window.bearingsAnswerForm = (() => {
       try { const raw = storage?.getItem(STATE_PREFIX + key); const parsed = raw ? JSON.parse(raw) : null; if (parsed && typeof parsed.phase === "string") {
         // Reload interrupted the response, not necessarily delivery. Keep its identity;
         // only an explicit Retry click may reconcile it through the idempotent inbox.
-        value = parsed.phase === "sending" ? { ...parsed, phase: "failed", error: "The send was interrupted. Retry sends the same answer once." } : parsed;
+        value = ["sending", "failed"].includes(parsed.phase) ? { ...parsed, attempted: true, phase: "failed", error: parsed.error || "The send was interrupted and may already have reached Firstmate. Retry sends the same answer once." } : parsed;
       } } catch {}
       memory.set(key, value);
       return value;
@@ -71,7 +71,7 @@ window.bearingsAnswerForm = (() => {
       const rev = card?.rev || node.getAttribute("data-call-rev");
       // The captain reviewed a different version of this call: never send it as-is.
       if (state && ["confirm", "failed"].includes(state.phase) && state.cardRev !== rev) {
-        state = { phase: "refused", error: "This call changed while you were reviewing; check it and review your answer again." };
+        state = { ...state, attempted: state.attempted || state.phase === "failed", phase: "refused", error: "This call changed while you were reviewing; check it and review your answer again." };
         states.set(key, state);
       }
       const phase = state?.phase || "compose";
@@ -96,7 +96,7 @@ window.bearingsAnswerForm = (() => {
       const error = part(form, "error");
       if (error) {
         const text = ["refused", "failed"].includes(phase) ? state.error || "" : "";
-        error.textContent = text;
+        if (error.textContent !== text) error.textContent = text;
         error.hidden = !text;
       }
       const receipt = part(form, "receipt");
@@ -120,16 +120,17 @@ window.bearingsAnswerForm = (() => {
     }
 
     function review(form, key) {
+      const previous = states.get(key) || {};
       const answer = read(form);
-      if (!answer.selection && !answer.note) { update(key, { phase: "refused", error: "Choose an option or write an answer first." }, "text"); return; }
-      if (bytes(display(answer.selection, answer.note)) > MAX_ANSWER_BYTES) { update(key, { phase: "refused", error: `The answer is longer than ${MAX_ANSWER_BYTES} bytes; shorten it.` }, "text"); return; }
-      update(key, { phase: "confirm", ...answer, cardRev: cardNode(key)?.getAttribute("data-call-rev") || null, requestId: uuid() }, "send");
+      if (!answer.selection && !answer.note) { update(key, { ...previous, phase: "refused", error: "Choose an option or write an answer first." }, "text"); return; }
+      if (bytes(display(answer.selection, answer.note)) > MAX_ANSWER_BYTES) { update(key, { ...previous, phase: "refused", error: `The answer is longer than ${MAX_ANSWER_BYTES} bytes; shorten it.` }, "text"); return; }
+      update(key, { phase: "confirm", ...answer, cardRev: cardNode(key)?.getAttribute("data-call-rev") || null, requestId: previous.requestId || uuid(), attempted: previous.attempted === true }, "send");
     }
 
     async function send(key) {
       const state = states.get(key);
       if (!state || !["confirm", "failed"].includes(state.phase)) return;
-      update(key, { ...state, phase: "sending", error: null });
+      update(key, { ...state, phase: "sending", attempted: true, error: null });
       let response = null, body = null;
       try {
         response = await fetchImpl("/api/bearings/answer", { method: "POST", headers: { "content-type": "application/json" },
@@ -151,11 +152,11 @@ window.bearingsAnswerForm = (() => {
       }
       // Unconfirmed (network, 5xx): the same request id may be retried by an explicit click.
       if (!response || response.status >= 500) {
-        update(key, { ...state, phase: "failed", error: body?.error || "Firstmate did not confirm the answer. Retry sends the same answer once." }, "send");
+        update(key, { ...state, attempted: true, phase: "failed", error: `${body?.error || "Firstmate did not confirm the answer."} The earlier send may already have reached Firstmate. Retry uses the same request id; editing cannot replace an already recorded answer.` }, "send");
         return;
       }
       // Refused (stale call, invalid answer, wrong origin, preview host): edit and review again.
-      update(key, { phase: "refused", error: body?.error || "The answer was not accepted." }, "text");
+      update(key, { ...state, attempted: true, phase: "refused", error: body?.error || "The answer was not accepted." }, "text");
     }
 
     async function poll() {
@@ -199,7 +200,10 @@ window.bearingsAnswerForm = (() => {
       const key = keyOf(target?.closest?.("[data-call-key]"));
       if (!key) return;
       if (target.closest("[data-call-answer-send]")) { event.preventDefault?.(); void send(key); }
-      else if (target.closest("[data-call-answer-edit]")) { event.preventDefault?.(); if (states.get(key)?.phase !== "sending") update(key, null, "text"); }
+      else if (target.closest("[data-call-answer-edit]")) { event.preventDefault?.(); if (states.get(key)?.phase !== "sending") {
+        const state = states.get(key);
+        update(key, state?.attempted || state?.phase === "failed" ? { ...state, phase: "compose", attempted: true } : null, "text");
+      } }
       else if (target.closest("[data-call-answer-again]")) { event.preventDefault?.(); update(key, null, "text"); }
     };
     list.addEventListener("submit", onSubmit);

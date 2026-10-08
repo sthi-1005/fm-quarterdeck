@@ -7,7 +7,7 @@ Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/beari
 ## Source and authority
 
 - Calls come from exactly one Firstmate interface: `$FM_HOME/bin/fm-bearings-snapshot.sh --json` (never `--include-prs`), with `FM_HOME` set, nice 10, a 45 s process-group kill, 2 MiB stdout and 4 KiB stderr caps. Concurrent callers share one run.
-- It never reads backlog, meta or status records to build calls, and writes nothing under `FM_HOME`. The snapshot's own documented observational cache refresh is the only fleet-side write, the same as a plain `/bearings`.
+- It never reads backlog, meta or status records to build calls, and writes nothing under `FM_HOME`. After the snapshot, a read-only, 2 MiB bounded read of the selected home's `data/backlog.md` supplements only `(main)` decision clocks (exact task id); no other home's records are inspected. The snapshot's own documented observational cache refresh is the only fleet-side write, the same as a plain `/bearings`.
 - Validation fails closed: `schema` must be `fm-bearings.v1`, and `decisions_open`, `omitted` and `contributions` (`captain[]`, `known`, `checked`, `proven_clear`) must have the expected types. A missing home or script, a failed run or invalid output never synthesizes calls: with a previous good model it stays visible as `state: "stale"`; without one the model is `state: "unavailable"` with no cards.
 
 ## Model `fm-quarterdeck-call.v1`
@@ -31,6 +31,12 @@ Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/beari
 - Privacy: `repo` is a basename, report and checkout paths are never served, and absolute paths inside free text are reduced to `…/<last segment>`.
 
 Sections are pluggable (`SECTIONS` in `bearings.js`); Phase 1 enables only `call`. Later Underway, Landed and Charted Next sections add entries without changing the transport.
+
+## Card clocks and sorting
+
+Each card has `clock:{label,at}`. Decision clocks use the newest durable `updated_at`, `hold_set_at` or `created` source field. The selected-home ledger supplements `(since YYYY-MM-DD)` creation dates and a leading `Captain hold set:` stamp when the snapshot omits them. Merge clocks use contribution `checked_at`. Missing evidence shows **unknown**, never file mtimes, snapshot time or first-seen time. Date-only creation evidence retains its date and says **time unknown** rather than inventing midnight. Full timestamps display absolute local time and a ticking relative age; ticks change only clock text and pause during text selection.
+
+**Sort calls** offers Newest first (default) and Oldest first on desktop and phone. It sorts by this durable clock, with stable source-order ties and unknowns last in either direction. The viewer's choice persists in `localStorage` under `fm-quarterdeck-call-sort.v1` (memory fallback on storage failure). Reordering uses the same engagement hold and release grace as snapshot updates, including a sort-pending notice and Update now. Existing form nodes, drafts and confirmation phases survive sorting.
 
 ## Cadence
 
@@ -77,7 +83,7 @@ Cards have a short type/repository heading, an **About** row (repository, owner,
 
 Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose decision options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask/reason, one More details click away when long, is the fallback. The About row is source metadata, not an invented work description.
 
-Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit and unshortened `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, a card-declared `close`, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. Quarterdeck already consumes `options`, `recommend_value` and `close` on `decisions_open` rows when present (see Answers). These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or read extra task records. Rich rendering leaves engagement hold and draft protection unchanged.
+Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit and unshortened `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, a card-declared `close`, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. Quarterdeck already consumes `options`, `recommend_value` and `close` on `decisions_open` rows when present (see Answers). These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or read extra task records for content. Rich rendering leaves engagement hold and draft protection unchanged.
 
 ## Long text
 
@@ -96,7 +102,7 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
 
 - `question` is the board's intake key: the task id for a decision, `merge.<task>` for a merge ask. A key that fails the intake's slug shape (`[A-Za-z0-9._-]{1,128}`) gives `answer: null`, and the card keeps "Answer in chat" plus a private note-to-self.
 - Decision `options`, `recommend` and `close` come only from optional Firstmate row fields `options[{value,label,hint}]`, `recommend_value` and `close` (`done`|`release`). Today's snapshot provides none, so decisions are **freeform only**. One invalid option (bad slug, duplicate, missing label, `reconcile`, more than 8) voids them all; `recommend` must name an option.
-- A merge ask offers the board's single **Merge now** option (`merge`), never a recommendation. A merge answer with only a note is instruction text for Firstmate, never a merge.
+- A merge ask offers the board's single **Merge now** option (`merge`), never a recommendation. Only an exact, note-free `merge` is a merge order. A selected Merge now with a typed note is relayed with empty `selection` and `note:"merge - <typed note>"`, so keyed intake reads instruction text; a note-only answer is instruction text too.
 
 **Captain flow** (`public/bearings-answer-form.js`; state per card key in memory and `sessionStorage` under `fm-quarterdeck-call-answer.v1:<key>`):
 
@@ -105,8 +111,8 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
 3. **Send to Firstmate** (the only sending control) moves to *sending*, then:
    - `202` → *sent*: answer drafts are cleared (so a resolved card shows no "unsent text" stub) and a receipt line follows Firstmate's inbox receipts: waiting → received → replied (polled every 15 s while visible and not yet replied).
    - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note. Reloading during *sending* also restores this uncertain retry state; it never resends automatically.
-   - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock; a new review gets a new request id.
-4. **Edit** returns from *confirm*/*failed* to *compose*; **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
+   - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock. Once a send was attempted, editing and re-review preserve its request id, even after a changed-card refusal or reload. A different answer under a recorded id is refused rather than creating a second note.
+4. **Edit** returns from *confirm*/*failed* to *compose*. An unconfirmed send warns that it may already have reached Firstmate; retry uses the original identity, and editing cannot replace a recorded answer. **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
 
 Typing protection is unchanged: the form lives inside the held section, so focus, typing, a selection or a press holds updates. If the card's `rev` changes while its answer is in *confirm* or *failed*, the next render moves it to *refused* ("changed while you were reviewing") and the captain reviews again; the server refuses a stale `cardRev` too. Answer state for calls that leave the model is forgotten on the next applied update, so a re-held task starts fresh.
 

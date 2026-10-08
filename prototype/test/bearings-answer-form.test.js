@@ -14,7 +14,7 @@ const merge = (rev = "b1") => ({ key: "merge:beta-merge", type: "merge", task: "
   answer: { question: "merge.beta-merge", options: [{ value: "merge", label: "Merge now", hint: "Firstmate re-checks" }], recommend: null, close: null, freeform: true } });
 const model = (cards) => ({ schema: "fm-quarterdeck-call.v1", rev: cards.map((card) => `${card.key}@${card.rev}`).join("|") || "empty", state: "ready", cards, coverage: { known: 1, checked: 1, provenClear: false }, omitted: [] });
 
-function setup({ responses = [], storage = null } = {}) {
+function setup({ responses = [], storage = null, viewerStorage = null } = {}) {
   const dom = callDom();
   const timers = fakeTimers();
   const { document } = dom;
@@ -37,7 +37,7 @@ function setup({ responses = [], storage = null } = {}) {
   };
   let n = 0;
   let answers = null, overflow = null;
-  const patcher = win.bearingsPatch.createCallPatcher({ section, list, status, view: win.bearingsView, doc: document, win, storage, timers,
+  const patcher = win.bearingsPatch.createCallPatcher({ section, list, status, view: win.bearingsView, doc: document, win, storage, viewerStorage, timers,
     onRender: (node, card) => { answers?.render(node, card); overflow?.render(node, card); },
     onApply: (next) => { answers?.prune(next.cards.map((card) => card.key)); overflow?.prune(next.cards.map((card) => card.key)); } });
   answers = win.bearingsAnswerForm.createAnswerController({ list, drafts: patcher.drafts, doc: document, win, storage, fetchImpl, timers, uuid: () => uuid(++n) });
@@ -48,6 +48,67 @@ function setup({ responses = [], storage = null } = {}) {
   const leave = () => { outside.focus(); outside.click(); timers.advance(700); };
   return { dom, document, timers, list, patcher, answers, overflow, fetches, node, part, submit, leave, win };
 }
+
+test('protected sorting preserves typing, confirmation and viewer preference across reload', () => {
+  const viewerStorage = tabStorage();
+  const t = setup({ viewerStorage });
+  const cards = [{ ...decision(), clock: { at: '2026-01-01T00:00:00Z', label: 'Created' } }, { ...merge(), clock: { at: '2026-02-01T00:00:00Z', label: 'Checked' } }];
+  t.patcher.update(model(cards));
+  assert.equal(t.list.children[0], t.node('merge:beta-merge'));
+  const field = t.part('decision:alpha-call', 'text');
+  field.focus(); field.type('Tuesday');
+  t.submit('decision:alpha-call');
+  const send = t.part('decision:alpha-call', 'send');
+  t.patcher.setSort('oldest');
+  assert.equal(t.patcher.held, true);
+  assert.equal(t.list.children[0], t.node('merge:beta-merge'), 'engaged sorting is deferred');
+  t.patcher.update(model(cards));
+  assert.equal(t.patcher.held, true, 'unchanged polls cannot cancel a pending sort');
+  t.leave();
+  assert.equal(t.list.children[0], t.node('decision:alpha-call'));
+  assert.equal(t.part('decision:alpha-call', 'send'), send, 'same form nodes survive reorder');
+  assert.equal(t.part('decision:alpha-call', 'text').value, 'Tuesday');
+  assert.equal(t.answers.state('decision:alpha-call').phase, 'confirm');
+  const reload = setup({ viewerStorage });
+  reload.patcher.update(model(cards));
+  assert.equal(reload.patcher.sortOrder, 'oldest');
+  assert.equal(reload.list.children[0], reload.node('decision:alpha-call'));
+});
+
+test('clock ticks only change clock text and leave focused answer nodes intact', () => {
+  const t = setup();
+  t.patcher.update(model([{ ...decision(), clock: { at: new Date(Date.now() - 120000).toISOString(), label: 'Updated' } }]));
+  const key = 'decision:alpha-call';
+  const field = t.part(key, 'text'); field.focus(); field.type('Tuesday');
+  const clock = t.node(key).querySelector('[data-call-clock]'); clock.textContent = 'outdated';
+  t.timers.advance(1000);
+  assert.match(clock.textContent, /2m ago/);
+  assert.equal(t.part(key, 'text'), field);
+  assert.equal(t.document.activeElement, field);
+  assert.equal(field.value, 'Tuesday');
+});
+
+test('Edit after an unconfirmed send and changed-card refusal retain identity, including reload', async () => {
+  const storage = tabStorage();
+  const t = setup({ storage, responses: [new Error('offline')] });
+  const key = 'decision:alpha-call'; t.patcher.update(model([decision()]));
+  t.part(key, 'text').type('Tuesday'); t.submit(key); t.part(key, 'send').click(); await flush();
+  const requestId = t.answers.state(key).requestId;
+  assert.match(t.part(key, 'error').textContent, /may already have reached/);
+  let writes = 0;
+  const error = t.part(key, 'error'), text = error.textContent;
+  Object.defineProperty(error, 'textContent', { get: () => text, set: () => { writes++; }, configurable: true });
+  t.answers.render(t.node(key)); t.answers.render(t.node(key));
+  assert.equal(writes, 0, 'unchanged alerts are not rewritten');
+  t.part(key, 'edit').click(); t.part(key, 'text').type('Wednesday'); t.submit(key);
+  assert.equal(t.answers.state(key).requestId, requestId);
+  t.leave(); t.patcher.update(model([decision('a2')]));
+  assert.equal(t.answers.state(key).phase, 'refused');
+  assert.equal(t.answers.state(key).requestId, requestId);
+  const reload = setup({ storage }); reload.patcher.update(model([decision('a2')]));
+  reload.part(key, 'text').type('Thursday'); reload.submit(key);
+  assert.equal(reload.answers.state(key).requestId, requestId);
+});
 
 function tabStorage() {
   const entries = new Map();
@@ -138,16 +199,16 @@ test("unconfirmed sends retry only by click with the same request id; refusals r
   await flush();
   assert.equal(t.fetches[1].body.requestId, t.fetches[0].body.requestId);
   assert.equal(t.fetches[1].body.selection, "merge");
-  assert.equal(t.part(key, "error").textContent, "Firstmate did not confirm");
+  assert.match(t.part(key, "error").textContent, /^Firstmate did not confirm.*may already have reached/);
   t.part(key, "send").click();
   await flush();
   assert.equal(t.answers.state(key).phase, "refused");
   assert.equal(t.part(key, "error").textContent, "This call is no longer open");
   assert.equal(t.part(key, "compose").hidden, false);
   assert.equal(t.part(key, "fields").disabled, false);
-  // A fresh review after a refusal is a new request.
+  // A refusal after an uncertain attempt cannot mint a second note identity.
   t.submit(key);
-  assert.equal(t.answers.state(key).requestId, uuid(2));
+  assert.equal(t.answers.state(key).requestId, uuid(1));
 });
 
 test("an empty or oversized answer is refused locally and nothing is sent", async () => {

@@ -64,6 +64,12 @@ export function validateAnswer(body, model) {
 // plus Quarterdeck provenance. Firstmate's lavish adapter ignores unknown fields, so the
 // same parse rule maps it to one keyed line: <question> TAB <selection or note> TAB <label>.
 export function answerEnvelope({ card, selection, note }, observedRev) {
+  // Only an exact, note-free merge is an order. A selected merge with a note
+  // must reach the keyed intake as instruction text, not as the bare option.
+  if (card.type === "merge" && selection === "merge" && note) {
+    note = displayAnswer(selection, note);
+    selection = "";
+  }
   const envelope = { schema: ANSWER_SCHEMA, question: card.answer.question, selection, note };
   if (card.answer.close) envelope.close = card.answer.close;
   const title = `${card.type === "merge" ? "Merge" : "Decision"} ${card.task}`;

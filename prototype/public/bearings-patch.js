@@ -5,6 +5,14 @@
 // per card key and survives every rebuild, including the card leaving.
 window.bearingsPatch = (() => {
   const DRAFT_PREFIX = "fm-quarterdeck-call-draft.v1:";
+  const SORT_KEY = "fm-quarterdeck-call-sort.v1";
+  function sortCards(cards, order) {
+    return [...cards].sort((a, b) => {
+      const left = Date.parse(a.clock?.at), right = Date.parse(b.clock?.at);
+      if (!Number.isFinite(left) || !Number.isFinite(right)) return Number.isFinite(left) ? -1 : Number.isFinite(right) ? 1 : 0;
+      return order === "oldest" ? left - right : right - left;
+    });
+  }
   // Clicks on controls act on the control; they never select or deselect the card.
   const INTERACTIVE = "a, button, input, textarea, select, label, summary, [contenteditable]";
   const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -114,7 +122,7 @@ window.bearingsPatch = (() => {
   }
 
   function createCallPatcher({ section, list, status, coverage = null, view = window.bearingsView || fallbackView, doc = window.document, win = window, storage = (() => { try { return win.sessionStorage; } catch { return null; } })(),
-    timers = win, holdDelayMs = 600, scroller = null, highlightMs = 2400, leaveMs = 320, onApply = () => {}, onHeld = () => {}, onRender = () => {} } = {}) {
+    sortControl = null, viewerStorage = (() => { try { return win.localStorage; } catch { return null; } })(), timers = win, holdDelayMs = 600, scroller = null, highlightMs = 2400, leaveMs = 320, onApply = () => {}, onHeld = () => {}, onRender = () => {} } = {}) {
     const render = { ...fallbackView, ...view };
     const drafts = createDraftStore(storage);
     const appliedRevs = new Map();
@@ -123,6 +131,9 @@ window.bearingsPatch = (() => {
     let pending = null;
     let releaseTimer = null;
     let held = false;
+    let sortOrder = "newest", appliedSort = null, clockTimer = null;
+    try { if (viewerStorage?.getItem(SORT_KEY) === "oldest") sortOrder = "oldest"; } catch {}
+    if (sortControl) sortControl.value = sortOrder;
     const reducedMotion = () => Boolean(win.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
     const tracker = createEngagementTracker(section, { doc, timers, onChange: (engaged) => { if (engaged) cancelRelease(); else scheduleRelease(); } });
 
@@ -139,7 +150,7 @@ window.bearingsPatch = (() => {
       held = true;
       section.setAttribute("data-held", "true");
       section.setAttribute("aria-busy", "true");
-      const text = render.heldText(diff);
+      const text = render.heldText(diff) + (appliedSort !== sortOrder ? " · sort pending" : "");
       if (heldText.textContent !== text) heldText.textContent = text;
       status.hidden = false;
       onHeld(true, diff);
@@ -248,7 +259,7 @@ window.bearingsPatch = (() => {
       cancelRelease();
       pending = null;
       const anchor = captureAnchor();
-      const cards = Array.isArray(model.cards) ? model.cards : [];
+      const cards = sortCards(Array.isArray(model.cards) ? model.cards : [], sortOrder);
       const existing = new Map();
       const stubs = new Map();
       const leaving = [];
@@ -303,6 +314,7 @@ window.bearingsPatch = (() => {
       for (const card of cards) appliedRevs.set(card.key, card.rev);
       appliedRev = model.rev;
       applied = model;
+      appliedSort = sortOrder;
       clearHeld();
       restoreAnchor(anchor);
       onApply(model);
@@ -310,7 +322,7 @@ window.bearingsPatch = (() => {
 
     function update(model) {
       if (!model || !Array.isArray(model.cards)) return "ignored";
-      if (applied && model.rev === appliedRev) {
+      if (applied && model.rev === appliedRev && appliedSort === sortOrder) {
         // Back to what is on screen: nothing is waiting any more.
         pending = null;
         cancelRelease();
@@ -330,6 +342,27 @@ window.bearingsPatch = (() => {
       tracker.deselect();
       if (pending) apply(pending);
     }
+
+    function setSort(order) {
+      if (!["oldest", "newest"].includes(order)) return;
+      sortOrder = order;
+      if (sortControl) sortControl.value = order;
+      try { viewerStorage?.setItem(SORT_KEY, order); } catch {}
+      if (pending || applied) update(pending || applied);
+    }
+    const onSort = () => setSort(sortControl.value);
+    sortControl?.addEventListener("change", onSort);
+    // Tick only clock text, never rebuild a card or disturb its answer phase.
+    function tickClocks() {
+      if (doc.visibilityState !== "hidden" && !tracker.state().selection) {
+        for (const node of list.querySelectorAll("[data-call-clock]")) {
+          const text = render.clockText?.({ at: node.getAttribute("data-call-clock"), label: node.getAttribute("data-call-clock-label") });
+          if (typeof text === "string" && node.textContent !== text) node.textContent = text;
+        }
+      }
+      clockTimer = timers.setTimeout(tickClocks, 1000);
+    }
+    clockTimer = timers.setTimeout(tickClocks, 1000);
 
     const onInput = (event) => {
       const field = event.target?.closest?.("[data-call-draft]");
@@ -366,6 +399,8 @@ window.bearingsPatch = (() => {
       update,
       observe,
       applyNow,
+      setSort,
+      get sortOrder() { return sortOrder; },
       tracker,
       drafts,
       get held() { return held; },
@@ -373,6 +408,8 @@ window.bearingsPatch = (() => {
       get applied() { return applied; },
       destroy() {
         cancelRelease();
+        timers.clearTimeout(clockTimer);
+        sortControl?.removeEventListener("change", onSort);
         tracker.destroy();
         list.removeEventListener("input", onInput);
         list.removeEventListener("change", onInput);
@@ -381,5 +418,5 @@ window.bearingsPatch = (() => {
     };
   }
 
-  return { createCallPatcher, createEngagementTracker, createDraftStore, diffCards, fallbackView, DRAFT_PREFIX };
+  return { createCallPatcher, createEngagementTracker, createDraftStore, diffCards, sortCards, fallbackView, DRAFT_PREFIX, SORT_KEY };
 })();

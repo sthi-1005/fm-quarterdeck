@@ -1766,6 +1766,9 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 #review-annotation .review-actions button { min-width: 0; }
 #review-annotation #review-form-close { min-height: 32px; margin-left: 0; }
 
+.call-sort { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: var(--text-small); }
+.call-sort select { min-height: 44px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.call-head { flex-wrap: wrap; }
 /* Live Captain's Call: mute chrome, never editable or copyable content. */
 .call-cards { display: flex; flex-direction: column; gap: var(--space-3); overflow-anchor: auto; }
 .call-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

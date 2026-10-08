@@ -1742,7 +1742,7 @@ function observeBearings(data) {
 let callAnswers = null, callOverflow = null;
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
-  view: window.bearingsView, scroller: $("#overview-view"),
+  view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
   onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); },
   onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); },
 });

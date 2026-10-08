@@ -59,9 +59,13 @@ test("the envelope is the board's fm-bearings-answer.v1 context plus provenance,
   const merge = model.cards.find((card) => card.key === "merge:beta-merge");
   const envelope = answerEnvelope({ card: merge, selection: "merge", note: "after the ```demo``` today" }, model.rev);
   assert.deepEqual(envelope, {
-    schema: "fm-bearings-answer.v1", question: "merge.beta-merge", selection: "merge", note: "after the ```demo``` today",
+    schema: "fm-bearings-answer.v1", question: "merge.beta-merge", selection: "", note: "merge - after the ```demo``` today",
     channel: "quarterdeck", type: "merge", task: "beta-merge", label: "Merge beta-merge -> merge - after the ```demo``` today", cardRev: merge.rev, observedRev: "model-rev-1",
   });
+  const bare = answerEnvelope({ card: merge, selection: "merge", note: "" }, model.rev);
+  assert.equal(bare.selection, "merge");
+  assert.equal(bare.note, "");
+  assert.notEqual(envelope.selection || envelope.note, "merge", "a typed note is instruction text in the keyed intake");
   const text = formatAnswerNote(envelope);
   assert.match(text.split("\n")[0], /^Captain's Call answer from Quarterdeck · Merge beta-merge: merge - after the/);
   const fences = text.split("\n").filter((line) => line.startsWith("```"));

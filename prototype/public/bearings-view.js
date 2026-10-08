@@ -8,6 +8,17 @@ window.bearingsView = (() => {
     if (!Number.isFinite(ms) || ms < 0) return "age unknown";
     return ms < 60000 ? "just now" : ms < 3600000 ? `${Math.floor(ms / 60000)}m ago` : `${Math.floor(ms / 3600000)}h ago`;
   }
+  function clockText(clock, now = Date.now()) {
+    const value = clock?.at;
+    const label = clock?.label || "Created / updated";
+    if (!value || !Number.isFinite(Date.parse(value))) return `${label}: unknown`;
+    // A durable date is not a timestamp: preserve its precision, never invent midnight.
+    if (/^\d{4}-\d\d-\d\d$/.test(value)) {
+      const days = Math.floor((Date.UTC(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()) - Date.parse(value)) / 86400000);
+      return `${label}: ${value} (time unknown) · ${days >= 0 ? `${days}d ago` : "age unknown"}`;
+    }
+    return `${label}: ${new Date(value).toLocaleString()} · ${age(value, now)}`;
+  }
   // Stable, id-safe suffix per card key for aria-controls targets.
   function idFor(key) {
     let hash = 5381;
@@ -50,7 +61,7 @@ window.bearingsView = (() => {
     const shortened = sourceShortened(decide);
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
     const about = [card.repo || "Repository not recorded", card.owner || "Owner not recorded", merge && card.kind].filter(Boolean).join(" · ");
-    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span>${merge ? `<span class="call-age" title="${escape(card.checkedAt || "Check time unknown")}">Checked ${escape(age(card.checkedAt))}</span>` : ""}</header>
+    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Created / updated")}">${escape(clockText(card.clock))}</span></header>
       <h3>${label} requested${card.repo ? ` · ${escape(card.repo)}` : ""}</h3>
       <dl class="call-context">${row("About", about)}${row("Decide", decide, ` class="call-clamp" data-call-clamp id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}`)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
       <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden>
@@ -85,5 +96,5 @@ window.bearingsView = (() => {
   }
   const heldText = (diff) => ["Captain's Call changed — updates when you're done", diff.added && `${diff.added} new`, diff.changed && `${diff.changed} changed`, diff.removed && `${diff.removed} resolved`].filter(Boolean).join(" · ");
   const stubHtml = () => '<div class="call-chrome"><h3>Resolved by Firstmate — your unsent text</h3><p class="call-meta">This text was not sent. Copy it before dismissing.</p></div><pre data-call-stub-text></pre><div class="call-stub-actions"><button type="button" data-call-stub-copy>Copy</button><button type="button" data-call-stub-dismiss>Dismiss</button></div>';
-  return { cardHtml, emptyHtml, coverageText, heldText, stubHtml, age, idFor, sourceShortened };
+  return { cardHtml, emptyHtml, coverageText, heldText, stubHtml, age, clockText, idFor, sourceShortened };
 })();

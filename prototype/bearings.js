@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, watch as fsWatch } from "node:fs";
-import { access, readdir, stat } from "node:fs/promises";
+import { access, open, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 // Live Captain's Call. Contract: BEARINGS.md. Quarterdeck runs only Firstmate's own
-// bounded bearings projection; it never reads backlog, meta or status records to
-// build calls, and it writes nothing under FM_HOME.
+// bounded bearings projection to build calls. A bounded read of the selected home's
+// backlog adds durable clocks only; it never creates calls or writes under FM_HOME.
 export const MODEL_SCHEMA = "fm-quarterdeck-call.v1";
 const SOURCE_SCHEMA = "fm-bearings.v1";
 const MIN_GAP_FLOOR_MS = 15000;
@@ -45,6 +45,49 @@ export function shortHash(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
 }
 const withRev = (card) => ({ ...card, rev: shortHash(card) });
+const durableDate = (value) => isoDate(value) || (typeof value === "string" && /^\d{4}-\d\d-\d\d$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value ? value : null);
+export function decisionClock(row) {
+  const candidates = [["Updated", row.updated_at], ["Hold set", row.hold_set_at], ["Created", row.created]]
+    .map(([label, value]) => ({ label, at: durableDate(value) })).filter((entry) => entry.at);
+  return candidates.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] || { label: "Created / updated", at: null };
+}
+
+// Read only the selected home's ledger, never another owner's endpoint namespace.
+// Missing/oversized ledgers and missing fields leave clocks unknown; file mtimes are not task times.
+export function backlogClocks(text) {
+  const clocks = new Map();
+  let current = null, firstBody = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^##\s/.test(line)) { current = null; continue; }
+    const item = line.match(/^\s*-\s+\[[ xX]\]\s+(\S+)\s+-\s+(.+)$/);
+    if (item) {
+      current = TASK_ID.test(item[1]) ? item[1] : null;
+      firstBody = true;
+      if (current) clocks.set(current, { created: item[2].match(/\(since (\d{4}-\d\d-\d\d)\)/)?.[1] });
+    } else if (current && /^\s{2,}\S/.test(line) && firstBody) {
+      firstBody = false;
+      const stamp = line.trim().match(/^Captain hold set: (\d{4}-\d\d-\d\d(?:T\d\d:\d\d:\d\dZ)?)$/)?.[1];
+      if (stamp) clocks.get(current).hold_set_at = stamp;
+    }
+  }
+  return clocks;
+}
+async function addBacklogClocks(output, home) {
+  let file;
+  try {
+    file = await open(path.join(home, "data", "backlog.md"), "r");
+    const info = await file.stat();
+    if (!info.isFile() || info.size > 2 * 1024 * 1024) return output;
+    const buffer = Buffer.alloc(2 * 1024 * 1024 + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead === buffer.length) return output;
+    const raw = JSON.parse(output);
+    const clocks = backlogClocks(buffer.subarray(0, bytesRead).toString("utf8"));
+    if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
+      object(row) && row.owner === "(main)" ? { ...clocks.get(row.id), ...row } : row);
+    return JSON.stringify(raw);
+  } catch { return output; } finally { await file?.close(); }
+}
 
 // Fail closed: only a recognised projection whose consumed fields have the expected
 // shape may replace the last good model.
@@ -109,7 +152,7 @@ function callSection(raw) {
     if (!id || !summary || decided.has(id)) { invalid += 1; continue; }
     decided.add(id);
     const contribution = raw.contributions.captain.find((entry) => object(entry) && entry.task === id && httpsUrl(entry.url));
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, answer: decisionAnswer(row, id) }));
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {
@@ -118,7 +161,7 @@ function callSection(raw) {
     // A live decision for the same task already asks the captain; one card per call.
     if (decided.has(task) || merges.has(task)) continue;
     merges.add(task);
-    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at), answer: mergeAnswer(task) }));
+    cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at), clock: { label: "Checked", at: isoDate(row.checked_at) }, answer: mergeAnswer(task) }));
   }
   const c = raw.contributions;
   const coverage = { known: c.known, checked: c.checked, complete: c.complete === true, provenClear: c.proven_clear,
@@ -181,7 +224,7 @@ export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = acc
       });
     });
   };
-  return () => (pending ||= once().finally(() => { pending = null; }));
+  return () => (pending ||= once().then((output) => addBacklogClocks(output, home)).finally(() => { pending = null; }));
 }
 
 // Reads mtimes and sizes only (never contents) of the two record kinds whose change
