@@ -145,7 +145,8 @@ function regionFor(node) {
   const range = pointerTextRange || capture?.textRangeTarget(window.getSelection?.());
   const actual = range?.element || targetFor(node);
   if (!actual) return null;
-  const precise = capture ? { selector: capture.cssSelector(actual), tag: actual.tagName.toLowerCase(), text: capture.excerpt(actual) } : null;
+  const accessibleName = (actual.getAttribute("aria-label") || actual.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const precise = capture ? { selector: capture.cssSelector(actual), tag: actual.tagName.toLowerCase(), text: capture.excerpt(actual), ...(accessibleName ? { wireLabel: accessibleName } : {}) } : null;
   if (precise) {
     const table = capture.tableCellTarget(actual);
     if (table) precise.target = table;
@@ -763,7 +764,8 @@ function enqueue() {
   if (selected?.target?.type === "record") note.record = { recordId: selected.target.recordId };
   else if (selected?.record) note.record = selected.record;
   if (["text-range", "table-cell"].includes(selected?.target?.type)) note.target = selected.target;
-  if (selected?.label && selected.label !== note.text) note.label = selected.label;
+  const targetLabel = selected?.wireLabel || (selected?.selector === undefined ? selected?.label : "");
+  if (targetLabel && targetLabel !== note.text) note.label = targetLabel;
   queue.push(note);
   queueIds.push(crypto.randomUUID());
   batchId ||= crypto.randomUUID();

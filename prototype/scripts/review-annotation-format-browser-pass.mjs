@@ -68,6 +68,7 @@ try {
     assert.equal(receipt.payload.schema, "fm-agentos-review.v2");
     const entry = receipt.payload.entries[0];
     assert.equal(entry.tag, "text"); assert.equal(entry.text, "CI is green");
+    assert.equal(entry.label, undefined, 'do not duplicate paragraph text as an accessible label');
     assert.equal(entry.target.start.offset, 22); assert.equal(entry.target.end.offset, 33);
     assert.equal(entry.target.prefix, "Merged the build fix; "); assert.equal(entry.target.suffix, " on main.");
     assert.match(entry.record.recordId, /\.jsonl(?:@0|:1):0$/);
