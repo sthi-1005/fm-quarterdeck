@@ -18,7 +18,11 @@ window.bearingsAnswerForm = (() => {
     const get = (key) => {
       if (memory.has(key)) return memory.get(key);
       let value = null;
-      try { const raw = storage?.getItem(STATE_PREFIX + key); const parsed = raw ? JSON.parse(raw) : null; if (parsed && typeof parsed.phase === "string") value = parsed; } catch {}
+      try { const raw = storage?.getItem(STATE_PREFIX + key); const parsed = raw ? JSON.parse(raw) : null; if (parsed && typeof parsed.phase === "string") {
+        // Reload interrupted the response, not necessarily delivery. Keep its identity;
+        // only an explicit Retry click may reconcile it through the idempotent inbox.
+        value = parsed.phase === "sending" ? { ...parsed, phase: "failed", error: "The send was interrupted. Retry sends the same answer once." } : parsed;
+      } } catch {}
       memory.set(key, value);
       return value;
     };
@@ -88,6 +92,7 @@ window.bearingsAnswerForm = (() => {
         send.setAttribute("aria-busy", String(phase === "sending"));
         send.textContent = phase === "sending" ? "Sending…" : phase === "failed" ? "Retry send" : "Send to Firstmate";
       }
+      part(form, "edit")?.setAttribute("aria-disabled", String(phase === "sending"));
       const error = part(form, "error");
       if (error) {
         const text = ["refused", "failed"].includes(phase) ? state.error || "" : "";
@@ -136,6 +141,11 @@ window.bearingsAnswerForm = (() => {
         // The words now live in Firstmate's inbox; an unsent-text stub would be wrong.
         drafts?.set?.(key, "selection", "");
         drafts?.set?.(key, "answer", "");
+        const form = cardNode(key)?.querySelector("[data-call-answer]");
+        if (form) {
+          part(form, "text").value = "";
+          for (const input of form.querySelectorAll('input[type="radio"]')) input.checked = false;
+        }
         update(key, { phase: "sent", requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, "receipt");
         return;
       }
@@ -155,11 +165,16 @@ window.bearingsAnswerForm = (() => {
       if (!waiting.length) return;
       if (doc.visibilityState !== "hidden") {
         try {
-          const response = await fetchImpl(`/api/bearings/answer/status?ids=${waiting.map(([, state]) => encodeURIComponent(state.requestId)).join(",")}`);
-          const data = response.ok ? await response.json() : null;
-          for (const [key, state] of waiting) {
-            const next = data?.answers?.[state.requestId];
-            if (next && next.state !== "unknown" && next.state !== state.receipt?.state) update(key, { ...state, receipt: next });
+          // The status endpoint accepts at most 20 ids per read.
+          for (let i = 0; i < waiting.length; i += 20) {
+            const batch = waiting.slice(i, i + 20);
+            const response = await fetchImpl(`/api/bearings/answer/status?ids=${batch.map(([, state]) => encodeURIComponent(state.requestId)).join(",")}`);
+            const data = response.ok ? await response.json() : null;
+            for (const [key, state] of batch) {
+              const next = data?.answers?.[state.requestId];
+              // Answer again or pruning may have happened while this read was pending.
+              if (states.get(key) === state && next && next.state !== "unknown" && next.state !== state.receipt?.state) update(key, { ...state, receipt: next });
+            }
           }
         } catch {}
       }

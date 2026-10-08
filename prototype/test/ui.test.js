@@ -269,6 +269,10 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
         const node = {
           innerHTML: "",
           textContent: "",
+          replaceChildren(...children) {
+            node.children = children;
+            node.textContent = children.map((child) => child.textContent ?? String(child)).join("");
+          },
           value: "",
           hidden: false,
           dataset: {},

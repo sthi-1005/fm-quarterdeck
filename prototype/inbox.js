@@ -13,6 +13,9 @@ async function call(home, args, input = "") {
     child.stdout.on("data", (chunk) => { stdout += chunk; if (stdout.length > 4_000_000) child.kill(); });
     child.stderr.on("data", (chunk) => { stderr += chunk; if (stderr.length > 4096) child.kill(); });
     child.on("error", reject);
+    // A guarded inbox may refuse before consuming stdin. EPIPE is an unconfirmed
+    // delivery, not an unhandled stream error that can terminate the HTTP server.
+    child.stdin.on("error", reject);
     child.on("close", (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
     child.stdin.end(input);
   });

@@ -104,6 +104,10 @@ export function createAnswerRelay({ home, note = noteWithRequestId, receipts = i
         const envelope = answerEnvelope(valid, model.rev);
         return { digest, key: valid.key, envelope, text: formatAnswerNote(envelope), at: new Date(now()).toISOString() };
       })();
+      // A failed acknowledgement can follow a saved note (for example a missing wake).
+      // Freeze the original envelope before attempting delivery, so a same-id retry
+      // never substitutes newer model provenance or loses a now-resolved call.
+      remember(parsed.requestId, record);
       let receipt;
       try { receipt = await note(home, answerRequestId(parsed.requestId), record.text); } catch { refuse(502, "unconfirmed", "Firstmate did not confirm the answer; retry sends the same answer once"); }
       remember(parsed.requestId, { ...record, noteId: receipt.id });

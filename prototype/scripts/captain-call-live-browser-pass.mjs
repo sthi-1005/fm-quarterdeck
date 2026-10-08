@@ -31,8 +31,14 @@ await chmod(script, 0o755);
 const inbox = path.join(home, 'bin/fm-inbox.sh');
 await writeFile(inbox, `#!/bin/sh
 case "$1" in
-  note) printf '%s' "$3" > "$FM_HOME/answer-request-id"; cat > "$FM_HOME/answer-note.txt"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"note-1","announced":true,"outcome":"created"}\\n' "$3" ;;
-  receipts) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[]}\\n' "$(cat "$FM_HOME/answer-request-id" 2>/dev/null)" ;;
+  note) printf '%s\\n' "$3" >> "$FM_HOME/answer-attempts"; cat > "$FM_HOME/answer-note.txt"; [ ! -e "$FM_HOME/fail-answer" ] || exit 1; [ ! -e "$FM_HOME/delay-answer" ] || sleep 5; printf '%s' "$3" > "$FM_HOME/answer-request-id"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"note-1","announced":true,"outcome":"created"}\\n' "$3" ;;
+  receipts)
+    id="$(cat "$FM_HOME/answer-request-id" 2>/dev/null)"
+    case "$(cat "$FM_HOME/receipt-state" 2>/dev/null)" in
+      replied) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[{"id":"note-1","body":"Synthetic answer recorded"}]}\\n' "$id" ;;
+      received) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[]}\\n' "$id" ;;
+      *) printf '{"schema":"fm-inbox-receipts.v1","pending":[{"id":"note-1","request_id":"%s"}],"handled":[],"replies":[]}\\n' "$id" ;;
+    esac ;;
   *) exit 2 ;;
 esac
 `);
@@ -43,7 +49,7 @@ for (const name of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BRO
 // Explicit CDP attachment avoids MCP's implicit Chrome/startup-tab discovery.
 const profile = path.join(temp, 'profile');
 await mkdir(profile, { recursive: true });
-const chrome = spawn(process.env.CHROMIUM || 'chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const chrome = spawn(process.env.CHROMIUM || 'chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-first-run', ...(process.env.FM_BROWSER_FORCED_COLORS === '1' ? ['--force-high-contrast'] : []), '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
 let spawnError, diagnostics = '';
 chrome.on('error', error => { spawnError = error; });
 chrome.stderr.on('data', chunk => { diagnostics = (diagnostics + chunk.toString()).slice(-2000); });
@@ -69,12 +75,13 @@ const server = createServer({ FM_HOME: home, FM_BEARINGS_MIN_GAP_MS: '15000', FM
   lanesReader: async () => ({ lanes: [], transcript: { sessions: [], warnings: [] } }),
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const deadline = setTimeout(() => { console.error('Captain Call browser deadline exceeded'); process.exit(1); }, 240000);
+const deadline = setTimeout(() => { console.error('Captain Call browser deadline exceeded'); process.exit(1); }, 360000);
 try {
   const port = await waitForBrowserPort(chrome, profile, { spawnError: () => spawnError, diagnostics: () => diagnostics });
   env.CHROME_DEVTOOLS_AXI_BROWSER_URL = `http://127.0.0.1:${port}`;
   await browser('newpage', `http://127.0.0.1:${server.address().port}/#overview`);
   await until("document.querySelectorAll('[data-call-key]').length===3 && document.querySelectorAll('#summary .metric-card').length===3");
+  if (process.env.FM_BROWSER_FORCED_COLORS === '1') await evaluate(`() => { if(!matchMedia('(forced-colors: active)').matches)throw Error('forced colors not active'); return 'native Chromium forced colors active'; }`);
   for (const width of [1280,360,390]) {
     await browser('resize', String(width), '844');
     await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||decision.querySelector('input[type=radio],select,details,.call-opt-rec')||!decision.querySelector('form[data-call-answer] textarea[data-call-draft=answer]')||merge.querySelectorAll('input[type=radio]').length!==1||merge.querySelector('input[type=radio]').value!=='merge'||merge.querySelector('.call-opt-rec'))throw Error('source information lost or answer options invented'); const more=c=>c.querySelector('[data-call-more]'); const gamma=document.querySelector('[data-call-key="decision:gamma-credential"]'); if(more(decision).hidden||more(merge).hidden||!more(gamma).hidden)throw Error('More details must show exactly when text is cut'); const clamp=decision.querySelector('[data-call-clamp]'); if(clamp.scrollHeight<=clamp.clientHeight+1)throw Error('long ask not clamped'); more(decision).click(); if(more(decision).getAttribute('aria-expanded')!=='true'||clamp.scrollHeight>clamp.clientHeight+1||decision.getAttribute('aria-current'))throw Error('More details did not expand in place'); more(decision).click(); if(more(decision).getAttribute('aria-expanded')!=='false'||clamp.scrollHeight<=clamp.clientHeight+1)throw Error('Fewer details did not collapse'); more(decision).blur(); return {width:innerWidth,richCards:true}; }`);
@@ -91,6 +98,92 @@ try {
   const envelope = JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(note)[1]);
   assert.deepEqual([envelope.schema, envelope.question, envelope.selection, envelope.note, envelope.channel], ['fm-bearings-answer.v1', 'gamma-credential', '', 'Synthetic credential is in the vault', 'quarterdeck']);
   await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); if(!card.querySelector('[data-call-answer-receipt]').innerText.includes('Sent to Firstmate: Synthetic credential is in the vault'))throw Error('receipt missing'); document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'PASS confirmed answer relayed once'; }`);
+  // Phase 2: synthetic source options, merge, changed confirmation, failed retry and receipts.
+  const phase = (key, value) => until(`document.querySelector('[data-call-key="${key}"] [data-call-answer]').dataset.callAnswerPhase==='${value}'`);
+  const answer = async (key, text, selection = '') => evaluate(`() => { const card=document.querySelector('[data-call-key="${key}"]'); const field=card.querySelector('[data-call-answer-text]'); field.focus(); field.value=${JSON.stringify(text)}; field.dispatchEvent(new Event('input',{bubbles:true})); ${selection ? `const radio=card.querySelector('input[value="${selection}"]'); radio.checked=true; radio.dispatchEvent(new Event('change',{bubbles:true}));` : ''} return 'draft'; }`);
+  const action = (key, name) => evaluate(`() => { document.querySelector('[data-call-key="${key}"] [data-call-answer-${name}]').click(); return '${name}'; }`);
+  const review = (key) => evaluate(`() => { document.querySelector('[data-call-key="${key}"] .call-answer-review').click(); return 'review'; }`);
+  const disengage = () => evaluate(`() => { document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'disengaged'; }`);
+  const phoneShot = async (key, name) => {
+    await browser('resize', '390', '844');
+    await evaluate(`() => { const card=document.querySelector('[data-call-key="${key}"]'); card.querySelector('[data-call-answer]').scrollIntoView({block:'center'}); if(document.documentElement.scrollWidth>innerWidth||card.scrollWidth>card.clientWidth+1)throw Error('answer overflow'); for(const button of card.querySelectorAll('.call-answer button')){if(button.getBoundingClientRect().height && button.getBoundingClientRect().height<44)throw Error('short touch target');} return '${name} phone geometry'; }`);
+    await browser('screenshot', path.join(proof, `captain-answer-${name}-390.png`));
+  };
+  const attempts = async () => (await readFile(path.join(home,'answer-attempts'),'utf8')).trim().split('\n');
+  const envelopeNow = async () => JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(await readFile(path.join(home,'answer-note.txt'),'utf8'))[1]);
+  await disengage();
+  raw.decisions_open[0].options = [{value:'staged',label:'Staged rollout',hint:'Limit exposure while checks continue'},{value:'now',label:'Release now',hint:'Use the full release window'}];
+  raw.decisions_open[0].recommend_value = 'staged';
+  raw.decisions_open[0].close = 'release';
+  await change();
+  await until(`document.querySelector('[data-call-key="decision:alpha-call"]').querySelectorAll('input[type=radio]').length===2`);
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); if(card.querySelectorAll('.call-opt-rec').length!==1||!card.querySelector('.call-opt:has(input[value=staged]) .call-opt-rec')||card.querySelector('input:checked'))throw Error('source recommendation must not select or answer'); return 'source options and one recommendation'; }`);
+  await phoneShot('decision:alpha-call','compose');
+  await answer('decision:alpha-call','After the synthetic demo','staged');
+  const before = (await attempts()).length;
+  await review('decision:alpha-call');
+  await phoneShot('decision:alpha-call','confirm');
+  assert.equal((await attempts()).length,before,'review is local');
+  await action('decision:alpha-call','edit');
+  await phase('decision:alpha-call','compose');
+  await review('decision:alpha-call');
+  await action('decision:alpha-call','send');
+  await phase('decision:alpha-call','sent');
+  const structured = await envelopeNow();
+  assert.deepEqual([structured.question,structured.selection,structured.note,structured.close],['alpha-call','staged','After the synthetic demo','release']);
+  await phoneShot('decision:alpha-call','sent');
+  await writeFile(path.join(home,'receipt-state'),'received');
+  await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer-receipt-text]').textContent.includes('received by Firstmate')`);
+  await phoneShot('decision:alpha-call','received');
+  await writeFile(path.join(home,'receipt-state'),'replied');
+  await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer-receipt-text]').textContent.includes('Firstmate replied: Synthetic answer recorded')`);
+  await phoneShot('decision:alpha-call','replied');
+  await action('decision:alpha-call','again');
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); if(card.querySelector('textarea').value||card.querySelector('input:checked'))throw Error('old answer must not be an unsent draft'); return 'empty correction'; }`);
+  await answer('decision:alpha-call','A revised synthetic answer','now');
+  await review('decision:alpha-call');
+  raw.decisions_open[0].summary += ' A changed source condition.';
+  await change();
+  await until(`document.querySelector('#captain-call').dataset.held==='true'`);
+  const changedBefore = (await attempts()).length;
+  await disengage();
+  await phase('decision:alpha-call','refused');
+  await phoneShot('decision:alpha-call','refused');
+  await action('decision:alpha-call','send');
+  assert.equal((await attempts()).length,changedBefore,'changed reviewed call never sends');
+  await writeFile(path.join(home,'fail-answer'),'1');
+  await writeFile(path.join(home,'receipt-state'),'accepted');
+  await answer('merge:beta-merge','','merge');
+  await review('merge:beta-merge');
+  await action('merge:beta-merge','send');
+  await phase('merge:beta-merge','failed');
+  await phoneShot('merge:beta-merge','failed');
+  const failedAttempts = await attempts();
+  await rm(path.join(home,'fail-answer'));
+  await writeFile(path.join(home,'delay-answer'),'1');
+  await action('merge:beta-merge','send');
+  await phase('merge:beta-merge','sending');
+  await phoneShot('merge:beta-merge','sending');
+  await phase('merge:beta-merge','sent');
+  assert.deepEqual((await attempts()).slice(-2),[failedAttempts.at(-1),failedAttempts.at(-1)],'Retry reuses the exact request id');
+  assert.equal((await envelopeNow()).selection,'merge');
+  assert.equal((await envelopeNow()).question,'merge.beta-merge');
+  await rm(path.join(home,'delay-answer'));
+  // Accessible disclosure: reach More details with Tab; Enter expands, Space collapses.
+  await browser('resize','1280','844');
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); card.tabIndex=-1; card.focus(); return 'keyboard start'; }`);
+  await browser('press','Tab');
+  await evaluate(`() => { const b=document.activeElement; if(!b.matches('[data-call-more]')||b.textContent!=='More details'||b.getAttribute('aria-expanded')!=='false'||b.getAttribute('aria-controls').split(' ').some(id=>!document.getElementById(id)))throw Error('disclosure keyboard/name/controls'); return 'Tab reached More details'; }`);
+  await browser('press','Enter');
+  await evaluate(`() => { if(document.activeElement.getAttribute('aria-expanded')!=='true'||document.activeElement.textContent!=='Fewer details')throw Error('Enter expand'); return 'expanded'; }`);
+  await browser('press','Space');
+  await evaluate(`() => { if(document.activeElement.getAttribute('aria-expanded')!=='false')throw Error('Space collapse'); return 'collapsed'; }`);
+  await writeFile(path.join(proof,'captain-answer-accessibility.txt'),await browser('snapshot'));
+  // Quarterdeck is deliberately light; a dark OS preference must not reduce readability.
+  await browser('emulate','--color-scheme','dark');
+  await phoneShot('decision:alpha-call','dark-preference');
+  await browser('emulate','--color-scheme','light');
+  await disengage();
   await evaluate(`() => { window.proof={}; proof.alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); proof.beta=document.querySelector('[data-call-key="merge:beta-merge"]'); proof.alphaField=proof.alpha.querySelector('textarea'); proof.betaField=proof.beta.querySelector('textarea'); proof.rebuilds=0; new MutationObserver(ms=>proof.rebuilds+=ms.filter(m=>m.target===proof.alpha&&m.type==='childList').length).observe(proof.alpha,{childList:true}); return {revision:window.FM_BOOT_REVISION, noTree:!document.querySelector('#projects')}; }`);
   raw.decisions_open[0].summary = 'Changed rollout question'; await change();
   await until("proof.alpha.innerText.includes('Changed rollout question')");
@@ -105,6 +198,9 @@ try {
   await evaluate("() => { proof.alpha.querySelector('textarea').blur(); document.getSelection().removeAllRanges(); return 'released'; }");
   await until("!!document.querySelector('[data-call-stub]')");
   await evaluate(`() => { const stub=document.querySelector('[data-call-stub]'); if(!stub.querySelector('[data-call-stub-copy]')||!stub.innerText.includes('Unsent synthetic reminder'))throw Error('resolved draft lost'); return 'PASS resolved stub with Copy'; }`);
+  // Renew the GET lease explicitly: the longer answer matrix may outlive the boot
+  // read's 60-second lease. Hidden tabs have no stream and must not invent a watcher.
+  await evaluate(`async () => { await fetch('/api/bearings'); return 'renewed fixture read lease'; }`);
   // Deterministic visibility lifecycle events: no native OS/background claims.
   await evaluate(`() => { Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'}); document.dispatchEvent(new Event('visibilitychange')); return 'synthetic hidden'; }`);
   raw.decisions_open[0].summary = 'Caught up from hidden'; await change();

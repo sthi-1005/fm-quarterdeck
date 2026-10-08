@@ -50,7 +50,8 @@ test('long text is clamped with a More details control; Firstmate shortening is 
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
   const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
   assert.match(freeform, /<form class="call-answer" data-call-answer novalidate/);
-  assert.match(freeform, /No structured options for this call yet/);
+  assert.match(freeform, /No structured options for this call yet; any recorded choices are in the full ask above/);
+  assert.doesNotMatch(freeform, /\$\{/);
   assert.match(freeform, /data-call-draft="answer" data-call-answer-text/);
   assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
   for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);

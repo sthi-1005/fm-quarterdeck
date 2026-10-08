@@ -25,7 +25,8 @@ window.bearingsView = (() => {
     const textLabel = options.length ? "Add a note <span>(optional · sent with your answer)</span>" : "Your answer <span>(sent to Firstmate)</span>";
     return `<form class="call-answer" data-call-answer novalidate aria-label="Answer: ${escape(label)}">
       <fieldset class="call-answer-fields" data-call-answer-fields>
-        ${options.length ? `<legend class="call-answer-legend">Answer</legend><div class="call-opts">${optionHtml}</div>` : '<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above. Answer in your own words.</p>'}
+        <legend class="call-answer-legend">Answer</legend>
+        ${options.length ? `<div class="call-opts">${optionHtml}</div>` : `<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above. Answer in your own words.</p>`}
         <label class="call-answer-note">${textLabel}<textarea data-call-draft="answer" data-call-answer-text rows="2" placeholder="${options.length ? "Optional note…" : "Your answer…"}"></textarea></label>
       </fieldset>
       <p class="call-answer-error" data-call-answer-error role="alert" hidden></p>

@@ -101,6 +101,24 @@ test("the relay notes once per request id, replays a retry after the card left, 
   await assert.rejects(createAnswerRelay({}).submit(body, model), refusal("unconfigured"));
 });
 
+test("an unconfirmed delivery retains its exact envelope for a same-id retry after the model changes", async () => {
+  const model = ready(normalizeSnapshot(await fixture("two-calls")));
+  const card = model.cards[0];
+  const body = { requestId: uuid(), key: card.key, cardRev: card.rev, selection: "", note: "Tuesday" };
+  const attempts = [];
+  const relay = createAnswerRelay({ home: "/synthetic/home", note: async (_home, _id, text) => {
+    attempts.push(text);
+    if (attempts.length === 1) throw new Error("acknowledgement unavailable");
+    return { id: "note-1", outcome: "replay" };
+  } });
+  await assert.rejects(relay.submit(body, model), refusal("unconfirmed"));
+  await assert.rejects(relay.submit({ ...body, note: "Wednesday" }, model), refusal("request-reused"));
+  const retry = await relay.submit(body, ready({ cards: [], rev: "new-model" }));
+  assert.equal(retry.replay, true);
+  assert.equal(retry.envelope.observedRev, model.rev);
+  assert.equal(attempts[1], attempts[0], "unconfirmed retries preserve the original note byte for byte");
+});
+
 async function answerServer(context, { relay, revision = "a".repeat(40) } = {}) {
   const raw = await fixture("two-calls");
   const hub = createBearingsHub({ runner: async () => JSON.stringify(raw), watchRecords: null, fingerprint: null });
@@ -128,6 +146,8 @@ test("POST /api/bearings/answer is same-origin JSON on the host only, revision-g
   assert.equal((await post("x".repeat(5000))).status, 413);
   assert.equal((await post({ ...body, key: "decision:missing" })).status, 409);
   assert.equal((await post({ ...body, selection: "reconcile" })).status, 422);
+  assert.equal((await post(body, {}, "/preview/main/api/bearings/answer")).status, 404);
+  assert.equal((await fetch(`${base}/preview/main/api/bearings/answer/status?ids=${uuid()}`)).status, 404);
   assert.equal(calls.length, 0, "no refusal reaches Firstmate");
 
   const accepted = await post(body);
@@ -145,4 +165,12 @@ test("POST /api/bearings/answer is same-origin JSON on the host only, revision-g
   const moved = await post({ ...body, requestId: uuid(2) });
   assert.ok([409, 503].includes(moved.status), "a moved revision never answers");
   assert.equal(calls.length, 1);
+});
+
+test("answer status fails visibly when Firstmate receipts are unavailable", async (context) => {
+  const relay = createAnswerRelay({ home: "/synthetic/home", receipts: async () => { throw new Error("offline"); } });
+  const { base } = await answerServer(context, { relay });
+  const response = await fetch(`${base}/api/bearings/answer/status?ids=${uuid()}`);
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error, "Firstmate receipts unavailable");
 });

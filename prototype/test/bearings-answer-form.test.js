@@ -14,7 +14,7 @@ const merge = (rev = "b1") => ({ key: "merge:beta-merge", type: "merge", task: "
   answer: { question: "merge.beta-merge", options: [{ value: "merge", label: "Merge now", hint: "Firstmate re-checks" }], recommend: null, close: null, freeform: true } });
 const model = (cards) => ({ schema: "fm-quarterdeck-call.v1", rev: cards.map((card) => `${card.key}@${card.rev}`).join("|") || "empty", state: "ready", cards, coverage: { known: 1, checked: 1, provenClear: false }, omitted: [] });
 
-function setup({ responses = [] } = {}) {
+function setup({ responses = [], storage = null } = {}) {
   const dom = callDom();
   const timers = fakeTimers();
   const { document } = dom;
@@ -31,22 +31,28 @@ function setup({ responses = [] } = {}) {
   const queue = [...responses];
   const fetchImpl = async (url, init = {}) => {
     fetches.push({ url, init, body: init.body ? JSON.parse(init.body) : null });
-    const next = queue.shift() || { status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } };
+    const next = await (queue.shift() || { status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } });
     if (next instanceof Error) throw next;
     return { status: next.status, ok: next.status < 300, json: async () => next.body };
   };
   let n = 0;
   let answers = null, overflow = null;
-  const patcher = win.bearingsPatch.createCallPatcher({ section, list, status, view: win.bearingsView, doc: document, win, storage: null, timers,
+  const patcher = win.bearingsPatch.createCallPatcher({ section, list, status, view: win.bearingsView, doc: document, win, storage, timers,
     onRender: (node, card) => { answers?.render(node, card); overflow?.render(node, card); },
     onApply: (next) => { answers?.prune(next.cards.map((card) => card.key)); overflow?.prune(next.cards.map((card) => card.key)); } });
-  answers = win.bearingsAnswerForm.createAnswerController({ list, drafts: patcher.drafts, doc: document, win, storage: null, fetchImpl, timers, uuid: () => uuid(++n) });
+  answers = win.bearingsAnswerForm.createAnswerController({ list, drafts: patcher.drafts, doc: document, win, storage, fetchImpl, timers, uuid: () => uuid(++n) });
   overflow = win.bearingsOverflow.createOverflowController({ list, win });
   const node = (key) => list.children.find((entry) => entry.getAttribute("data-call-key") === key);
   const part = (key, name) => node(key).querySelector(`[data-call-answer-${name}]`);
   const submit = (key) => node(key).querySelector("[data-call-answer]").dispatchEvent({ type: "submit", preventDefault() {} });
   const leave = () => { outside.focus(); outside.click(); timers.advance(700); };
-  return { dom, document, timers, list, patcher, answers, overflow, fetches, node, part, submit, leave };
+  return { dom, document, timers, list, patcher, answers, overflow, fetches, node, part, submit, leave, win };
+}
+
+function tabStorage() {
+  const entries = new Map();
+  return { getItem: (key) => entries.get(key) || null, setItem: (key, value) => entries.set(key, value), removeItem: (key) => entries.delete(key),
+    key: (index) => [...entries.keys()][index], get length() { return entries.size; } };
 }
 
 test("nothing is sent until Review answer and then an explicit Send; the sent answer clears its draft and shows receipts", async () => {
@@ -154,6 +160,107 @@ test("an empty or oversized answer is refused locally and nothing is sent", asyn
   t.submit(key);
   assert.match(t.part(key, "error").textContent, /longer than 512 bytes/);
   assert.equal(t.fetches.length, 0);
+});
+
+test("option drafts restore after a refill; Edit preserves drafts and Answer again starts empty", async () => {
+  const t = setup();
+  const key = "merge:beta-merge";
+  t.patcher.update(model([merge()]));
+  const radio = () => t.node(key).querySelector('input[type="radio"]');
+  radio().checked = true;
+  radio().dispatchEvent({ type: "change" });
+  t.part(key, "text").type("After the demo");
+  t.leave();
+  t.patcher.update(model([merge("b2")]));
+  assert.equal(radio().checked, true);
+  assert.equal(t.part(key, "text").value, "After the demo");
+  t.submit(key);
+  t.part(key, "edit").click();
+  assert.equal(t.answers.state(key), null);
+  assert.equal(t.part(key, "fields").disabled, false);
+  assert.equal(radio().checked, true);
+  assert.equal(t.part(key, "text").value, "After the demo");
+  t.submit(key);
+  t.part(key, "send").click();
+  await flush();
+  t.part(key, "again").click();
+  assert.equal(t.answers.state(key), null);
+  assert.equal(t.part(key, "text").value, "");
+  assert.equal(radio().checked, false);
+  t.submit(key);
+  assert.equal(t.answers.state(key).phase, "refused");
+  assert.equal(t.fetches.length, 1, "Answer again never sends the old words");
+});
+
+test("tab storage restores confirmation and receipts; prune forgets a re-held task", async () => {
+  const storage = tabStorage();
+  const key = "decision:alpha-call";
+  const t = setup({ storage });
+  t.patcher.update(model([decision()]));
+  t.part(key, "text").type("Tuesday");
+  t.submit(key);
+  const reloaded = setup({ storage });
+  reloaded.patcher.update(model([decision()]));
+  assert.equal(reloaded.answers.state(key).phase, "confirm");
+  assert.equal(reloaded.part(key, "preview").textContent, "Tuesday");
+  assert.equal(reloaded.fetches.length, 0);
+  reloaded.part(key, "send").click();
+  await flush();
+  const receiptReload = setup({ storage });
+  receiptReload.patcher.update(model([decision()]));
+  assert.equal(receiptReload.answers.state(key).phase, "sent");
+  assert.equal(receiptReload.part(key, "receipt").hidden, false);
+  assert.equal(receiptReload.fetches.length, 0, "reload does not resend");
+  receiptReload.patcher.update(model([]));
+  receiptReload.timers.advance(1000);
+  receiptReload.patcher.update(model([decision("a2")]));
+  assert.equal(receiptReload.answers.state(key), null);
+  assert.equal(receiptReload.part(key, "confirm").hidden, true);
+  assert.equal(receiptReload.part(key, "text").value, "");
+});
+
+test("reload during an uncertain send offers only an explicit same-id retry", async () => {
+  const storage = tabStorage();
+  const key = "decision:alpha-call";
+  storage.setItem("fm-quarterdeck-call-answer.v1:" + key, JSON.stringify({ phase: "sending", requestId: uuid(9), cardRev: "a1", selection: "", note: "Tuesday" }));
+  const t = setup({ storage });
+  t.patcher.update(model([decision()]));
+  assert.equal(t.answers.state(key).phase, "failed");
+  assert.equal(t.part(key, "send").textContent, "Retry send");
+  t.timers.advance(60000);
+  await flush();
+  assert.equal(t.fetches.length, 0);
+  t.part(key, "send").click();
+  await flush();
+  assert.equal(t.fetches[0].body.requestId, uuid(9));
+});
+
+test("a pending receipt read cannot overwrite Answer again", async () => {
+  const storage = tabStorage();
+  const key = "decision:alpha-call";
+  storage.setItem("fm-quarterdeck-call-answer.v1:" + key, JSON.stringify({ phase: "sent", requestId: uuid(1), note: "Tuesday", receipt: { state: "accepted" } }));
+  let respond;
+  const t = setup({ storage, responses: [new Promise((resolve) => { respond = resolve; })] });
+  t.patcher.update(model([decision()]));
+  const pending = t.answers.poll();
+  t.part(key, "again").click();
+  respond({ status: 200, body: { answers: { [uuid(1)]: { state: "received" } } } });
+  await pending;
+  assert.equal(t.answers.state(key), null, "late receipts do not restore the old sent phase");
+});
+
+test("receipt polling batches at most twenty ids and leaves unavailable receipts pending", async () => {
+  const storage = tabStorage();
+  const cards = Array.from({ length: 21 }, (_, i) => ({ ...decision(), key: `decision:call-${i}` }));
+  for (let i = 0; i < cards.length; i++) storage.setItem("fm-quarterdeck-call-answer.v1:" + cards[i].key, JSON.stringify({ phase: "sent", requestId: uuid(i + 1), note: "Tuesday", receipt: { state: "accepted" } }));
+  const t = setup({ storage, responses: [{ status: 502, body: {} }, { status: 200, body: { answers: { [uuid(21)]: { state: "received" } } } }] });
+  t.patcher.update(model(cards));
+  await t.answers.poll();
+  assert.equal(t.fetches.length, 2);
+  assert.equal(new URL(t.fetches[0].url, "http://example.invalid").searchParams.get("ids").split(",").length, 20);
+  assert.equal(new URL(t.fetches[1].url, "http://example.invalid").searchParams.get("ids"), uuid(21));
+  assert.equal(t.answers.state(cards[0].key).receipt.state, "accepted");
+  assert.equal(t.answers.state(cards[20].key).receipt.state, "received");
 });
 
 test("More details appears only when text is cut, expands in place, and survives patches", () => {

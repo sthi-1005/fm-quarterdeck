@@ -59,7 +59,7 @@ Lane/kind/source/task/search filters intersect. Search is debounced and escaped.
 
 ## Security and portability
 
-No arbitrary browser shell, filesystem path, ref, command or destination control is provided. There are narrow POST contracts for review/chat, presentation state and registered preview selection; this is not a GET-only application. Reads do not fabricate missing clocks, thinking, dialogue, currency conversion or account evidence.
+No arbitrary browser shell, filesystem path, ref, command or destination control is provided. There are narrow POST contracts for review/chat, confirmed Captain's Call answers (`POST /api/bearings/answer`, receipts via `GET /api/bearings/answer/status`; both host-only), presentation state and registered preview selection; this is not a GET-only application. Reads do not fabricate missing clocks, thinking, dialogue, currency conversion or account evidence.
 
 Keep loopback binding or one exact private HTTPS Host/Origin pair. Forwarding headers and tailnet wildcard names are not authority. Every request proves the clean serving Git revision; no-Git archives fail closed. A later authorized fresh repository must regenerate all operator-owned revision bindings instead of carrying old objects/refs/history. HTML and search input are escaped; full feeds are not screen-reader live regions.
 

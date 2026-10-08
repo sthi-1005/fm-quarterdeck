@@ -7,6 +7,8 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Desktop shell disclosure/resizing uses one edge stripe. Lane and kind filters have independent panels; context/history use bounded scroll areas. Phone/tablet disclosures preserve native focus, Escape and close behavior.
 - Message prose has a readable width while structured content may use the pane. Feed paging is bounded independently of loaded source history.
 - Overview, Expenses, Quota, Preferences and closed history share heading, card, status and empty/unavailable conventions.
+- Captain's Call answer forms separate source context from input with a quiet rule; option cards use native radios, a textual Recommended chip and visible keyboard focus. All call buttons and option targets are at least 44px high. Confirmation and receipt panels retain readable text (disabled fields use muted ink, not whole-form opacity), and phone actions wrap without overflow.
+- The content canvas is light, including under an OS dark preference; the app shell remains dark. Forced colors use system outlines and disabled text, not color-only selection.
 
 ## Acceptance, not historical results
 

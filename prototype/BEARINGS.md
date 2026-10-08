@@ -104,7 +104,7 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
 2. **Review answer** checks locally (non-empty; `selection - note` at most 512 UTF-8 bytes, the board's cap) and moves to *confirm*: the fields lock and the exact text to be sent is shown. Nothing has been sent.
 3. **Send to Firstmate** (the only sending control) moves to *sending*, then:
    - `202` → *sent*: answer drafts are cleared (so a resolved card shows no "unsent text" stub) and a receipt line follows Firstmate's inbox receipts: waiting → received → replied (polled every 15 s while visible and not yet replied).
-   - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note.
+   - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note. Reloading during *sending* also restores this uncertain retry state; it never resends automatically.
    - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock; a new review gets a new request id.
 4. **Edit** returns from *confirm*/*failed* to *compose*; **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
 
@@ -115,7 +115,7 @@ Typing protection is unchanged: the form lives inside the held section, so focus
 - Same-origin `authorized()` request (403), `application/json` with no query (415), body at most 4 KiB (413), and a served revision still equal to the process commit (409 `revision`).
 - Body exactly `{requestId, key, cardRev, selection, note}`: `requestId` a lowercase UUID, `cardRev` the 16-hex card rev shown. The note keeps the captain's words (line endings normalised, other control characters refused).
 - Refusals, each with `{error, code}` and no Firstmate call: `reconcile` selection (422, never an answer), empty (422), over 512 bytes (422), model not `ready` (409 `not-current`), key not open (409 `gone`), `cardRev` differs (409 `changed`), `answer: null` (409 `not-answerable`), selection not among the card's options (422 `bad-option`), request id reused for a different answer (409), no `FM_HOME` (503).
-- Delivery: `$FM_HOME/bin/fm-inbox.sh note --request-id quarterdeck-call:<requestId> --json -` (repairing a missing wake with `announce`), the same guarded, idempotent path review notes use. `202 {state:"accepted", requestId, key, noteId, replay, sentAt, envelope}`; an unconfirmed note is `502 unconfirmed`. The process remembers the last 200 relayed request ids, so a retry resends the identical note even after the card has left.
+- Delivery: `$FM_HOME/bin/fm-inbox.sh note --request-id quarterdeck-call:<requestId> --json -` (repairing a missing wake with `announce`), the same guarded, idempotent path review notes use. `202 {state:"accepted", requestId, key, noteId, replay, sentAt, envelope}`; an unconfirmed note is `502 unconfirmed`. The process remembers the last 200 attempted request ids before delivery (including unconfirmed acknowledgements), so a retry resends the identical note even after the card has left.
 
 The note body is one human line, a routing line, and the envelope in a ```` ```json fm-bearings-answer ```` fence (backticks inside JSON strings are escaped, so captain text cannot close it):
 
@@ -134,7 +134,11 @@ Firstmate's lavish adapter rule maps it to one keyed line: `<question>\t<selecti
 
 ```sh
 cd prototype
-node --test test/bearings*.test.js
+node --test --test-concurrency=2 test/bearings*.test.js
+# One isolated synthetic browser; run from a clean committed checkout:
+SCREENSHOT_DIR=/absolute/private/proof node scripts/captain-call-live-browser-pass.mjs
+# Sequential forced-colors matrix (never a second concurrent browser):
+FM_BROWSER_FORCED_COLORS=1 SCREENSHOT_DIR=/absolute/private/forced-proof node scripts/captain-call-live-browser-pass.mjs
 ```
 
 Fixtures under `test/fixtures/bearings/` are synthetic `fm-bearings.v1` output; tests that run a snapshot use a temporary home with a fake `bin/fm-bearings-snapshot.sh`.
