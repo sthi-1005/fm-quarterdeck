@@ -503,9 +503,12 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
     await chat.scan();
     await chat.applySnapshot(baseTasks(), fresh()).catch(() => false);
   })().finally(() => { refreshing = null; }));
+  // A scan publishes only new content. Unchanged scans stay silent: every observed event
+  // costs each stream a revision check and an activity read, and the stream's own
+  // heartbeat already carries freshness.
   async function tick() {
     await refresh();
-    emit();
+    if (current().rev !== lastRev) emit();
   }
   let unsubscribeHub = null;
   return {

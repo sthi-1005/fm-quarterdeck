@@ -10,7 +10,7 @@ window.bearingsDismiss = (() => {
     function render(node) {
       const key = keyOf(node);
       let state = states.get(key);
-      if (state && state.phase !== "sending" && state.rev !== node.getAttribute("data-call-rev")) {
+      if (state?.phase === "confirm" && state.rev !== node.getAttribute("data-call-rev")) {
         state = { phase: "compose", rev: node.getAttribute("data-call-rev"), error: "This call changed; review it before dismissing." };
         states.set(key, state);
       }

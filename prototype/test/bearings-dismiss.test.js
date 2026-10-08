@@ -60,6 +60,16 @@ test('dismiss errors return to review; a changed card invalidates its earlier re
   s.controller.destroy(); s.patcher.destroy();
 });
 
+test('a card that changes after Cancel shows no stale-review error', async () => {
+  const s = setup(async () => ({ ok: true }));
+  s.button('').click(); s.button('cancel').click();
+  s.patcher.update(model([{ ...chat, rev: 'changed-chat', summary: 'A changed synthetic ask' }, hold]));
+  s.outside.focus(); s.timers.advance(600);
+  assert.equal(s.button('confirm').hidden, true);
+  assert.equal(s.button('error').hidden, true);
+  s.controller.destroy(); s.patcher.destroy();
+});
+
 test('chat cards arrive live, stay held while another card is engaged, then fade on resolution without stealing moved focus', async () => {
   let finish;
   const s = setup(() => new Promise(resolve => { finish = resolve; }));

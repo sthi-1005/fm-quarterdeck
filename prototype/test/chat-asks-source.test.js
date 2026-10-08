@@ -26,16 +26,16 @@ function fixture() {
   return { source, timers, links, hubListeners, scans: () => scans, closes: () => closes, setAsks: value => { asks = value; }, async publish(model, type = 'model') { base = model; for (const listener of hubListeners) await listener({ type }); }, base: () => base };
 }
 
-test('source emits model only for changed content, observed for unchanged scans and hub evidence', async () => {
+test('scans emit model only for changed content and stay silent otherwise; hub evidence is forwarded', async () => {
   const f = fixture(), events = [];
   const stop = f.source.subscribe(event => events.push(event)); await flush();
-  assert.deepEqual(events.map(event => event.type), ['observed']);
+  assert.deepEqual(events, []);
   f.setAsks([ask]); f.timers.advance(3000); await flush();
-  assert.deepEqual(events.map(event => event.type), ['observed', 'model']);
+  assert.deepEqual(events.map(event => event.type), ['model']);
   const rev = events.at(-1).model.rev;
-  f.timers.advance(3000); await flush();
-  assert.equal(events.at(-1).type, 'observed');
-  assert.equal(events.at(-1).rev, rev);
+  f.timers.advance(9000); await flush();
+  assert.equal(events.length, 1);
+  assert.equal(f.source.current().rev, rev);
   await f.publish({ ...f.base(), checkedAt: '2030-01-02T10:01:00Z' }, 'observed');
   assert.equal(events.at(-1).type, 'observed');
   assert.equal(events.at(-1).checkedAt, '2030-01-02T10:01:00Z');
