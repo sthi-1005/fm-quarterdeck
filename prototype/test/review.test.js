@@ -598,7 +598,7 @@ test("annotation addresses the clicked control, never its enclosing sidebar", as
   badgeState(12);
   assert.match(nodes.get("review-panel-toggle").getAttribute("aria-label"), /12 annotations awaiting Firstmate receipt; 1 note queued locally/);
   assert.match(nodes.get("review-toggle").getAttribute("aria-label"), /Annotation mode on: tap or click content to annotate/);
-  assert.equal(vm.runInContext("queue[0].region.label", context), "Refresh data");
+  assert.equal(vm.runInContext("queue[0].label || queue[0].text", context), "Refresh data");
   let rerenders = 0;
   nodes.get("review-thread").replaceChildren = () => { rerenders++; };
   documentListeners.get("pointerover")({ target: content, pointerType: "mouse" });

@@ -13,6 +13,8 @@ function showAwaitingReview(count) {
   updateReviewControl();
 }
 let selected = null;
+let pointerTextRange = null;
+const recordTexts = new WeakMap(); // Never persist whole no-ID message bodies in drafts.
 let activeReviewTab = "conversation";
 // Sent history is a collapsed section; expanding it never replaces the queue or composer.
 let sentOpen = false;
@@ -140,7 +142,7 @@ function targetFor(node) {
 }
 
 function regionFor(node) {
-  const range = capture?.textRangeTarget(window.getSelection?.());
+  const range = pointerTextRange || capture?.textRangeTarget(window.getSelection?.());
   const actual = range?.element || targetFor(node);
   if (!actual) return null;
   const precise = capture ? { selector: capture.cssSelector(actual), tag: actual.tagName.toLowerCase(), text: capture.excerpt(actual) } : null;
@@ -157,7 +159,7 @@ function regionFor(node) {
     if (!precise) return { target, label: "Fleet Chat message", route: route(), version: config.version };
     const record = target.recordId ? { recordId: target.recordId } : { source: target.source, at: target.occurredAt, lanes: target.lanes };
     const result = { ...precise, record, label: label(actual), route: route(), version: config.version };
-    if (!record.recordId) capture.recordFingerprint(target.text).then((sha256) => { record.sha256 = sha256; saveDraft(); }).catch(() => { el("review-state").textContent = "Message identity unavailable; reselect the target before sending."; });
+    if (!record.recordId) recordTexts.set(result, target.text);
     return result;
   }
   const surface = actual.closest(".product-view, .lane-list, .context-rail");
@@ -460,6 +462,8 @@ function selectRegion(node, point) {
   if (!next) return;
   returnToArmed = pickingRegion;
   selected = next;
+  pointerTextRange = null;
+  if (next.record && !next.record.recordId) capture.recordFingerprint(recordTexts.get(next)).then((sha256) => { next.record.sha256 = sha256; saveDraft(); }).catch(() => { el("review-state").textContent = "Message identity unavailable; reselect the target before sending."; });
   hovered = null;
   hoveredNode = null;
   endPicking();
@@ -709,6 +713,11 @@ document.addEventListener("pointerover", (event) => {
 });
 el("review-pick").addEventListener("click", () => { if (hovered && hoveredNode) selectRegion(hoveredNode); });
 document.addEventListener("pointerdown", (event) => {
+  pointerTextRange = null;
+  if (event.button === 0 && (pickingRegion || annotateByDefault !== event.altKey) && targetFor(event.target)) {
+    pointerTextRange = capture?.textRangeTarget(window.getSelection?.());
+    if (pointerTextRange) event.preventDefault(); // Capture before a click collapses native selection.
+  }
   if (pickingRegion) touchStart = { x: event.clientX, y: event.clientY, moved: false };
 }, true);
 document.addEventListener("pointermove", (event) => {

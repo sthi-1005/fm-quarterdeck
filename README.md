@@ -126,6 +126,8 @@ Primary chat is a separate `fm-agentos-chat.v1` injected `chatDeliver` contract 
 cd prototype && npm test
 # Offline Chromium behavioral gate from a clean committed checkout:
 CHROMIUM=/absolute/path/to/chromium npm run test:browser
+# Optional durable desktop/phone review screenshots (synthetic spare-port candidate):
+SCREENSHOT_DIR=/absolute/private/proof node scripts/review-annotation-format-browser-pass.mjs
 # From repository root:
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s expenses
 node --test test/*.test.mjs
