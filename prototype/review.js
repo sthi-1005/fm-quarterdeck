@@ -1,4 +1,4 @@
-import { validV2Entry } from "./review-v2.js";
+import { validV2Entry, validRecordId } from "./review-v2.js";
 import { createGitIdentity } from "./git-identity.js";
 import { appendFile, mkdir, open, readFile, lstat, link, unlink, readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -59,9 +59,7 @@ function validMessageTarget(target) {
   if (!target || typeof target !== "object" || Array.isArray(target)) return false;
   if (target.type === "record") {
     if (Object.keys(target).sort().join(",") !== "recordId,type" || typeof target.recordId !== "string" || target.recordId.length > 1000) return false;
-    const id = target.recordId.match(/^((?:main-pi-session|state)\/[a-zA-Z0-9._/\-]+\.jsonl):([1-9]\d*)(?::(0|[1-9]\d*))?(?::block:(0|[1-9]\d*))?$/);
-    if (!id || id[1].split("/").some((segment) => segment === "." || segment === "..")) return false;
-    return id[1] === "state/branch-outcomes.jsonl" || id[1] === "state/terminal-outcomes.jsonl" ? id[3] === undefined && id[4] === undefined : id[3] !== undefined;
+    return validRecordId(target.recordId);
   }
   if (target.type === "quote") return Object.keys(target).sort().join(",") === "lanes,text,time,type" &&
     typeof target.time === "string" && target.time.length > 0 && target.time.length <= 120 &&

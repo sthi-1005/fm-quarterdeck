@@ -39,6 +39,12 @@ test("both legacy headers parse, with whole quotes bounded in the browser projec
 test("v2 strict validation, selected text targets and bounded fingerprint records", () => {
   const valid = (candidate) => validateReviewPayload(candidate, version, "");
   assert.equal(valid(payload), true);
+  for (const recordId of ['state/main-session/demo.jsonl@0:0', 'claude-main-session/demo.jsonl@124:0:block:1', 'main-pi-session/demo.jsonl:1:0', 'state/terminal-outcomes.jsonl:1']) {
+    assert.equal(valid({ ...payload, entries: [{ ...entry, record: {recordId} }] }), true, recordId);
+    const legacy = { ...payload, schema: 'fm-agentos-review.v1', entries: [{kind:'lane-message-annotation',text:'Fix',route:payload.route,version,region:null,target:{type:'record',recordId}}] };
+    assert.equal(valid(legacy), true, `v1 ${recordId}`);
+  }
+  for (const recordId of ['state/main-session/demo.jsonl@0', 'state/../demo.jsonl@0:0', 'state/terminal-outcomes.jsonl@0:0', 'state/main-session/demo.jsonl@-1:0']) assert.equal(valid({...payload,entries:[{...entry,record:{recordId}}]}), false);
   const boundary = { selector: ".message-content > p", path: [0], offset: 22 };
   const text = { ...entry, tag: "text", target: { type: "text-range", text: "CI is green", selector: entry.selector, commonAncestorSelector: entry.selector, start: boundary, end: { ...boundary, offset: 33 }, prefix: "Merged the build fix; ", suffix: " on main." } };
   const noId = { ...entry, record: { source: "state/demo.status", at: "2026-01-01T00:00:00Z", lanes: ["demo"], sha256: "414bce7b19745178" } };

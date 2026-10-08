@@ -4,14 +4,14 @@ const string = (value, max) => typeof value === "string" && value.length <= max;
 export const validReviewRoute = (value) => string(value, 512) && /^#(?:lanes(?:\/[^\s#?]*)?|overview|work|expenses|quota|preferences|closed)$/.test(value);
 export function validRecordId(value) {
   if (!string(value, 1000)) return false;
-  const match = value.match(/^((?:main-pi-session|state)\/[a-zA-Z0-9._/\-]+\.jsonl):([1-9]\d*)(?::(0|[1-9]\d*))?(?::block:(0|[1-9]\d*))?$/);
+  const match = value.match(/^((?:main-pi-session|claude-main-session|state)\/[a-zA-Z0-9._/\-]+\.jsonl)(?::([1-9]\d*)|@(0|[1-9]\d*))(?::(0|[1-9]\d*))?(?::block:(0|[1-9]\d*))?$/);
   if (!match || match[1].split("/").some((part) => part === "." || part === "..")) return false;
-  return ["state/branch-outcomes.jsonl", "state/terminal-outcomes.jsonl"].includes(match[1]) ? match[3] === undefined && match[4] === undefined : match[3] !== undefined;
+  return ["state/branch-outcomes.jsonl", "state/terminal-outcomes.jsonl"].includes(match[1]) ? match[2] !== undefined && match[4] === undefined && match[5] === undefined : match[4] !== undefined;
 }
 const lanes = (value) => Array.isArray(value) && value.length > 0 && value.length <= 30 && value.every((lane) => string(lane, 160) && lane.length > 0);
 function validRecord(record) {
   if (Object.hasOwn(record || {}, "recordId")) return keys(record, ["recordId"]) && validRecordId(record.recordId);
-  return keys(record, ["source", "at", "lanes", "sha256"]) && string(record.source, 300) && record.source.length > 0 && !record.source.startsWith("/") && !record.source.split("/").includes("..") && string(record.at, 40) && /^\d{4}-\d\d-\d\dT/.test(record.at) && Number.isFinite(Date.parse(record.at)) && lanes(record.lanes) && /^[0-9a-f]{16}$/.test(record.sha256 || "");
+  return keys(record, ["source", "at", "lanes", "sha256"]) && string(record.source, 300) && record.source.length > 0 && !record.source.startsWith("/") && !record.source.split("/").includes("..") && string(record.at, 40) && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(record.at) && Number.isFinite(Date.parse(record.at)) && lanes(record.lanes) && /^[0-9a-f]{16}$/.test(record.sha256 || "");
 }
 function validBoundary(value) {
   return keys(value, ["selector", "path", "offset"]) && string(value.selector, 512) && Array.isArray(value.path) && value.path.length <= 100 && value.path.every((n) => Number.isSafeInteger(n) && n >= 0) && Number.isSafeInteger(value.offset) && value.offset >= 0;

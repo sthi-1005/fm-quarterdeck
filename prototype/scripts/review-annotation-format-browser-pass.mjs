@@ -70,7 +70,7 @@ try {
     assert.equal(entry.tag, "text"); assert.equal(entry.text, "CI is green");
     assert.equal(entry.target.start.offset, 22); assert.equal(entry.target.end.offset, 33);
     assert.equal(entry.target.prefix, "Merged the build fix; "); assert.equal(entry.target.suffix, " on main.");
-    assert.match(entry.record.recordId, /\.jsonl:1:0$/);
+    assert.match(entry.record.recordId, /\.jsonl(?:@0|:1):0$/);
     assert.equal(entry.version, undefined); assert.equal(entry.route, undefined);
     const note = await readFile(path.join(home, "inbox", `${batch.id}.note`), "utf8");
     assert.match(note, new RegExp(`request_id=agentos-review:${batch.id}`)); assert.match(note, /```json fm-review/);
