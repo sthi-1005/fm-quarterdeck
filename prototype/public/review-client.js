@@ -552,6 +552,8 @@ async function loadConfig() {
 // Recovery re-reads run one at a time: while the open composer cannot send, and on tab return.
 let recheck = null;
 function recheckConfig() { recheck ||= loadConfig().finally(() => { recheck = null; }); }
+// Live Captain's Call reuses this one update notice; it never reloads on its own.
+window.quarterdeckRevision = { recheck: recheckConfig, showUpdate: () => { updateNotice.hidden = false; } };
 if (typeof setInterval === "function") setInterval(() => {
   if (!config.ready && !el("review-panel").hidden) recheckConfig();
   else if (config.ready && sent.some((batch) => !["completed", "failed", "replied"].includes(batch.state))) void refreshStatuses();

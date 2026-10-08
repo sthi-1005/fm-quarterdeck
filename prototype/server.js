@@ -14,6 +14,7 @@ import { readConversationTranscript } from "./transcript.js";
 import { compactLanes } from "./lane-payload.js";
 import { readSupervisionOutcomes } from "./supervision.js";
 import { createQuotaReader } from "./quota.js";
+import { createBearingsHub } from "./bearings.js";
 import { createConfiguredCostReader } from "./costs.js";
 import { readExpenseOverlay } from "./private-runtime.js";
 import { readPreferences } from "./preferences.js";
@@ -60,6 +61,8 @@ const STATIC_FILES = new Map([
   ["/shell-width.js", ["shell-width.js", "text/javascript; charset=utf-8"]],
   ["/shell-panel.css", ["shell-panel.css", "text/css; charset=utf-8"]],
   ["/preview-selector.js", ["preview-selector.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-patch.js", ["bearings-patch.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-live.js", ["bearings-live.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -939,7 +942,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), bearingsStream = {}, costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -983,7 +986,10 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     return (/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) && origin === `http://${host}`) ||
       Boolean(allowedReviewOrigin && host === allowedReviewOrigin.slice("https://".length) && origin === allowedReviewOrigin);
   };
-  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/quota", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  // Live Captain's Call streams (host only; previews poll /api/bearings?since).
+  const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
+  const streams = new Set();
   const server = http.createServer(async (request, response) => {
     let release;
     let used = false;
@@ -1240,6 +1246,19 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         if (selected) lastDataRead.set(selected.id, new Date().toISOString());
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/bearings") {
+        bearingsSource.touch();
+        const since = url.searchParams.get("since");
+        const freshness = bearingsSource.freshness();
+        await sendJson(request, response, 200, since && since === freshness.rev ? { unchanged: true, ...freshness } : bearingsSource.current());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/bearings/stream") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        if (streams.size >= streamOptions.maxStreams) { await sendJson(request, response, 503, { error: "Too many live streams; poll /api/bearings" }); return; }
+        openBearingsStream(request, response);
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/health") {
         await sendJson(request, response, 200, { ok: true, service: "fm-quarterdeck" });
         return;
@@ -1289,6 +1308,38 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
       });
     } finally { workDone = true; responseDone ||= response.writableFinished || response.destroyed; finishUse(); }
   });
+  // SSE framing is written by hand: sendJson gzips, which would buffer events.
+  function openBearingsStream(request, response) {
+    response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
+    const send = (event, data, id) => response.write(`${id ? `id: ${id}\n` : ""}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const stream = { end: (event) => { if (!response.writableEnded) { send(event, {}); response.end(); } } };
+    streams.add(stream);
+    // Every push and heartbeat re-checks the served revision; old code never streams.
+    const guarded = async (write) => {
+      if (response.writableEnded) return;
+      if (await syncRevision() !== servedCommit) { stream.end("revision"); return; }
+      if (!response.writableEnded) write();
+    };
+    response.write("retry: 3000\n\n");
+    send("hello", { servedCommit });
+    const current = bearingsSource.current();
+    if (request.headers["last-event-id"] !== current.rev) send("model", current, current.rev);
+    else send("observed", bearingsSource.freshness());
+    const unsubscribe = bearingsSource.subscribe((event) => {
+      void guarded(() => event.type === "model" ? send("model", event.model, event.model.rev) : send("observed", { rev: event.rev, state: event.state, observedAt: event.observedAt, checkedAt: event.checkedAt, stale: event.stale, error: event.error }));
+    });
+    const heartbeat = setInterval(() => { void guarded(() => response.write(": hb\n\n")); }, streamOptions.heartbeatMs);
+    const recycle = setTimeout(() => stream.end("bye"), streamOptions.recycleMs);
+    response.on("close", () => { streams.delete(stream); unsubscribe(); clearInterval(heartbeat); clearTimeout(recycle); });
+  }
+  // Open event streams would hold server.close() forever; end them and stop the scheduler first.
+  const closeServer = server.close.bind(server);
+  server.close = (callback) => {
+    for (const stream of [...streams]) stream.end("bye");
+    bearingsSource.close?.();
+    return closeServer(callback);
+  };
+  server.bearings = bearingsSource;
   server.previewLifecycle = lifecycle;
   server.shutdownPreviews = () => lifecycle.close();
   server.on("close", () => { lifecycle.close().catch(() => {}); });
