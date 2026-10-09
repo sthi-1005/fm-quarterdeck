@@ -17,7 +17,7 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.doesNotMatch(html, /data-call-key|data-call-rev|Merge now|data-call-thread-toggle|data-call-draft="thread"/);
     assert.match(html, /data-call-answer-text rows="1"/);
     assert.match(html, new RegExp(HINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(html, /data-call-box-hint[\s\S]*data-call-thread-history/);
+    assert.match(html, /data-call-thread-expand[\s\S]*data-call-thread-history[\s\S]*data-call-answer-text[\s\S]*data-call-box-hint/);
     if (type === 'decision') assert.match(html, />Credentials</);
     else { assert.match(html, /https:\/\/example.invalid\/pull\/1\?a=1&amp;b=2/); assert.match(html, /rel="noopener noreferrer"/); }
   }
@@ -56,6 +56,8 @@ test('long text stays in the title; Firstmate shortening is disclosed beside the
   assert.notEqual(view.idFor('decision:a.b'), view.idFor('decision:a-b'), 'ids stay distinct when keys sanitize alike');
   assert.match(html, /data-call-text-toggle[\s\S]*This is the full text Quarterdeck received/);
   const header = html.slice(html.indexOf('<header class="call-head">'), html.indexOf('</header>'));
+  assert.match(header, /class="call-lifecycle-dot" data-call-lifecycle-badge data-call-lifecycle="active" role="img" aria-label="Active" title="Active"><\/span>/);
+  assert.doesNotMatch(header, />Active</);
   assert.match(header, /data-call-procrastinate-for="3h"[\s\S]*data-call-procrastinate-for="6h"[\s\S]*data-call-procrastinate-for="1d"[\s\S]*data-call-procrastinate-for="3d"/);
   assert.doesNotMatch(html.slice(html.indexOf('</header>')), /data-call-procrastinate/);
   assert.match(html, /Bring back now/);
@@ -65,9 +67,8 @@ test('long text stays in the title; Firstmate shortening is disclosed beside the
   assert.ok(continued.includes(`<h3 id="call-decide-${view.idFor('decision:alpha-call')}">${full}</h3>`));
   assert.doesNotMatch(continued, /data-call-truncated|snapshot shortened|data-call-text-toggle/);
   const other = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick the window…', reason: 'A different recorded reason' });
-  assert.match(other, /data-call-text-toggle[\s\S]*Pick the window…/);
-  assert.match(other, /Recorded reason[\s\S]*A different recorded reason/);
-  assert.doesNotMatch(other, /<h3[^>]*>A different recorded reason/);
+  assert.ok(other.includes(`<h3 id="call-decide-${view.idFor('decision:alpha-call')}">A different recorded reason</h3>`));
+  assert.doesNotMatch(other, /data-call-text-toggle|snapshot shortened|Pick the window/);
 });
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
   const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
@@ -75,7 +76,8 @@ test('answerable cards render a form: freeform only without options, options wit
   assert.match(freeform, /No structured options for this call yet; any recorded choices are in the full ask above/);
   assert.doesNotMatch(freeform, /\$\{/);
   assert.match(freeform, /data-call-draft="answer" data-call-answer-text rows="1"/);
-  assert.match(freeform, /data-call-box-hint[\s\S]*data-call-thread-history/);
+  assert.match(freeform, /data-call-thread-expand[\s\S]*data-call-thread-history[\s\S]*data-call-answer-text/);
+  assert.doesNotMatch(freeform, /data-call-answer-text[\s\S]*data-call-thread-history/);
   assert.doesNotMatch(freeform, /data-call-thread-toggle|Ask more info|data-call-draft="thread"/);
   assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
   for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);
@@ -146,6 +148,24 @@ test('linked asks render within the hold and disclose escaped reply alternatives
   assert.match(html, /&lt;one&gt; · reply “&lt;yes&gt;” or “no”<br>Second &amp; ask · reply No quoted reply/);
   assert.doesNotMatch(html, /<one>|<yes>|data-call-dismiss/);
   assert.doesNotMatch(view.cardHtml({ type: 'decision', chatAsks: [] }), /Also asked in chat/);
+  const reason = 'Ship the ledger change only after the captain picks a window.';
+  const filed = view.cardHtml({
+    key: 'decision:hold-reason', task: 'hold-reason', type: 'decision', owner: '(main)', repo: 'quarterdeck',
+    summary: '[task:hold-reason]: reply option A or option B',
+    backlogReason: reason,
+    reason: '[task:hold-reason]: reply option A or option B',
+    chatAsks: [{ summary: '[task:hold-reason]: reply option A or option B', replies: ['option A', 'option B'] }],
+    answer: { question: 'hold-reason', options: [], recommend: null, close: null, freeform: true },
+  });
+  const filedId = view.idFor('decision:hold-reason');
+  assert.ok(filed.includes(`<h3 id="call-decide-${filedId}">${reason}</h3>`));
+  assert.doesNotMatch(filed, /\[task:/);
+  assert.match(filed, /Also asked in chat/);
+  assert.match(filed, /quarterdeck · \(main\)/);
+  assert.doesNotMatch(filed, /Repository not recorded/);
+  assert.equal((filed.match(/data-call-reply=/g) || []).length, 2);
+  assert.ok(filed.indexOf(reason) < filed.indexOf('data-call-reply='), 'the hold reason stays above the reply choices');
+  assert.match(filed, /data-call-reply="option A"[\s\S]*data-call-reply="option B"/);
 });
 test('coverage names chat scan failures, omitted asks and bounded catchup', () => {
   for (const state of ['loading', 'unavailable']) assert.match(view.coverageText({ state: 'ready', chat: { state } }), /Chat asks unavailable/);

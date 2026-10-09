@@ -1784,6 +1784,14 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-card .state-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 5px 9px 4px; border: 1.5px solid var(--text); border-radius: 6px; box-shadow: 2px 2px 0 var(--text); background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; line-height: 1.2; letter-spacing: 0.04em; white-space: normal; overflow-wrap: anywhere; }
 .call-card[data-call-type="merge"] .state-chip { background: color-mix(in srgb, var(--amber) 72%, white); color: var(--text); }
 .call-chat-chip, .call-card[data-call-type="chat"] .state-chip { background: var(--surface); color: var(--text); border-style: dashed; }
+.call-lifecycle-dot { display: inline-block; width: 10px; height: 10px; flex: 0 0 auto; border: 1.5px solid var(--text); border-radius: 50%; background: var(--accent); }
+.call-lifecycle-dot[data-call-lifecycle="queued"] { background: var(--amber); }
+.call-lifecycle-dot[data-call-lifecycle="sent"] { background: var(--blue); border-style: dashed; }
+.call-lifecycle-dot[data-call-lifecycle="procrastinated"] { background: var(--muted); border-style: dotted; }
+.call-lifecycle-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.call-lifecycle-filter button { min-height: 44px; padding: 6px 10px; border: 1.5px solid var(--text); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; }
+.call-lifecycle-filter button[aria-pressed="true"] { background: var(--accent); color: #fff; box-shadow: 2px 2px 0 var(--text); }
+#call-lifecycle-empty { margin: 0 0 12px; }
 .call-card[data-call-type="chat"] { border-left-width: 2px; border-left-style: double; background-color: var(--surface); background-image: linear-gradient(var(--text), var(--text)), linear-gradient(var(--text), var(--text)); background-size: 1px 100%, 1px 100%; background-position: 4px 0, 7px 0; background-repeat: no-repeat; }
 .call-repo { flex: 0 1 auto; min-width: 0; max-width: 100%; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); text-align: right; overflow-wrap: anywhere; white-space: normal; }
 .call-dismiss-confirm { margin-top: 12px; padding: 12px; border: 1px dashed var(--control-line); border-radius: 6px; background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; }
@@ -1795,7 +1803,6 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-full[hidden] { display: none; }
 .call-full p { margin: 0 0 8px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .call-group-heading { margin: 4px 0; font-size: var(--text-small); font-weight: 700; color: var(--muted); }
-#call-answered-toggle, #call-procrastinated-toggle { margin: 0 8px 12px 0; }
 .call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only, .call-id, .call-shortened { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; white-space: normal; }
 .call-age { flex: 1 1 100%; }
 .call-id, .call-shortened { margin: 0; }
@@ -1805,6 +1812,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-context { display: grid; gap: 6px; margin: 0; min-width: 0; max-width: 100%; }
 .call-context-row { display: grid; grid-template-columns: minmax(0, 5.5rem) minmax(0, 1fr); gap: 8px; align-items: baseline; min-width: 0; max-width: 100%; }
 .call-context-ask { grid-template-columns: minmax(0, 1fr); }
+.call-context-ask dd { font-size: var(--text-small); color: var(--muted); }
 .call-context dt { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; overflow-wrap: anywhere; white-space: normal; min-width: 0; max-width: 100%; }
 .call-context dd { margin: 0; min-width: 0; max-width: 100%; font-size: 0.9375rem; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
 .call-source-gap { margin: 0; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); color: var(--muted); font-size: var(--text-small); line-height: 1.6; }
@@ -1889,7 +1897,12 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 @keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent), 3px 3px 0 var(--text); } to { box-shadow: 3px 3px 0 var(--text); } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
 @media (forced-colors: active) {
-  .call-card, .call-card .state-chip, .call-card .call-head-pill, .call-opt-rec, .call-answer-actions .call-answer-queue { border-color: CanvasText; box-shadow: none; background: Canvas; color: CanvasText; }
+  .call-card, .call-card .state-chip, .call-card .call-head-pill, .call-lifecycle-filter button, .call-opt-rec, .call-answer-actions .call-answer-queue { border-color: CanvasText; box-shadow: none; background: Canvas; color: CanvasText; }
+  .call-lifecycle-filter button[aria-pressed="true"] { outline: 2px solid CanvasText; }
+  .call-lifecycle-dot { border-color: CanvasText; background: CanvasText; }
+  .call-context-ask dd { color: CanvasText; }
+  .call-lifecycle-dot[data-call-lifecycle="sent"] { border-style: dashed; }
+  .call-lifecycle-dot[data-call-lifecycle="procrastinated"] { border-style: dotted; }
   .call-opt:has(input:checked), .call-answer-confirm, .call-answer-receipt, .call-status { border-color: Highlight; }
   .call-opt:has(input:focus-visible), .call-answer-receipt:focus { outline-color: Highlight; }
   .call-answer-fields[data-locked] .call-opt, .call-answer-fields[data-locked] textarea, .call-answer-fields[data-locked] .call-opt-rec { color: GrayText; border-color: GrayText; }

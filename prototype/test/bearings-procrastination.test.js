@@ -25,6 +25,7 @@ test("procrastination extends a future return, expires, and drops calls Firstmat
     const extended = await store.set(KEY, "6h");
     assert.equal(extended.until[KEY], "2026-06-01T09:00:00.000Z");
     assert.equal((await stat(store.file)).mode & 0o777, 0o600);
+    assert.equal((await store.view(new Set([KEY]))).until[KEY], "2026-06-01T09:00:00.000Z", "naming the open card key keeps it across a revision");
     now = Date.parse("2026-06-01T08:00:00.000Z");
     assert.equal((await store.view(null)).until[KEY], "2026-06-01T09:00:00.000Z", "a loading model does not drop an open call");
     assert.deepEqual((await store.view(new Set())).until, {}, "a resolved call leaves the backlog");
@@ -150,7 +151,7 @@ test("the menu, return time, and full-text toggle are tab memory and never an an
   assert.equal(changes.at(-1), false);
   card.setAttribute("data-call-answered", "");
   controller.render(card);
-  assert.equal(card.querySelector("[data-call-procrastinate]").hidden, true, "an answered card hides Procrastinate");
+  assert.equal(card.querySelector("[data-call-procrastinate]").hidden, false, "Procrastinate stays on a sent card");
 
   const text = view.createTextController({ list });
   const toggle = card.querySelector("[data-call-text-toggle]");
@@ -165,4 +166,128 @@ test("the menu, return time, and full-text toggle are tab memory and never an an
   assert.equal(card.querySelector("[data-call-full]").hidden, true);
   text.destroy();
   controller.destroy();
+});
+
+function memoryStorage(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {
+    getItem: (key) => map.has(key) ? map.get(key) : null,
+    setItem: (key, value) => map.set(key, String(value)),
+    removeItem: (key) => map.delete(key),
+  };
+}
+
+test("a parked card is already parked from this tab before the server answers", async () => {
+  const dom = callDom();
+  const timers = fakeTimers();
+  const source = readFileSync(new URL("../public/bearings-procrastinate.js", import.meta.url), "utf8");
+  const context = vm.createContext({ window: { document: dom.document } });
+  vm.runInContext(source, context);
+  const future = "2026-06-01T03:00:00.000Z";
+  const storage = memoryStorage({ "fm-quarterdeck-call-procrastination.v1": JSON.stringify({ [KEY]: future, "decision:old-call": "2020-01-01T00:00:00.000Z" }) });
+  let behavior = "reject";
+  const fetchImpl = async () => {
+    if (behavior === "reject") throw new Error("offline");
+    if (behavior === "missing") return { ok: false, status: 404, json: async () => ({ error: "missing" }) };
+    if (behavior === "busy") return { ok: false, status: 503, json: async () => ({ error: "busy" }) };
+    return { ok: true, status: 200, json: async () => ({ schema: "fm-quarterdeck-call-procrastination.v1", until: {} }) };
+  };
+  const controller = context.window.bearingsProcrastinate.createController({
+    list: dom.document.createElement("div"), doc: dom.document, fetchImpl, timers, storage, now: () => Date.parse("2026-06-01T00:00:00.000Z"),
+  });
+  try {
+    assert.equal(controller.parked(KEY), true, "tab memory counts before the server answers");
+    assert.equal(controller.parked("decision:old-call"), false, "an expired cached return does not park");
+    await flush();
+    assert.equal(controller.parked(KEY), true, "a failed read keeps the return time");
+    behavior = "missing";
+    timers.advance(3000);
+    await flush();
+    assert.equal(controller.parked(KEY), true, "a missing route keeps the tab memory");
+    assert.equal(storage.getItem("fm-quarterdeck-call-procrastination.v1")?.includes(KEY), true);
+    behavior = "busy";
+    await controller.load();
+    assert.equal(controller.parked(KEY), true, "a busy read keeps the tab memory");
+    behavior = "empty";
+    timers.advance(3000);
+    await flush();
+    assert.equal(controller.parked(KEY), false, "a successful empty read is Bring back or a resolved call");
+    assert.equal(storage.getItem("fm-quarterdeck-call-procrastination.v1"), null);
+  } finally { controller.destroy(); }
+});
+
+test("Update now keeps a procrastinated card parked across a new revision and an answered receipt", async () => {
+  const dom = callDom();
+  const timers = fakeTimers();
+  const sources = ["bearings-view.js", "bearings-patch.js", "bearings-procrastinate.js", "call-lifecycle.js"].map((name) => readFileSync(new URL(`../public/${name}`, import.meta.url), "utf8"));
+  const { document } = dom;
+  const section = document.createElement("section");
+  const status = document.createElement("p");
+  const list = document.createElement("div");
+  const coverage = document.createElement("p");
+  section.append(status, list, coverage);
+  document.body.append(section);
+  const win = { document, matchMedia: () => ({ matches: false }), navigator: {} };
+  const context = vm.createContext({ window: win, URL });
+  for (const source of sources) vm.runInContext(source, context);
+  let until = {};
+  const started = Date.parse("2026-06-01T00:00:00.000Z");
+  const fetchImpl = async (_url, init = {}) => {
+    if (init.method === "POST") {
+      const body = JSON.parse(init.body);
+      if (body.clear) delete until[body.key];
+      else until[body.key] = new Date(started + 3 * 3600000).toISOString();
+    }
+    return { ok: true, status: 200, json: async () => ({ schema: "fm-quarterdeck-call-procrastination.v1", until: { ...until } }) };
+  };
+  const model = (cards) => ({ schema: "fm-quarterdeck-call.v1", rev: cards.map((entry) => `${entry.key}@${entry.rev}`).join("|"), state: "ready", cards, coverage: { known: 1, checked: 1, provenClear: false }, omitted: [] });
+  let procrastinate;
+  const paint = () => {
+    const applied = patcher.applied;
+    const api = win.callLifecycle;
+    if (!applied || !procrastinate) return;
+    for (const card of applied.cards) {
+      const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.getAttribute("data-call-key") === card.key);
+      if (!node) continue;
+      const state = api.cardState({ card, procrastinated: procrastinate.parked(card.key) });
+      node.setAttribute("data-call-lifecycle", state);
+      node.toggleAttribute("data-call-answered", Boolean(card.answered));
+      node.toggleAttribute("data-call-procrastinated", state === "procrastinated");
+      procrastinate.render(node);
+      node.hidden = state !== "active";
+    }
+  };
+  const patcher = win.bearingsPatch.createCallPatcher({
+    section, list, status, coverage, view: win.bearingsView, doc: document, win, storage: memoryStorage(), timers,
+    onRender: (node) => procrastinate?.render(node), onApply: () => paint(),
+  });
+  procrastinate = win.bearingsProcrastinate.createController({
+    list, doc: document, fetchImpl, timers, storage: memoryStorage(), now: () => started, onChange: () => paint(),
+  });
+  try {
+    await flush();
+    const first = { key: KEY, type: "decision", task: "alpha-call", summary: "Pick the window…", rev: "a1" };
+    assert.equal(patcher.update(model([first])), "applied");
+    const card = [...list.querySelectorAll("[data-call-key]")].find((node) => node.getAttribute("data-call-key") === KEY);
+    card.querySelector('[data-call-procrastinate-for="3h"]').click();
+    await flush();
+    assert.equal(procrastinate.parked(KEY), true);
+    assert.equal(card.hidden, true, "Active hides a procrastinated card");
+    card.querySelector("[data-call-answer-text]").focus();
+    const next = { ...first, rev: "a2", summary: "Gamma credential after Update now", answered: true };
+    assert.equal(patcher.update(model([next])), "held");
+    assert.ok(card.querySelector("[data-call-update-now]"));
+    card.querySelector("[data-call-update-now]").click();
+    assert.equal(card.getAttribute("data-call-rev"), "a2");
+    assert.match(card.textContent, /Gamma credential after Update now/);
+    assert.equal(procrastinate.parked(KEY), true);
+    assert.match(card.querySelector("[data-call-procrastinate-until]").textContent, /^Returns /);
+    assert.equal(card.querySelector("[data-call-procrastinate]").hidden, false, "Update now leaves the Procrastinate pill");
+    assert.equal(card.getAttribute("data-call-lifecycle"), "procrastinated");
+    assert.equal(card.hidden, true, "an answered procrastinated card stays off Active");
+    assert.equal(win.callLifecycle.cardState({ card: next, procrastinated: true }), "procrastinated");
+  } finally {
+    procrastinate.destroy();
+    patcher.destroy();
+  }
 });

@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { callDom, fakeTimers } from "./helpers/call-dom.js";
 
-const sources = await Promise.all(["bearings-patch.js", "bearings-view.js", "bearings-answer-form.js", "bearings-overflow.js"].map((name) => readFile(new URL(`../public/${name}`, import.meta.url), "utf8")));
+const sources = await Promise.all(["bearings-patch.js", "bearings-view.js", "bearings-answer-form.js", "bearings-overflow.js", "call-lifecycle.js"].map((name) => readFile(new URL(`../public/${name}`, import.meta.url), "utf8")));
 const flush = async () => { for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -406,4 +406,33 @@ test("queued answers list for the review queue, send together with their own ids
   assert.equal(t.answers.state(second).phase, "compose");
   assert.equal(t.answers.state(second).requestId, uuid(2), "an attempted answer keeps its identity after Remove");
   assert.deepEqual(plain(t.answers.queued()), []);
+});
+
+test("Send batch relays every queued card on its own route and those cards become Sent", async () => {
+  const asked = new Set();
+  const t = setup({
+    responses: [{ status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } }, { status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:06.000Z" } }],
+    onAsked: (key) => asked.add(key),
+  });
+  t.patcher.update(model([decision(), merge()]));
+  const first = "decision:alpha-call";
+  const second = "merge:beta-merge";
+  t.part(first, "text").type("Tuesday");
+  t.submit(first);
+  const radio = t.node(second).querySelector('input[value="merge"]');
+  radio.checked = true;
+  radio.dispatchEvent({ type: "change" });
+  t.submit(second);
+  const thread = (key) => ({ captainAsked: asked.has(key) });
+  const stateOf = (key, card) => t.win.callLifecycle.cardState({ card, answer: t.answers.state(key), thread: thread(key) });
+  assert.equal(stateOf(first, decision()), "queued");
+  assert.equal(stateOf(second, merge()), "queued");
+  assert.equal(await t.answers.sendQueued(), true);
+  assert.deepEqual(t.fetches.map((entry) => [entry.url, entry.body.key]), [["/api/bearings/thread", first], ["/api/bearings/answer", second]]);
+  assert.equal(t.answers.state(first), null, "a sent thread note stays out of the answer sent phase");
+  assert.equal(t.answers.state(second).phase, "sent");
+  assert.deepEqual(plain(t.answers.queued()), []);
+  assert.equal(stateOf(first, decision()), "sent");
+  assert.equal(stateOf(second, merge()), "sent");
+  assert.equal(t.win.callLifecycle.cardState({ card: merge(), answer: t.answers.state(second), thread: thread(second), procrastinated: true }), "procrastinated");
 });

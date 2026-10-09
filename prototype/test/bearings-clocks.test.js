@@ -4,7 +4,7 @@ import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import { backlogClocks, backlogTitles, decisionClock, normalizeSnapshot, createSnapshotRunner } from '../bearings.js';
+import { backlogClocks, backlogRepos, backlogTitles, decisionClock, normalizeSnapshot, createSnapshotRunner } from '../bearings.js';
 const window = {};
 for (const name of ['bearings-view', 'bearings-patch']) vm.runInNewContext(await readFile(new URL(`../public/${name}.js`, import.meta.url), 'utf8'), { window, URL });
 const raw = { schema: 'fm-bearings.v1', decisions_open: [{ id: 'alpha', owner: '(main)', summary: 'Pick a window' }], contributions: { captain: [], known: 0, checked: 0, proven_clear: false }, omitted: [] };
@@ -60,6 +60,31 @@ test('main-home title and hold reason supplement a shortened ask without replaci
     assert.equal(content.cards.find((card) => card.task === 'twin').backlogTitle, undefined, 'duplicate ids fail closed');
     assert.equal(content.cards.find((card) => card.task === 'beta').backlogTitle, undefined);
     assert.equal(backlogTitles(ledger).has('twin'), false);
+    assert.equal(await readFile(path.join(home, 'data/backlog.md'), 'utf8'), ledger);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test('a missing snapshot repository is filled from the backlog repo field and a flight repo still wins', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'call-repo-'));
+  try {
+    await mkdir(path.join(home, 'bin')); await mkdir(path.join(home, 'data'));
+    const ledger = '## In Flight\n- [ ] hold-reason - Choose a window (repo: /synthetic/checkouts/quarterdeck) (hold-kind: captain)\n- [ ] alpha - Keep flight (repo: backlog-name) (hold-kind: captain)\n- [ ] twin - First (repo: one)\n- [ ] twin - Second (repo: two)\n';
+    const snapshot = { ...raw, in_flight: [{ id: 'alpha', repo: '/synthetic/checkouts/alpha-repo' }], decisions_open: [
+      { id: 'hold-reason', owner: '(main)', summary: 'Choose' },
+      { id: 'alpha', owner: '(main)', summary: 'Keep flight' },
+      { id: 'twin', owner: '(main)', summary: 'Twin' },
+      { id: 'other', owner: 'delta-mate', summary: 'Other home' },
+    ] };
+    await writeFile(path.join(home, 'data/backlog.md'), ledger);
+    await writeFile(path.join(home, 'bin/fm-bearings-snapshot.sh'), `#!/bin/sh\nprintf '%s' '${JSON.stringify(snapshot)}'\n`, { mode: 0o755 });
+    const content = normalizeSnapshot(JSON.parse(await createSnapshotRunner(home)()));
+    assert.equal(content.cards.find((card) => card.task === 'hold-reason').repo, 'quarterdeck');
+    assert.equal(content.cards.find((card) => card.task === 'alpha').repo, 'alpha-repo');
+    assert.equal(content.cards.find((card) => card.task === 'twin').repo, null, 'duplicate backlog ids fail closed');
+    assert.equal(content.cards.find((card) => card.task === 'other').repo, null, 'another owner is not supplemented');
+    assert.equal(backlogRepos(ledger).get('hold-reason'), 'quarterdeck');
+    assert.equal(backlogRepos(ledger).has('twin'), false);
+    assert.doesNotMatch(JSON.stringify(content), /\/synthetic\//);
     assert.equal(await readFile(path.join(home, 'data/backlog.md'), 'utf8'), ledger);
   } finally { await rm(home, { recursive: true, force: true }); }
 });

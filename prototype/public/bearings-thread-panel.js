@@ -8,7 +8,7 @@ window.bearingsThread = (() => {
   const LABELS = { ask: "You asked", answer: "Your answer", reply: "Firstmate replied", chat: "Firstmate in chat", "chat-ask": "Firstmate asked in chat" };
 
   function createThreadController({ list, drafts, doc = window.document, win = window, storage = (() => { try { return win.sessionStorage; } catch { return null; } })(),
-    fetchImpl = (...args) => win.fetch(...args), timers = win, pollMs = 15000, uuid = () => win.crypto.randomUUID() } = {}) {
+    fetchImpl = (...args) => win.fetch(...args), timers = win, pollMs = 15000, uuid = () => win.crypto.randomUUID(), onChange = () => {} } = {}) {
     // Per card key: { entries, checkedAt, loading, error, transcript, notice, baselined, seen }.
     // History is always re-read. A thread send's retry identity lives on the answer controller.
     const states = new Map();
@@ -67,7 +67,7 @@ window.bearingsThread = (() => {
         const status = part(node, "status");
         if (status) status.textContent = statusText(state);
         const notice = part(node, "notice");
-        if (notice) notice.textContent = state.notice || "";
+        if (notice) { notice.textContent = state.notice || ""; notice.hidden = !state.notice; }
       });
       item.append(copy);
       return item;
@@ -141,7 +141,10 @@ window.bearingsThread = (() => {
         if (historyToggle.textContent !== label) historyToggle.textContent = label;
       }
       const notice = part(node, "notice");
-      if (notice && notice.textContent !== (state.notice || "")) notice.textContent = state.notice || "";
+      if (notice) {
+        if (notice.textContent !== (state.notice || "")) notice.textContent = state.notice || "";
+        notice.hidden = !state.notice;
+      }
       const status = part(node, "status");
       const text = entries.length || state.notice || state.error ? statusText(state) : "";
       if (status && status.textContent !== text) status.textContent = text;
@@ -168,25 +171,31 @@ window.bearingsThread = (() => {
       state.loading = false;
       if (response?.ok && body && Array.isArray(body.entries)) {
         Object.assign(state, { entries: body.entries, omitted: body.omitted || 0, transcript: body.transcript || null, checkedAt: body.checkedAt || null });
+        // History is the durable signal. Keep the local receipt until that history includes the ask.
+        if (body.entries.some((entry) => entry?.kind === "ask" && entry?.from === "captain")) state.captainAsked = false;
         // The first read marks replies already on the card as seen. Later replies count as new.
         if (!state.baselined) { markRead(state); state.baselined = true; }
         state.error = null;
       } else state.error = body?.error || "This call's history is unavailable right now; it retries while this card is present.";
       rerender(key);
+      onChange(key);
       schedulePoll();
       if (state.again) return load(key);
     }
 
     // The answer controller calls this after a confirmed thread note so the receipt shows at once.
+    // captainAsked keeps the card Sent until the reloaded history includes that note.
     function noteSent(key) {
       const state = stateOf(key);
+      state.captainAsked = true;
       state.notice = "Question sent to Firstmate; the reply appears here";
       state.error = null;
       rerender(key);
+      onChange(key);
       void load(key);
     }
 
-    // Every present card is read once so its history can show under the box.
+    // Every present card is read once so its history can show above the text box.
     // Polling continues for those cards while the page is visible.
     function watchedKeys() { return [...states.keys()].filter((key) => { const state = states.get(key); return state && (state.entries || state.loadQueued) && cardNode(key); }); }
     async function poll() {

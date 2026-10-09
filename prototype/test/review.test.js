@@ -459,7 +459,10 @@ test("queued Captain's Call answers count in the review queue and Send batch sen
     });
     return elements.get(id);
   }
-  let calls = [{ key: "decision:alpha-call", label: "Decision alpha-call", text: "Tuesday", phase: "confirm" }];
+  let calls = [
+    { key: "decision:alpha-call", label: "Decision alpha-call", text: "Tuesday", phase: "confirm" },
+    { key: "merge:beta-merge", label: "Merge beta-merge", text: "merge", phase: "confirm" },
+  ];
   const sends = [];
   const posts = [];
   const context = {
@@ -474,13 +477,13 @@ test("queued Captain's Call answers count in the review queue and Send batch sen
   vm.runInContext(reviewClientScript, context);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(typeof context.window.quarterdeckReviewQueue.refresh, "function");
-  assert.equal(element("review-count").textContent, "· 1 queued", "a queued answer counts with the notes");
-  assert.equal(element("review-send").disabled, false, "a queued answer alone enables Send batch");
+  assert.equal(element("review-count").textContent, "· 2 queued", "every queued answer counts with the notes");
+  assert.equal(element("review-send").disabled, false, "queued answers alone enable Send batch");
   element("review-send").listeners.click();
   for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(sends, [1]);
+  assert.deepEqual(sends, [2], "Send batch sends every queued card answer");
   assert.deepEqual(posts, [], "answers never travel as review annotations");
-  assert.match(element("review-state").textContent, /^Sent 1 Captain's Call answer;/);
+  assert.match(element("review-state").textContent, /^Sent 2 Captain's Call answers;/);
   assert.equal(element("review-count").textContent, "");
   assert.equal(element("review-send").disabled, true);
 });

@@ -1712,7 +1712,12 @@ const freshness = Object.fromEntries(["dashboard", "quota", "lanes", "bearings"]
 const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", bearings: "Captain's Call" };
 let callCount = 0;
 function renderCallBadge(model) {
-  const count = model.cards.filter((card) => !card.answered && !(callAnswers?.state(card.key)?.phase === "sent") && !callProcrastinate?.parked(card.key)).length;
+  const count = (model?.cards || []).filter((card) => (window.callLifecycle?.cardState({
+    card,
+    answer: callAnswers?.state?.(card.key) || null,
+    thread: callThreads?.state?.(card.key) || null,
+    procrastinated: Boolean(callProcrastinate?.parked?.(card.key)),
+  }) || "active") === "active").length;
   for (const id of ["#call-badge", "#call-mobile-badge"]) {
     const badge = $(id);
     if (!badge) continue;
@@ -1740,72 +1745,76 @@ function observeBearings(data) {
 }
 // Answer and overflow controllers re-apply their per-card state after every patcher fill.
 let callAnswers = null, callOverflow = null, callDismiss = null, callThreads = null, callProcrastinate = null, callText = null;
-let showAnsweredCalls = false, showProcrastinated = false;
-function renderAnsweredCalls() {
+let callLifecycleFilter = window.callLifecycle?.readFilter(localStorage) || "active";
+function renderCallLifecycle() {
   const model = callPatcher?.applied;
-  if (!model || !callPatcher) return;
-  const list = $("#call-cards"), toggle = $("#call-answered-toggle"), parkedToggle = $("#call-procrastinated-toggle");
-  let heading = list.querySelector("[data-call-answered-heading]");
-  if (!heading) { heading = document.createElement("h3"); heading.className = "call-group-heading"; heading.setAttribute("data-call-answered-heading", ""); heading.textContent = "Answered, awaiting Firstmate"; }
-  let parkedHeading = list.querySelector("[data-call-procrastinated-heading]");
-  if (!parkedHeading) { parkedHeading = document.createElement("h3"); parkedHeading.className = "call-group-heading"; parkedHeading.setAttribute("data-call-procrastinated-heading", ""); parkedHeading.textContent = "Procrastinated"; }
-  const waiting = [], active = [], deferred = [];
+  const api = window.callLifecycle;
+  if (!model || !callPatcher || !api) return;
+  const list = $("#call-cards");
+  const filter = $("#call-lifecycle-filter");
+  list?.querySelector("[data-call-answered-heading]")?.remove();
+  list?.querySelector("[data-call-procrastinated-heading]")?.remove();
+  const states = [];
   for (const card of model.cards) {
     const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.dataset.callKey === card.key);
     if (!node) continue;
-    const state = callAnswers?.state(card.key);
-    const answered = Boolean(card.answered || state?.phase === "sent");
-    const parked = !answered && Boolean(callProcrastinate?.parked(card.key));
-    node.toggleAttribute("data-call-answered", answered);
-    node.toggleAttribute("data-call-procrastinated", parked);
+    const answer = callAnswers?.state(card.key) || null;
+    const state = api.cardState({
+      card,
+      answer,
+      thread: callThreads?.state(card.key) || null,
+      procrastinated: Boolean(callProcrastinate?.parked(card.key)),
+    });
+    states.push(state);
+    node.setAttribute("data-call-lifecycle", state);
+    node.toggleAttribute("data-call-answered", Boolean(card.answered || answer?.phase === "sent"));
+    node.toggleAttribute("data-call-procrastinated", state === "procrastinated");
+    const badge = node.querySelector("[data-call-lifecycle-badge]");
+    if (badge) {
+      badge.setAttribute("data-call-lifecycle", state);
+      const label = api.LABELS[state];
+      badge.setAttribute("aria-label", label);
+      badge.setAttribute("title", label);
+      if (badge.textContent) badge.textContent = "";
+    }
     callProcrastinate?.render(node);
-    if (answered) {
-      node.hidden = !showAnsweredCalls;
-      waiting.push(node);
-      if (node.hidden && node.contains(document.activeElement)) { toggle.hidden = false; callPatcher.tracker.deselect(); toggle.focus(); }
-    } else if (parked) {
-      node.hidden = !showProcrastinated;
-      deferred.push(node);
-      if (node.hidden && parkedToggle && node.contains(document.activeElement)) { parkedToggle.hidden = false; callPatcher.tracker.deselect(); parkedToggle.focus(); }
-    } else {
-      node.hidden = false;
-      active.push(node);
+    const focused = node.contains(document.activeElement);
+    const selected = callPatcher.tracker.state().selected === card.key;
+    node.hidden = !api.visible(state, callLifecycleFilter);
+    if (node.hidden && (focused || selected)) {
+      callPatcher.tracker.deselect();
+      if (focused) filter?.querySelector(`[data-call-lifecycle="${state}"]`)?.focus();
     }
   }
-  toggle.hidden = !waiting.length;
-  toggle.textContent = `${showAnsweredCalls ? "Hide" : "Show"} answered calls (${waiting.length})`;
-  toggle.setAttribute("aria-expanded", String(showAnsweredCalls));
-  heading.hidden = !showAnsweredCalls || !waiting.length;
-  if (parkedToggle) {
-    parkedToggle.hidden = !deferred.length;
-    parkedToggle.textContent = showProcrastinated ? `Hide procrastinated (${deferred.length})` : `Procrastinated (${deferred.length})`;
-    parkedToggle.setAttribute("aria-expanded", String(showProcrastinated));
-  }
-  parkedHeading.hidden = !showProcrastinated || !deferred.length;
-  const grouped = [...active, parkedHeading, ...deferred, heading, ...waiting];
-  const desired = [...grouped, ...[...list.children].filter((node) => !grouped.includes(node))];
-  const engaged = callPatcher.tracker.keys();
-  for (let index = desired.length - 1; index >= 0; index--) {
-    const node = desired[index], before = desired[index + 1] || null;
-    const current = [...list.children];
-    if (!engaged.has(node.getAttribute("data-call-key")) && ((current[current.indexOf(node) + 1] || null) !== before || !node.parentNode)) list.insertBefore(node, before);
+  const tally = api.counts(states);
+  api.paintToggle(filter, tally, callLifecycleFilter);
+  const empty = $("#call-lifecycle-empty");
+  if (empty) {
+    const text = api.emptyText(callLifecycleFilter, tally);
+    empty.hidden = !text;
+    if (empty.textContent !== text) empty.textContent = text;
   }
   renderCallBadge(model);
 }
-$("#call-answered-toggle").addEventListener("click", () => { showAnsweredCalls = !showAnsweredCalls; renderAnsweredCalls(); });
-$("#call-procrastinated-toggle")?.addEventListener("click", () => { showProcrastinated = !showProcrastinated; renderAnsweredCalls(); });
+$("#call-lifecycle-filter")?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-call-lifecycle]");
+  const api = window.callLifecycle;
+  if (!button || !api) return;
+  callLifecycleFilter = api.writeFilter(localStorage, button.getAttribute("data-call-lifecycle"));
+  renderCallLifecycle();
+});
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
   onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); callThreads?.render(node); callText?.render(node); callProcrastinate?.render(node); },
-  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); callText?.prune(keys); renderAnsweredCalls(); window.quarterdeckReviewQueue?.refresh(); },
+  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); callText?.prune(keys); renderCallLifecycle(); window.quarterdeckReviewQueue?.refresh(); },
 });
 // Queued answers join the review panel's queue; its Send batch sends them with the notes.
-callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => { renderAnsweredCalls(); window.quarterdeckReviewQueue?.refresh(); }, onAsked: (key) => callThreads?.noteSent(key) });
+callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => { renderCallLifecycle(); window.quarterdeckReviewQueue?.refresh(); }, onAsked: (key) => { callThreads?.noteSent(key); renderCallLifecycle(); } });
 if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key) };
-callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts });
+callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => renderCallLifecycle() });
 callText = callPatcher && window.bearingsView?.createTextController?.({ list: $("#call-cards") });
-callProcrastinate = callPatcher && window.bearingsProcrastinate?.createController?.({ list: $("#call-cards"), onChange: () => renderAnsweredCalls() });
+callProcrastinate = callPatcher && window.bearingsProcrastinate?.createController?.({ list: $("#call-cards"), onChange: () => renderCallLifecycle() });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
 // Focus leaves the card only after a confirmed dismissal; drafts remain protected.
 callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({

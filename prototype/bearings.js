@@ -7,8 +7,8 @@ import path from "node:path";
 
 // Live Captain's Call. Contract: BEARINGS.md. Quarterdeck runs only Firstmate's own
 // bounded bearings projection to build calls. A bounded read of the selected home's
-// backlog adds durable clocks plus existing main-home titles and hold reasons; it never
-// creates calls or writes under FM_HOME.
+// backlog adds durable clocks plus existing main-home titles, hold reasons and, when the
+// snapshot has no repository, the backlog repo name; it never creates calls or writes under FM_HOME.
 export const MODEL_SCHEMA = "fm-quarterdeck-call.v1";
 const SOURCE_SCHEMA = "fm-bearings.v1";
 const MIN_GAP_FLOOR_MS = 15000;
@@ -116,6 +116,21 @@ export function backlogTitles(text) {
   }
   return titles;
 }
+// Repository names from the same unchecked item line. A path is only its final segment.
+// Duplicate ids fail closed, matching titles. Body prose is never a repository.
+export function backlogRepos(text) {
+  const repos = new Map(), seen = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const item = line.match(/^\s*-\s+\[ \]\s+(\S+)\s+-\s+(.+)$/);
+    if (!item || !TASK_ID.test(item[1])) continue;
+    const [, id, fields] = item;
+    if (seen.has(id)) { repos.delete(id); continue; }
+    seen.add(id);
+    const name = repoName(fields.match(/\(repo:\s*([^)]+)\)/i)?.[1] || "");
+    if (name) repos.set(id, name);
+  }
+  return repos;
+}
 // Durable lifecycle blocks are scoped to their ledger item, not arbitrary prose.
 // Duplicate ids invalidate evidence, including checked/unchecked duplicates.
 export function backlogHoldRecords(text) {
@@ -169,7 +184,7 @@ async function addBacklogEvidence(output, home) {
     if (bytesRead === buffer.length) return output;
     const raw = JSON.parse(output);
     const text = buffer.subarray(0, bytesRead).toString("utf8");
-    const clocks = backlogClocks(text), reasons = backlogHoldReasons(text), titles = backlogTitles(text);
+    const clocks = backlogClocks(text), reasons = backlogHoldReasons(text), titles = backlogTitles(text), repos = backlogRepos(text);
     raw.quarterdeck_holds = backlogHoldRecords(text);
     if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
       object(row) && row.owner === "(main)" ? {
@@ -177,6 +192,7 @@ async function addBacklogEvidence(output, home) {
         ...(typeof row.reason !== "string" && reasons.has(row.id) ? { reason: reasons.get(row.id) } : {}),
         ...(titles.has(row.id) ? { backlogTitle: titles.get(row.id) } : {}),
         ...(reasons.has(row.id) ? { backlogReason: reasons.get(row.id) } : {}),
+        ...((typeof row.repo !== "string" || !row.repo.trim()) && repos.has(row.id) ? { repo: repos.get(row.id) } : {}),
       } : row);
     return JSON.stringify(raw);
   } catch { return output; } finally { await file?.close(); }
@@ -248,7 +264,7 @@ function callSection(raw) {
     // Optional source title/reason retain quoted replies for chat-ask deduplication.
     const title = publicText(row.title, Infinity), reason = publicText(row.reason, Infinity);
     const backlogTitle = publicText(row.backlogTitle, Infinity), backlogReason = publicText(row.backlogReason, Infinity);
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), ...(backlogTitle ? { backlogTitle } : {}), ...(backlogReason ? { backlogReason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), ...(backlogTitle ? { backlogTitle } : {}), ...(backlogReason ? { backlogReason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) || repoName(row.repo) || null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {

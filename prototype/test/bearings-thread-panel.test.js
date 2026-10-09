@@ -50,7 +50,7 @@ function setup({ responses = [], storage = null } = {}) {
   return { document, timers, list, patcher, threads, fetches, node, part, ask };
 }
 
-test("a card shows the latest exchange under the box, with a count, and keeps watching", async () => {
+test("a card shows the latest exchange above the text box, with a count, and keeps watching", async () => {
   const entries = [
     { kind: "chat", from: "firstmate", at: "2026-01-02T09:00:00.000Z", text: "Filed a hold for alpha-call." },
     { kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "replied" },
@@ -59,6 +59,10 @@ test("a card shows the latest exchange under the box, with a count, and keeps wa
   const t = setup({ responses: [history(entries)] });
   t.patcher.update(model([decision()]));
   await flush();
+  const markup = t.node().innerHTML;
+  const boxAt = markup.indexOf("data-call-answer-text");
+  assert.ok(markup.indexOf("data-call-thread-expand") < boxAt, "expand sits above the text box");
+  assert.ok(markup.indexOf("data-call-thread-history") < boxAt, "history sits above the text box");
   assert.equal(t.part("count").textContent, "Thread · 3");
   assert.equal(t.node().querySelector("[data-call-thread-toggle]"), null);
   assert.equal(t.node().querySelector("[data-call-thread-text]"), null);

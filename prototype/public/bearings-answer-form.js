@@ -1,7 +1,8 @@
 // Captain's Call one-box flow (BEARINGS.md "Answers"). Nothing is sent without an explicit
 // captain click: Queue locks the note and shows exactly what will go to Firstmate, and
 // only Send (this card) or Send batch (the review queue) relays it. A checked option is an
-// answer. Text with no option is a card thread note, and that path never uses the sent phase.
+// answer. Text with no option is a card thread note. That path does not use the answer
+// phase sent; the thread receipt marks the card Sent on the lifecycle toggle.
 // A retry after an unconfirmed send is another explicit click and reuses the same request id.
 // A card leaves only when Firstmate's next snapshot drops it; this controller never removes a card.
 window.bearingsAnswerForm = (() => {
@@ -196,7 +197,8 @@ window.bearingsAnswerForm = (() => {
         // The words now live in Firstmate's inbox; an unsent-text stub would be wrong.
         clearDraft(key);
         if (thread) {
-          // Phase sent would hide the card as an answered call. The receipt is the thread entry.
+          // Stay in compose so the one box can ask again. onAsked records the thread receipt,
+          // which is what makes the card Sent until Firstmate closes the call.
           update(key, null, focus ? "text" : null);
           onAsked(key);
           return true;
