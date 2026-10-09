@@ -364,8 +364,11 @@ try {
   raw.decisions_open[0].options = [{value:'staged',label:'Staged rollout',hint:'Limit exposure while checks continue'},{value:'now',label:'Release now',hint:'Use the full release window'}];
   raw.decisions_open[0].recommend_value = 'staged';
   raw.decisions_open[0].close = 'release';
+  // The board already painted these radios. Wait until this snapshot's close mode
+  // replaces the card, or a later compose holds the update and the send is refused.
+  await evaluate(`() => { window.__alphaRev = document.querySelector('[data-call-key="decision:alpha-call"]').dataset.callRev; return 'rev remembered'; }`);
   await change();
-  await until(`document.querySelector('[data-call-key="decision:alpha-call"]').querySelectorAll('input[type=radio]').length===2`);
+  await until(`document.querySelector('[data-call-key="decision:alpha-call"]').dataset.callRev!==window.__alphaRev && document.querySelector('[data-call-key="decision:alpha-call"]').querySelectorAll('input[type=radio]').length===2 && !document.querySelector('[data-call-key="decision:alpha-call"] [data-call-held]')`);
   await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); if(card.querySelectorAll('.call-opt-rec').length!==1||!card.querySelector('.call-opt:has(input[value=staged]) .call-opt-rec')||card.querySelector('input:checked'))throw Error('source recommendation must not select or answer'); return 'source options and one recommendation'; }`);
   await phoneShot('decision:alpha-call','compose');
   await answer('decision:alpha-call','After the synthetic demo','staged');
