@@ -51,7 +51,7 @@ window.bearingsView = (() => {
     const choices = options.length + replies.length;
     const textLabel = choices ? "Add a note <span>(optional · sent with your answer)</span>" : "Your answer <span>(sent to Firstmate)</span>";
     return `<form class="call-answer" data-call-answer data-call-answer-label="${escape(label)}" novalidate aria-label="Answer: ${escape(label)}">
-      <fieldset class="call-answer-fields${choices ? " call-answer-fields-split" : ""}" data-call-answer-fields>
+      <fieldset class="call-answer-fields" data-call-answer-fields>
         <legend class="call-answer-legend">Answer</legend>
         ${choices ? `<div class="call-opts">${optionHtml}</div>` : `<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above. Answer in your own words.</p>`}
         <div class="call-answer-compose">
@@ -67,10 +67,10 @@ window.bearingsView = (() => {
       <div class="call-answer-receipt" data-call-answer-receipt tabindex="-1" hidden><p role="status" data-call-answer-receipt-text></p><button type="button" data-call-answer-again>Answer again</button></div>
     </form>`;
   }
-  // "Ask more info": a card-scoped thread with Firstmate (BEARINGS.md "Card threads").
+  // "Ask more info": a compact action on the card (BEARINGS.md "Card threads").
   // History stays on the card; the composer stays closed until Ask more info.
-  // The thread controller fills the log; the textarea is a protected draft like any other.
-  const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button><span class="call-meta" data-call-thread-replies role="status" aria-live="polite"></span>`;
+  // The thread controller fills the log and the entry count; the textarea is a protected draft.
+  const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button><span class="call-meta sr-only" data-call-thread-replies role="status" aria-live="polite"></span>`;
   const threadHistoryHtml = (id) => `<section class="call-thread-history" id="call-thread-history-${id}" data-call-thread-history hidden>
       <h4>Thread</h4>
       <p class="call-meta" data-call-thread-earlier></p>
@@ -79,10 +79,9 @@ window.bearingsView = (() => {
       <button type="button" class="call-thread-history-toggle" data-call-thread-history-toggle aria-expanded="false" aria-controls="call-thread-log-${id}" hidden>Show earlier messages</button>
     </section>`;
   const threadHtml = (id, label) => `<section class="call-thread" id="call-thread-${id}" data-call-thread aria-label="Ask Firstmate: ${escape(label)}" hidden>
-      <h4>Ask Firstmate</h4>
       <p class="call-meta" data-call-thread-status role="status"></p>
       <form class="call-thread-form" data-call-thread-form novalidate>
-        <label class="call-answer-note">Ask Firstmate about this call <span>(sent to Firstmate's inbox · not an answer)</span><textarea data-call-draft="thread" data-call-thread-text rows="2" placeholder="What is this about?"></textarea></label>
+        <label class="call-answer-note"><span class="sr-only">Ask Firstmate about this call <span>(sent to Firstmate's inbox · not an answer)</span></span><textarea data-call-draft="thread" data-call-thread-text rows="1" placeholder="What is this about?"></textarea></label>
         <div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-send" data-call-thread-send>Ask Firstmate</button></div>
       </form>
       <p class="call-answer-error" data-call-thread-error role="alert" hidden></p>

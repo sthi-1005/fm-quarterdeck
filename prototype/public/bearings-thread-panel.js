@@ -1,6 +1,6 @@
 // Card threads (BEARINGS.md "Card threads"). Each present card reads its history so the
-// latest exchange is visible without opening the composer. "Ask more info" opens the
-// question box. A question is sent only by an explicit Ask Firstmate click, through the
+// latest exchange is visible without opening the composer. "Ask more info" is a compact
+// control that opens a one-line question box. A question is sent only by an explicit Ask Firstmate click, through the
 // guarded inbox; an unconfirmed send is retried by another click with the same request
 // id. The question box is a protected draft, so typing holds Captain's Call updates.
 window.bearingsThread = (() => {
@@ -94,12 +94,22 @@ window.bearingsThread = (() => {
       if (state.loading && !state.entries) return "Loading this call's history…";
       if (state.error && !state.entries) return "";
       const count = state.entries?.length || 0;
-      const parts = [count ? `${count} ${count === 1 ? "message" : "messages"} about this call` : "Nothing about this call yet. Ask Firstmate below; the reply appears here."];
+      const parts = [count ? `${count} ${count === 1 ? "message" : "messages"} about this call` : "Nothing about this call yet. Ask Firstmate beside the box; the reply appears here."];
       if (state.transcript?.state === "unavailable") parts.push("Firstmate's chat could not be read");
       else if (state.transcript?.windowed) parts.push("chat searched from its newest part only");
       if (state.omitted) parts.push(`${state.omitted} older messages not shown`);
       if (state.notice) parts.push(state.notice);
       return parts.join(" · ");
+    }
+
+    // The question box starts as one line and grows with the draft. Tests without layout skip this.
+    function growQuestion(field) {
+      if (!field?.style || typeof field.scrollHeight !== "number") return;
+      const previous = field.style.height;
+      field.style.height = "auto";
+      const height = field.scrollHeight;
+      if (!height) { field.style.height = previous; return; }
+      field.style.height = `${Math.min(Math.max(height, 44), 152)}px`;
     }
 
     // Re-applies thread state to a card's (possibly fresh) markup after every fill.
@@ -112,13 +122,16 @@ window.bearingsThread = (() => {
       toggle.setAttribute("aria-expanded", String(state.open));
       state.key = key;
       const newReplies = state.open ? 0 : unread(state);
-      toggle.textContent = state.open ? "Hide thread" : `Ask more info${newReplies ? ` · ${newReplies} new ${newReplies === 1 ? "reply" : "replies"}` : ""}`;
+      const loaded = Array.isArray(state.entries) ? state.entries.length : null;
+      const replyPart = newReplies ? ` · ${newReplies} new ${newReplies === 1 ? "reply" : "replies"}` : "";
+      toggle.textContent = `${state.open ? "Hide thread" : "Ask more info"}${loaded == null ? "" : ` · ${loaded}`}${replyPart}`;
       const replyStatus = part(node, "replies");
       if (replyStatus) {
         const message = newReplies ? `${newReplies} new ${newReplies === 1 ? "reply" : "replies"} from Firstmate for this call` : "";
         if (replyStatus.textContent !== message) replyStatus.textContent = message;
       }
       panel.hidden = !state.open;
+      if (state.open) growQuestion(part(node, "text"));
       const entries = state.entries || [];
       const exchange = latestExchange(entries);
       const shown = state.historyOpen ? entries : exchange;
@@ -286,8 +299,13 @@ window.bearingsThread = (() => {
       event.preventDefault();
       void ask(key);
     };
+    const onInput = (event) => {
+      const field = event.target?.closest?.("[data-call-thread-text]");
+      if (field) growQuestion(field);
+    };
     list.addEventListener("click", onClick);
     list.addEventListener("submit", onSubmit);
+    list.addEventListener("input", onInput);
 
     return {
       render,
@@ -305,6 +323,7 @@ window.bearingsThread = (() => {
         timers.clearTimeout(pollTimer);
         list.removeEventListener("click", onClick);
         list.removeEventListener("submit", onSubmit);
+        list.removeEventListener("input", onInput);
       },
     };
   }

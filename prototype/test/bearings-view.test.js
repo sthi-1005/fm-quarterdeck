@@ -17,6 +17,8 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.match(html, /data-call-draft="note"/);
     assert.doesNotMatch(withoutThread(html), /data-call-key|data-call-rev|type="submit"|Merge now/);
     assert.match(html, /data-call-thread-toggle aria-expanded="false"[^>]*>Ask more info</);
+    assert.match(html, /data-call-thread-text rows="1"/);
+    assert.match(html, /Ask Firstmate about this call <span>\(sent to Firstmate's inbox · not an answer\)<\/span>/);
     if (type === 'decision') assert.match(html, />Credentials</);
     else { assert.match(html, /https:\/\/example.invalid\/pull\/1\?a=1&amp;b=2/); assert.match(html, /rel="noopener noreferrer"/); }
   }
@@ -62,12 +64,13 @@ test('answerable cards render a form: freeform only without options, options wit
   assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
   for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);
   assert.match(freeform, /data-call-answer-confirm role="group" aria-label="Queued answer" hidden/);
-  // Queue, then Send and Edit, sit in one bar directly under the answer text box.
+  // Queue, then Send and Edit, sit in one row with the answer note.
   assert.match(freeform, /data-call-answer-text[^>]*><\/textarea><\/label>\s*<div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-queue" data-call-answer-compose>Queue<\/button><button type="button" class="call-answer-send" data-call-answer-send hidden>Send<\/button><button type="button" data-call-answer-edit hidden>Edit<\/button><\/div>/);
   assert.doesNotMatch(freeform, /Review answer/);
   const options = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick', answer: { question: 'alpha-call', options: [{ value: 'staged', label: '<b>Staged</b>', hint: 'Fewer users' }, { value: 'now', label: 'Now', hint: null }], recommend: 'staged', close: null, freeform: true } });
   assert.equal((options.match(new RegExp(`type="radio" name="call-selection-${view.idFor('decision:alpha-call')}"`, 'g')) || []).length, 2);
-  assert.match(options, /call-answer-fields call-answer-fields-split/, 'options sit beside the note');
+  assert.match(options, /<div class="call-opts">[\s\S]*<div class="call-answer-compose">/, 'options and the note share one answer block');
+  assert.doesNotMatch(options, /call-answer-fields-split/);
   assert.match(options, /value="staged"[^>]*aria-describedby="call-rec-[^"]+"/, 'the recommendation is announced with its option');
   assert.equal((options.match(/call-opt-rec/g) || []).length, 1, 'only the recommended option is marked');
   assert.match(options, /value="staged"[^>]*data-call-option-label="&lt;b&gt;Staged&lt;\/b&gt;"[\s\S]*?Fewer users[\s\S]*?Recommended/);

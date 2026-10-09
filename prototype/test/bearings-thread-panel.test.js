@@ -59,7 +59,7 @@ test("a card shows the latest exchange without opening the composer, and Ask mor
   const t = setup({ responses: [history(entries)] });
   t.patcher.update(model([decision()]));
   await flush();
-  assert.equal(t.part("toggle").textContent, "Ask more info");
+  assert.equal(t.part("toggle").textContent, "Ask more info · 3");
   assert.equal(t.part("toggle").getAttribute("aria-expanded"), "false");
   assert.equal(t.node().querySelector("[data-call-thread]").hidden, true);
   assert.equal(t.fetches.length, 1, "the card reads its history while the composer stays closed");
@@ -78,7 +78,7 @@ test("a card shows the latest exchange without opening the composer, and Ask mor
 
   t.part("toggle").click();
   assert.equal(t.part("toggle").getAttribute("aria-expanded"), "true");
-  assert.equal(t.part("toggle").textContent, "Hide thread");
+  assert.equal(t.part("toggle").textContent, "Hide thread · 3");
   assert.equal(t.node().querySelector("[data-call-thread]").hidden, false);
   assert.equal(t.document.activeElement, t.part("text"), "the question box takes focus");
   assert.match(t.part("status").textContent, /^3 messages about this call/);
