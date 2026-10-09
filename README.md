@@ -8,15 +8,15 @@ Firstmate Quarterdeck is a web dashboard for [kunchenguid/firstmate](https://git
 
 | Surface | Status | Note |
 |---|---|---|
-| Captain's Call (live) | Experimental | Calls update in place; engaged cards hold updates and preserve typed text; long titles, asks, options and links stay fully readable; each card has one text box, a picked option answers and text alone is a thread note, and both can be queued to send together; thread history sits under the box; confirmed answers relay to Firstmate; asks Firstmate makes only in chat appear as cards ([chat asks](docs/CHAT-ASKS.md)). |
-| Work Split | Experimental | Early-stage experience; still taking shape. |
-| Preferences | Experimental | Early-stage experience; still taking shape. |
-| Fleet Chats | Mature | Core experience is established; polish is ongoing. |
-| Expenses | Working | Core functionality is available and continuing to evolve. |
-| Quota page | Working | Useful and operational, with further refinement ahead. |
-| Sidebar quota cards | Mature | Established, polished quota summaries at a glance. |
+| Overview | 🔵 Active progress · 🟡 In test | Live Captain's Call on a two-column Overview. Cards update in place and an engaged card holds its own update. Each card has one text box: a board-sourced option answers, and text alone is a thread note. Lifecycle dots mark Active, Queued, Sent, and Procrastinated, and Procrastinate parks a card. On Active, Send queued (N) sends the queued answers through the same sender as Send batch. A sent answer locks its radios and note. Thread history stays on the card. Chat asks link onto filed calls ([chat asks](docs/CHAT-ASKS.md)). |
+| Work Split | 🔵 Active progress | Early-stage experience; still taking shape. |
+| Preferences | 🔵 Active progress | Early-stage experience; still taking shape. |
+| Fleet Chats | 🟢 Stable | Core experience is established; polish is ongoing. |
+| Expenses | 🟡 In test | Core functionality is available and continuing to evolve. |
+| Quota page | 🟡 In test | Useful and operational, with further refinement ahead. |
+| Sidebar quota cards | 🟢 Stable | Established, polished quota summaries at a glance. |
 
-**Status guide:** Mature is established; Working is functional but still evolving; Experimental is early-stage.
+**Status:** 🟢 Stable is established · 🟡 In test is usable and still being checked · 🔵 Active progress is in active development · ⚪ Planned is not built yet.
 
 ## Prerequisites and setup
 
