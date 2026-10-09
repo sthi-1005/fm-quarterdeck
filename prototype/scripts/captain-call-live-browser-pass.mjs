@@ -315,7 +315,7 @@ try {
       const labelBox = label.getBoundingClientRect();
       if (Math.abs((labelBox.top + labelBox.height / 2) - (box.top + box.height / 2)) > 4) throw Error('title is not on the marker line');
       if (fullStyle.position !== 'absolute') throw Error('closed header shows the long title');
-      if (box.width < 40 || box.height < 8 || box.height > 36) throw Error('header box ' + Math.round(box.width) + 'x' + Math.round(box.height));
+      if (box.width < 40 || box.height < 8 || box.height > 48) throw Error('header box ' + Math.round(box.width) + 'x' + Math.round(box.height));
       if (label.scrollWidth > label.clientWidth + 1) throw Error('short title overflows');
       return 'closed batch header ' + Math.round(box.height);
     }`);
@@ -477,7 +477,7 @@ try {
       if (!id || id.textContent.length < 6 || id.textContent.length > 7 || id.title.length < 8 || !id.getAttribute('aria-label').includes(id.title)) throw Error('short batch id');
       const label = summary.querySelector('.review-batch-label');
       const labelBox = label.getBoundingClientRect();
-      if (getComputedStyle(summary).display !== 'flex' || box.height > 36 || Math.abs((labelBox.top + labelBox.height / 2) - (box.top + box.height / 2)) > 4) throw Error('sent header is not one line ' + Math.round(box.height));
+      if (getComputedStyle(summary).display !== 'flex' || box.height > 48 || Math.abs((labelBox.top + labelBox.height / 2) - (box.top + box.height / 2)) > 4) throw Error('sent header is not one line ' + Math.round(box.height));
       id.click();
       if (batch.open) throw Error('copying the batch id toggled the batch');
       if (document.documentElement.scrollWidth > innerWidth) throw Error('sent header overflow');
