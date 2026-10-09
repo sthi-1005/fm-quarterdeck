@@ -312,11 +312,13 @@ try {
   assert.equal((await envelopeNow()).selection,'');
   assert.equal((await envelopeNow()).note,'merge - Only after the synthetic migration');
   await rm(path.join(home,'delay-answer'));
-  // Full text stays readable from the keyboard: Tab reaches the complete link, and the ask is not clipped.
+  // Full text stays readable from the keyboard. The header pill is the first stop; the next Tab reaches the complete link, and the ask is not clipped.
   await browser('resize','1280','844');
   await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); card.tabIndex=-1; card.focus(); return 'keyboard start'; }`);
   await browser('press','Tab');
-  await evaluate(`() => { const link=document.activeElement; const ask=document.querySelector('[data-call-key="decision:alpha-call"] h3'); const clamp=getComputedStyle(ask).webkitLineClamp; if(!link.matches('a.call-link')||link.textContent!==link.href||ask.scrollHeight>ask.clientHeight+1||getComputedStyle(ask).textOverflow==='ellipsis'||(Boolean(clamp)&&clamp!=='none'))throw Error('link or ask is not fully readable'); return 'Tab reached the full link'; }`);
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const first=document.activeElement; if(!card.contains(first)||!first.matches('[data-call-procrastinate-toggle]'))throw Error('first tab stop '+(first.className||first.tagName)); return 'header pill first'; }`);
+  await browser('press','Tab');
+  await evaluate(`() => { const link=document.activeElement; const ask=document.querySelector('[data-call-key="decision:alpha-call"] h3'); const clamp=getComputedStyle(ask).webkitLineClamp; if(!link.matches('a.call-link')||link.textContent!==link.href||ask.scrollHeight>ask.clientHeight+1||getComputedStyle(ask).textOverflow==='ellipsis'||(Boolean(clamp)&&clamp!=='none'))throw Error('link or ask is not fully readable '+(link.className||link.tagName)+' clip '+(ask.scrollHeight-ask.clientHeight)); return 'Tab reached the full link'; }`);
   await writeFile(path.join(proof,'captain-answer-accessibility.txt'),await browser('snapshot'));
   // Quarterdeck is deliberately light; a dark OS preference must not reduce readability.
   await browser('emulate','--color-scheme','dark');
