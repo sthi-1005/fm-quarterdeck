@@ -50,35 +50,43 @@ function setup({ responses = [], storage = null } = {}) {
   return { document, timers, list, patcher, threads, fetches, node, part, ask };
 }
 
-test("Ask more info opens the card's thread, loads its history oldest first and watches visited cards for replies without auto-opening", async () => {
-  const t = setup({ responses: [history([
+test("a card shows the latest exchange without opening the composer, and Ask more info still loads and watches the thread", async () => {
+  const entries = [
     { kind: "chat", from: "firstmate", at: "2026-01-02T09:00:00.000Z", text: "Filed a hold for alpha-call." },
     { kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "replied" },
     { kind: "reply", from: "firstmate", at: "2026-01-02T11:00:00.000Z", text: "It picks the rollout window." },
-  ])] });
+  ];
+  const t = setup({ responses: [history(entries)] });
   t.patcher.update(model([decision()]));
+  await flush();
   assert.equal(t.part("toggle").textContent, "Ask more info");
   assert.equal(t.part("toggle").getAttribute("aria-expanded"), "false");
   assert.equal(t.node().querySelector("[data-call-thread]").hidden, true);
-  assert.equal(t.fetches.length, 0, "a closed thread reads nothing");
+  assert.equal(t.fetches.length, 1, "the card reads its history while the composer stays closed");
+  assert.equal(t.fetches[0].url, `/api/bearings/thread?key=${encodeURIComponent(KEY)}`);
+  assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, false);
+  assert.deepEqual([...t.part("log").children].map((entry) => entry.querySelector("strong").textContent), ["You asked", "Firstmate replied"]);
+  assert.match(t.part("earlier").textContent, /1 earlier message/);
+  assert.equal(t.part("history-toggle").hidden, false);
+  t.part("history-toggle").click();
+  assert.equal(t.node().querySelector("[data-call-thread]").hidden, true, "showing earlier messages does not open the composer");
+  assert.deepEqual([...t.part("log").children].map((entry) => entry.querySelector("strong").textContent), ["Firstmate in chat", "You asked", "Firstmate replied"]);
+  assert.match(t.part("log").children[1].textContent, /replied/);
+  assert.equal(t.part("log").children[2].querySelector("time").getAttribute("datetime"), "2026-01-02T11:00:00.000Z");
+  t.part("history-toggle").click();
+  assert.equal(t.part("log").children.length, 2, "the card can return to the latest exchange");
 
   t.part("toggle").click();
   assert.equal(t.part("toggle").getAttribute("aria-expanded"), "true");
   assert.equal(t.part("toggle").textContent, "Hide thread");
   assert.equal(t.node().querySelector("[data-call-thread]").hidden, false);
   assert.equal(t.document.activeElement, t.part("text"), "the question box takes focus");
-  await flush();
-  assert.equal(t.fetches[0].url, `/api/bearings/thread?key=${encodeURIComponent(KEY)}`);
-  const entries = t.part("log").children;
-  assert.deepEqual(entries.map((entry) => entry.querySelector("strong").textContent), ["Firstmate in chat", "You asked", "Firstmate replied"]);
-  assert.match(entries[1].textContent, /replied/);
-  assert.equal(entries[2].querySelector("time").getAttribute("datetime"), "2026-01-02T11:00:00.000Z");
   assert.match(t.part("status").textContent, /^3 messages about this call/);
 
   // The thread survives Firstmate's next snapshot refilling the card.
   t.patcher.update(model([decision("a2")]));
   assert.equal(t.part("toggle").getAttribute("aria-expanded"), "true");
-  assert.equal(t.part("log").children.length, 3);
+  assert.equal(t.part("log").children.length, 2);
 
   t.timers.advance(15000);
   await flush();
@@ -86,7 +94,7 @@ test("Ask more info opens the card's thread, loads its history oldest first and 
   t.part("toggle").click();
   t.timers.advance(60000);
   await flush();
-  assert.equal(t.fetches.length, 3, "a visited closed thread watches for replies");
+  assert.equal(t.fetches.length, 3, "a loaded card keeps watching for replies");
 });
 
 test("Ask Firstmate sends only on an explicit click, retries an unconfirmed send with the same id, and clears on 202", async () => {
@@ -170,21 +178,17 @@ test("closed visited thread marks new replies politely and opening acknowledges 
   t.threads.destroy();
 });
 
-test("long entries expand without losing text and copy fails visibly", async () => {
+test("long entries stay fully readable and copy fails visibly", async () => {
   const text = "Synthetic context ".repeat(300);
   const t = setup({ responses: [history([{ kind: "chat", from: "firstmate", at: "2026-01-02T11:00:00Z", text }])] });
   t.patcher.update(model([decision()]));
-  t.part("toggle").click();
   await flush();
   const entry = t.part("log").children[0];
-  const buttons = entry.querySelectorAll("button");
-  assert.equal(buttons[0].textContent, "More");
-  assert.ok(entry.querySelector(".call-thread-text").textContent.length < text.length);
-  buttons[0].click();
   assert.equal(entry.querySelector(".call-thread-text").textContent, text);
-  assert.equal(buttons[0].getAttribute("aria-expanded"), "true");
+  assert.equal(entry.querySelectorAll("button").length, 1);
   assert.match(entry.querySelector("time").textContent, /ago/);
-  buttons[1].click();
+  entry.querySelector("button").click();
   await flush();
+  assert.match(t.part("notice").textContent, /Copy unavailable/);
   assert.match(t.part("status").textContent, /Copy unavailable/);
 });

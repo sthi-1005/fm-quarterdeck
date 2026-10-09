@@ -1,7 +1,7 @@
-// Card threads (BEARINGS.md "Card threads"). "Ask more info" opens a card-scoped thread:
-// the card's own inbox notes, Firstmate's replies and Firstmate's chat messages naming the
-// task, oldest first. A question is sent only by an explicit Ask Firstmate click, through
-// the guarded inbox; an unconfirmed send is retried by another click with the same request
+// Card threads (BEARINGS.md "Card threads"). Each present card reads its history so the
+// latest exchange is visible without opening the composer. "Ask more info" opens the
+// question box. A question is sent only by an explicit Ask Firstmate click, through the
+// guarded inbox; an unconfirmed send is retried by another click with the same request
 // id. The question box is a protected draft, so typing holds Captain's Call updates.
 window.bearingsThread = (() => {
   const STATE_PREFIX = "fm-quarterdeck-call-thread.v1:";
@@ -42,6 +42,14 @@ window.bearingsThread = (() => {
     const replies = (state) => (state.entries || []).filter((entry) => entry.kind === "reply");
     const unread = (state) => replies(state).filter((entry) => !state.seen?.has(identity(entry))).length;
     const markRead = (state) => { state.seen = new Set(replies(state).map(identity)); };
+    // The latest exchange is the newest turn, plus the message it answers when the
+    // two sides differ. Everything before that is "earlier" and stays one click away.
+    const latestExchange = (entries) => {
+      if (entries.length < 2) return entries.slice();
+      const last = entries[entries.length - 1];
+      const prev = entries[entries.length - 2];
+      return prev.from !== last.from ? [prev, last] : [last];
+    };
 
     function entryNode(entry, state) {
       const item = doc.createElement("li");
@@ -63,24 +71,8 @@ window.bearingsThread = (() => {
       const body = doc.createElement("p");
       body.className = "call-thread-text";
       const text = entry.text || "";
-      const id = identity(entry);
-      const expanded = state.expanded?.has(id);
-      body.textContent = text.length > 800 && !expanded ? `${text.slice(0, 800)}…` : text;
+      body.textContent = text;
       item.append(head, body);
-      if (text.length > 800) {
-        const more = doc.createElement("button");
-        more.type = "button";
-        more.textContent = expanded ? "Less" : "More";
-        more.setAttribute("aria-expanded", String(Boolean(expanded)));
-        more.addEventListener("click", () => {
-          state.expanded ||= new Set();
-          if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
-          body.textContent = state.expanded.has(id) ? text : `${text.slice(0, 800)}…`;
-          more.textContent = state.expanded.has(id) ? "Less" : "More";
-          more.setAttribute("aria-expanded", String(state.expanded.has(id)));
-        });
-        item.append(more);
-      }
       const copy = doc.createElement("button");
       copy.type = "button";
       copy.textContent = "Copy";
@@ -88,8 +80,11 @@ window.bearingsThread = (() => {
       copy.addEventListener("click", async () => {
         try { await win.navigator.clipboard.writeText(text); state.notice = "Message copied"; }
         catch { state.notice = "Copy unavailable; select the message text to copy it"; }
-        const status = part(cardNode(state.key), "status");
+        const node = cardNode(state.key);
+        const status = part(node, "status");
         if (status) status.textContent = statusText(state);
+        const notice = part(node, "notice");
+        if (notice) notice.textContent = state.notice || "";
       });
       item.append(copy);
       return item;
@@ -124,17 +119,37 @@ window.bearingsThread = (() => {
         if (replyStatus.textContent !== message) replyStatus.textContent = message;
       }
       panel.hidden = !state.open;
+      const entries = state.entries || [];
+      const exchange = latestExchange(entries);
+      const shown = state.historyOpen ? entries : exchange;
+      const earlier = entries.length - exchange.length;
+      const history = node.querySelector("[data-call-thread-history]");
+      if (history) history.hidden = entries.length === 0;
       const log = part(node, "log");
       if (log) {
-        const signature = JSON.stringify(state.entries || []);
+        const signature = JSON.stringify({ historyOpen: Boolean(state.historyOpen), entries: shown });
         if (log.getAttribute("data-history") !== signature) {
-          const items = (state.entries || []).map((entry) => entryNode(entry, state));
           log.textContent = "";
-          log.append(...items);
-          log.hidden = !items.length;
+          log.append(...shown.map((entry) => entryNode(entry, state)));
+          log.hidden = shown.length === 0;
           log.setAttribute("data-history", signature);
         }
       }
+      const earlierNode = part(node, "earlier");
+      if (earlierNode) {
+        const message = entries.length === 0 ? "" : state.historyOpen ? `Showing all ${entries.length} messages` : earlier ? `${earlier} earlier ${earlier === 1 ? "message" : "messages"}` : "";
+        if (earlierNode.textContent !== message) earlierNode.textContent = message;
+        earlierNode.hidden = !message;
+      }
+      const historyToggle = part(node, "history-toggle");
+      if (historyToggle) {
+        historyToggle.hidden = earlier <= 0;
+        historyToggle.setAttribute("aria-expanded", String(Boolean(state.historyOpen)));
+        const label = state.historyOpen ? "Show latest only" : `Show ${earlier} earlier ${earlier === 1 ? "message" : "messages"}`;
+        if (historyToggle.textContent !== label) historyToggle.textContent = label;
+      }
+      const notice = part(node, "notice");
+      if (notice && notice.textContent !== (state.notice || "")) notice.textContent = state.notice || "";
       const status = part(node, "status");
       const text = state.open ? statusText(state) : "";
       if (status && status.textContent !== text) status.textContent = text;
@@ -150,6 +165,10 @@ window.bearingsThread = (() => {
         const message = state.error || "";
         if (error.textContent !== message) error.textContent = message;
         error.hidden = !message;
+      }
+      if (state.entries == null && !state.loading && !state.loadQueued) {
+        state.loadQueued = true;
+        void load(key);
       }
       schedulePoll();
     }
@@ -170,6 +189,7 @@ window.bearingsThread = (() => {
       if (response?.ok && body && Array.isArray(body.entries)) {
         Object.assign(state, { entries: body.entries, omitted: body.omitted || 0, transcript: body.transcript || null, checkedAt: body.checkedAt || null });
         if (state.open) markRead(state);
+        else if (!state.openedOnce && !state.baselined) { markRead(state); state.baselined = true; }
         if (!state.pending || state.pending.phase !== "failed") state.error = null;
       } else if (!state.pending) state.error = body?.error || "This call's history is unavailable right now; it retries while this card is present.";
       rerender(key);
@@ -179,11 +199,11 @@ window.bearingsThread = (() => {
     function setOpen(key, open) {
       const state = stateOf(key);
       state.open = open;
-      if (open) markRead(state);
+      if (open) { state.openedOnce = true; markRead(state); }
       save(key);
       rerender(key);
       if (open) {
-        void load(key);
+        if (state.entries == null && !state.loading) void load(key);
         cardNode(key)?.querySelector("[data-call-thread-text]")?.focus?.();
       }
       schedulePoll();
@@ -232,8 +252,9 @@ window.bearingsThread = (() => {
       cardNode(key)?.querySelector("[data-call-thread-send]")?.focus?.();
     }
 
-    // Only threads visited in this tab are watched; unopened cards cause no extra reads.
-    function watchedKeys() { return [...states.keys()].filter((key) => (states.get(key)?.open || states.get(key)?.entries) && cardNode(key)); }
+    // Every present card is read once so its history can show without opening the composer.
+    // Polling continues for those cards while the page is visible.
+    function watchedKeys() { return [...states.keys()].filter((key) => { const state = states.get(key); return state && (state.open || state.entries || state.loadQueued) && cardNode(key); }); }
     async function poll() {
       pollTimer = null;
       if (destroyed) return;
@@ -249,6 +270,13 @@ window.bearingsThread = (() => {
       const target = event.target;
       const key = keyOf(target?.closest?.("[data-call-key]"));
       if (!key) return;
+      if (target.closest("[data-call-thread-history-toggle]")) {
+        event.preventDefault?.();
+        const state = stateOf(key);
+        state.historyOpen = !state.historyOpen;
+        rerender(key);
+        return;
+      }
       if (target.closest("[data-call-thread-toggle]")) { event.preventDefault?.(); setOpen(key, !stateOf(key).open); }
     };
     const onSubmit = (event) => {

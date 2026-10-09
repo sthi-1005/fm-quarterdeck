@@ -7,6 +7,16 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Desktop shell disclosure/resizing uses one edge stripe. Lane and kind filters have independent panels; context/history use bounded scroll areas. Phone/tablet disclosures preserve native focus, Escape and close behavior.
 - Message prose has a readable width while structured content may use the pane. Feed paging is bounded independently of loaded source history.
 - Overview, Expenses, Quota, Preferences and closed history share heading, card, status and empty/unavailable conventions.
+- Captain's Call cards are poster cards on the light canvas: a 2px forest-ink border, a 3px hard shadow, and an uppercase enamel type chip.
+- Decision chips use the accent fill, merge chips an amber mix with dark ink, and chat-ask chips a dashed surface.
+- The title is the full ask or reason.
+- Context keys are small uppercase monospace.
+- Option rows use a warm surface and an accent ring when selected, and Recommended is an uppercase amber chip.
+- Queue is accent-filled with an ink border; a merge Queue uses the amber mix.
+- Held cards keep their update notice at full strength, with no dimmed or outdated treatment.
+- Long titles, options, links and ids wrap so the full text stays readable on desktop and on a phone.
+- A card with thread entries shows the latest exchange, the count of earlier messages, and a control that expands the same history.
+- Chat asks keep the double left border.
 - Captain's Call answer forms separate source context from input with a quiet rule; option cards use native radios, a textual Recommended chip and visible keyboard focus. All call buttons and option targets are at least 44px high. Confirmation and receipt panels retain readable text (disabled fields use muted ink, not whole-form opacity), and phone actions wrap without overflow.
 - The content canvas is light, including under an OS dark preference; the app shell remains dark. Forced colors use system outlines and disabled text, not color-only selection.
 

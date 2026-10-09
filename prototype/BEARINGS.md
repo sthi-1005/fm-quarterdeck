@@ -2,7 +2,7 @@
 
 Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves filed holds. Chat-only asks have the mechanical Quarterdeck resolution paths below.
 
-Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases), `public/bearings-overflow.js` (More details) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
+Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases), `public/bearings-overflow.js` (retained; cards no longer clamp) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
 
 ## Source and authority
 
@@ -63,7 +63,7 @@ The captain is engaged with a Captain's Call card while any of these hold:
 - a pointer is pressed inside that card;
 - a card is selected: a click on a card body (not a control) sets `aria-current="true"` until Escape, a second click on it, or a click outside the section.
 
-While engaged, only that card's incoming update or removal waits. All other cards update, appear or disappear immediately. The newest model waits as `pending` only for held changes; later updates replace it. Each held card with a pending change gets `data-held="true"`, `aria-busy="true"` and a small `role="status"` notice inside it: "Call updated — updates when you're done" or "Call resolved — updates when you're done", with its own **Update now**. That button applies only that card's waiting change. There is no section- or page-wide card-change notice. Cards are never `inert`, disabled or `pointer-events:none`: text stays selectable and copyable and fields stay editable. Freshness (`observed`) may refresh the empty state and coverage line, which hold no input. The separate page-level "Quarterdeck updated" notice for a new served revision is unchanged.
+While engaged, only that card's incoming update or removal waits. All other cards update, appear or disappear immediately. The newest model waits as `pending` only for held changes; later updates replace it. Each held card with a pending change gets `data-held="true"`, `aria-busy="true"` and a small `role="status"` notice inside it: "Call updated — updates when you're done" or "Call resolved — updates when you're done", with its own **Update now**. The card stays at full strength: there is no outdated overlay and no dimmed styling. That button applies only that card's waiting change. There is no section- or page-wide card-change notice. Cards are never `inert`, disabled or `pointer-events:none`: text stays selectable and copyable and fields stay editable. Freshness (`observed`) may refresh the empty state and coverage line, which hold no input. The separate page-level "Quarterdeck updated" notice for a new served revision is unchanged.
 
 After a card's signals clear, its own 600 ms grace period (so moving between two fields of one card never flickers) precedes one rebuild, even if another card remains engaged:
 
@@ -79,20 +79,32 @@ Card markup from the view must carry nothing the patcher owns. The patcher creat
 
 ## Rich cards and upstream data gap
 
-Cards have a short type/repository heading, an **About** row (repository, owner, and contribution kind when present), and a **Decide** row containing the complete decision summary or merge reason. Free text remains path-redacted and is never shortened by Quarterdeck: the server serves all of it, and long text is only clamped visually behind More details (see Long text). A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card. All displayed links come from snapshot contribution rows; no URL is guessed.
+Cards follow the bearings poster on Quarterdeck's light canvas: a 2px forest-ink border, a 3px hard shadow, and an enamel type chip (accent for a decision, an amber mix for a merge, a dashed surface chip for a chat ask).
+The repository, when known, sits beside the chip and wraps, and the clock takes its own line.
+The card title is the complete decision ask or merge reason.
+An **About** row carries repository, owner, and contribution kind when present.
+Free text remains path-redacted and is never shortened by Quarterdeck: the server serves all of it, and the card shows every character it received (see Long text).
+A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card.
+All displayed links come from snapshot contribution rows; no URL is guessed.
+Chat asks keep the double left border, and their title is the ask text.
 
-Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose decision options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask/reason, one More details click away when long, is the fallback (including guarded main-home reason supplementation for legacy snapshots). The About row is source metadata, not an invented work description.
+Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose decision options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask or reason, shown as the card title, is the fallback (including guarded main-home reason supplementation for legacy snapshots). The About row is source metadata, not an invented work description.
 
 Proposed upstream snapshot fields: a source-authored short `title`, descriptive `about`, explicit and unshortened `decide`, `options[{value,label,hint}]`, `recommend_value` referencing an option, a card-declared `close`, and merge `risk`, with the source contribution URL retained for both decision and merge subjects. Quarterdeck already consumes `options`, `recommend_value` and `close` on `decisions_open` rows when present (see Answers). These should be versioned and validated upstream before Quarterdeck consumes them. Board composition is not a new snapshot authority; this phase does not invoke the board builder or inspect other homes. The selected-home ledger supplements only already-authorized decision rows as described above. Rich rendering leaves engagement hold and draft protection unchanged.
 
 ## Long text
 
-The Decide text (decision ask or merge reason) is clamped to 4 lines (6 at phone width). A **More details** button (`[data-call-more]`, `aria-expanded`, `aria-controls` naming the Decide text and the detail region) appears only when something is actually cut:
-
-- the clamp is hiding lines at the current width (`scrollHeight > clientHeight`, re-measured after every fill and on list resize, so rotation, panel resizes and the view becoming visible are covered), or
-- Firstmate's snapshot itself shortened the text: it ends in `…` (decision summaries are cut at about 90 characters upstream). The detail region then says so and names the task id to ask about in chat; Quarterdeck shows everything it received. It never reconstructs the summary from backlog prose; an existing main-home hold's reason may be supplemented from its versioned field as described above.
-
-Expanding works in place, is kept per card key across patches (pruned when the call leaves), and never selects or holds the card beyond the ordinary focus rule. The full text of a source-shortened ask needs an upstream snapshot field; see "Upstream data gap".
+The card title is the full decision ask or merge reason.
+There is no line clamp and no **More details** control.
+Titles, options, links and task ids wrap, on desktop and on a phone, so an ellipsis never hides text that cannot be read.
+The task id is always visible (`Task` and the id).
+When Firstmate's snapshot itself shortened the text, it ends in `…` (decision summaries are cut at about 90 characters upstream).
+The card then says so beside the task id and names that id to ask about in chat.
+Quarterdeck shows everything it received.
+It never reconstructs the summary from backlog prose.
+An existing main-home hold's reason may be supplemented from its versioned field as described above.
+The full text of a source-shortened ask needs an upstream snapshot field; see "Upstream data gap".
+`public/bearings-overflow.js` stays loaded and does nothing while no `[data-call-more]` control is present.
 
 ## Answers
 
@@ -150,7 +162,19 @@ Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N
 
 "Ask more info" opens a thread scoped to one card, for when a call no longer explains itself. Its stable id is the card key (`decision:<task>`, `merge:<task>`, `chat:<16 hex>`). There is no model call: Quarterdeck relays the captain's question and joins existing records; Firstmate answers.
 
-- **Asking** (`public/bearings-thread-panel.js`): every card has an **Ask more info** toggle (`aria-expanded`, `aria-controls`) that reveals the thread region with its history, a question box (`data-call-draft="thread"`, a protected draft like any other, so typing holds updates) and **Ask Firstmate**, flush under the box. Only that explicit click sends. An unconfirmed send (network or `5xx`) shows **Retry ask**, which reuses the same request id; a `4xx` shows the server's reason. A confirmed send clears the box and reloads the history. Open/closed and an unconfirmed question persist per key in `sessionStorage` (`fm-quarterdeck-call-thread.v1:<key>`); reload never resends. Threads of cards that leave are forgotten. A thread visited in this tab re-reads its history every 15 s while the page is visible and its card is present, even after closing. Closed threads show a new-reply count on the toggle and a polite status announcement, never auto-open; opening marks the currently loaded replies read. Unvisited cards cause no history reads. Reply counts are tab-local, not a Firstmate acknowledgement.
+- **Asking** (`public/bearings-thread-panel.js`): every card has an **Ask more info** toggle (`aria-expanded`, `aria-controls`) that reveals the question box (`data-call-draft="thread"`, a protected draft like any other, so typing holds updates) and **Ask Firstmate**, flush under the box.
+  Only that explicit click sends.
+  An unconfirmed send (network or `5xx`) shows **Retry ask**, which reuses the same request id; a `4xx` shows the server's reason.
+  A confirmed send clears the box and reloads the history.
+  Open/closed and an unconfirmed question persist per key in `sessionStorage` (`fm-quarterdeck-call-thread.v1:<key>`); reload never resends.
+  Threads of cards that leave are forgotten.
+  Every present card reads its history on arrival, so the latest exchange is visible in `[data-call-thread-history]` without opening the composer, and keeps reading every 15 s while the page is visible and the card is present.
+  That exchange is the newest message, plus the one before it when the two sides differ.
+  Earlier messages are counted on the card, and **Show N earlier messages** expands the same log to everything loaded; **Show latest only** returns to the exchange.
+  That control does not open the composer.
+  Closed threads show a new-reply count on the toggle and a polite status announcement, never auto-open; opening marks the currently loaded replies read.
+  The first read of a card that has not been opened marks existing replies seen, so only later replies count as new.
+  Reply counts are tab-local, not a Firstmate acknowledgement.
 - **`POST /api/bearings/thread`** (host only; 404 through a preview path): same-origin JSON with no query, at most 4 KiB, served revision unchanged (409 `revision`). Body exactly `{requestId, key, text}`: a lowercase UUID, a card key, and at most 2000 UTF-8 bytes without control characters other than line breaks. The key must be an open card (409 `gone`); answerable or not does not matter. The process remembers 200 request ids, so a retry resends the identical note even after the card left, and reusing an id for different words is 409. Delivery is `fm-inbox.sh note --request-id quarterdeck-thread:<key>:<requestId>` (the same guarded, idempotent path answers and review notes use; a key that would overflow the 128-character id grammar is replaced by `h-<16 hex>` of it). `202 {state:"accepted", requestId, key, noteId, replay, sentAt}`; unconfirmed is `502 unconfirmed`.
 - **Note body:** "Captain asks about <Decision|Merge> <task> | Chat ask <hash> from Quarterdeck: <question>", then the reply route ("Answer with `bin/fm-inbox.sh reply <this note id>` … or in the main chat naming the task id. This is a question, not an answer; nothing was decided."), then a ```` ```json fm-quarterdeck-thread ```` fence `{schema:"fm-quarterdeck-card-thread.v1", key, type, task?, ask?, question, requestId}` (backticks escaped). It never carries an `fm-bearings-answer` block, so it cannot reach keyed intake or the merge rule.
 - **`GET /api/bearings/thread?key=<card key>`** (host only): `{schema, key, task, entries[], omitted, transcript:{state, windowed}, checkedAt}`, oldest first, at most 80 entries (`omitted` counts older ones). Entries are `{kind, from, at, text, noteId?, state?}`, joined mechanically:
@@ -160,7 +184,7 @@ Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N
   - `chat-ask`: the chat ask behind a chat card, and asks linked into a filed card;
   - `chat`: Firstmate's own text in the primary transcript (the chat-ask sources, newest 4 MiB each, cached until the file changes) that names the card's task id as a whole token. Chat cards have no task id, so only their notes and ask appear (`transcript.state:"not-applicable"`).
 
-  Text is path-redacted and bounded at 16000 characters per entry. The browser collapses entries over 800 characters with an accessible More/Less button, and offers Copy (with a visible fallback if clipboard access fails). Each entry shows relative and absolute time. Replies join by note id from the receipts' separate `replies` collection (legacy inline `reply` and string `text` remain supported). Claude and Pi primary transcripts use their own record parsers; thinking and tool results never join. Unknown times sort last in discovery order. Receipts unavailable is `502`; an unreadable transcript is reported as `transcript.state:"unavailable"` rather than hidden. Fleet Chats are unchanged: the thread is an extra, card-scoped view of the same records.
+  Text is path-redacted and bounded at 16000 characters per entry. The browser shows each entry's full text, and offers Copy (with a visible fallback if clipboard access fails). Each entry shows relative and absolute time. Replies join by note id from the receipts' separate `replies` collection (legacy inline `reply` and string `text` remain supported). Claude and Pi primary transcripts use their own record parsers; thinking and tool results never join. Unknown times sort last in discovery order. Receipts unavailable is `502`; an unreadable transcript is reported as `transcript.state:"unavailable"` rather than hidden. Fleet Chats are unchanged: the thread is an extra, card-scoped view of the same records.
 - **Rejected alternatives:** answering in Quarterdeck with a model (Firstmate owns answers); a new Firstmate endpoint or thread store (the inbox already gives ids, replies and receipts); matching transcript prose loosely or by task-name words (whole task-id tokens only, so a thread never shows another task's chat); posting the question as a Fleet Chat message (it would lose the card key and the reply route).
 
 ## Chat asks

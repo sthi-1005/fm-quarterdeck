@@ -1,5 +1,5 @@
 // Captain's Call presentation. The patcher owns card identity and drafts; the answer
-// controller owns the answer phases; the overflow controller owns More details.
+// controller owns the answer phases. Cards no longer clamp, so the overflow controller stays idle.
 window.bearingsView = (() => {
   const escape = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -68,12 +68,19 @@ window.bearingsView = (() => {
     </form>`;
   }
   // "Ask more info": a card-scoped thread with Firstmate (BEARINGS.md "Card threads").
+  // History stays on the card; the composer stays closed until Ask more info.
   // The thread controller fills the log; the textarea is a protected draft like any other.
   const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button><span class="call-meta" data-call-thread-replies role="status" aria-live="polite"></span>`;
-  const threadHtml = (id, label) => `<section class="call-thread" id="call-thread-${id}" data-call-thread aria-label="Thread with Firstmate: ${escape(label)}" hidden>
-      <h4>Thread with Firstmate</h4>
+  const threadHistoryHtml = (id) => `<section class="call-thread-history" id="call-thread-history-${id}" data-call-thread-history hidden>
+      <h4>Thread</h4>
+      <p class="call-meta" data-call-thread-earlier></p>
+      <ol class="call-thread-log" id="call-thread-log-${id}" data-call-thread-log></ol>
+      <p class="call-meta" data-call-thread-notice role="status"></p>
+      <button type="button" class="call-thread-history-toggle" data-call-thread-history-toggle aria-expanded="false" aria-controls="call-thread-log-${id}" hidden>Show earlier messages</button>
+    </section>`;
+  const threadHtml = (id, label) => `<section class="call-thread" id="call-thread-${id}" data-call-thread aria-label="Ask Firstmate: ${escape(label)}" hidden>
+      <h4>Ask Firstmate</h4>
       <p class="call-meta" data-call-thread-status role="status"></p>
-      <ol class="call-thread-log" data-call-thread-log></ol>
       <form class="call-thread-form" data-call-thread-form novalidate>
         <label class="call-answer-note">Ask Firstmate about this call <span>(sent to Firstmate's inbox · not an answer)</span><textarea data-call-draft="thread" data-call-thread-text rows="2" placeholder="What is this about?"></textarea></label>
         <div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-send" data-call-thread-send>Ask Firstmate</button></div>
@@ -87,17 +94,18 @@ window.bearingsView = (() => {
     const label = CHAT_LABELS[card.kind] || "Ask";
     const id = idFor(card.key);
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
+    const summary = card.summary || "Ask text not recorded";
     return `<div class="call-chrome"><header class="call-head"><span class="state-chip call-chat-chip">${label} · Chat ask</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Asked")}">${escape(clockText(card.clock))}</span></header>
-      <h3>${label} asked in chat</h3>
-      <dl class="call-context">${row("About", "Firstmate asked in chat; no captain hold is filed")}${row("Decide", card.summary || "Ask text not recorded", ` class="call-clamp" data-call-clamp id="call-decide-${id}"`)}${row("Reply", repliesText(card.replies))}</dl>
-      <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden><p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p></div>
-      <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
+      <h3 id="call-decide-${id}">${escape(summary)}</h3>
+      <dl class="call-context">${row("About", "Firstmate asked in chat; no captain hold is filed")}${row("Reply", repliesText(card.replies))}</dl>
+      <p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p>
       <p class="call-meta">Answering here, dismissing, or replying in chat with the quoted reply closes this card.</p>
+      ${threadHistoryHtml(id)}
       <div class="call-answer-actions"><button type="button" data-call-dismiss>Review dismissal</button>${threadToggleHtml(id)}</div>
       <div class="call-dismiss-confirm" data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden><p>Hide this ask from Captain's Call? Nothing is sent to Firstmate. Unsent text stays in this tab.</p><div class="call-answer-actions"><button type="button" data-call-dismiss-send>Dismiss this ask</button><button type="button" data-call-dismiss-cancel>Cancel</button></div></div>
       <p class="call-answer-error" data-call-dismiss-error role="alert" hidden></p>
-      ${threadHtml(id, `${label} asked in chat`)}</div>
-      ${answerHtml(card, `${label} asked in chat`)}`;
+      ${threadHtml(id, summary)}</div>
+      ${answerHtml(card, summary)}`;
   }
   const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length
     ? `<div class="call-context-row"><dt>Also asked in chat</dt><dd>${card.chatAsks.map((ask) => `${escape(ask.summary)} · reply ${escape(repliesText(ask.replies))}`).join("<br>")}</dd></div>` : "";
@@ -114,16 +122,14 @@ window.bearingsView = (() => {
     const shortened = sourceShortened(decide);
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
     const about = [card.repo || "Repository not recorded", card.owner || "Owner not recorded", merge && card.kind].filter(Boolean).join(" · ");
-    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Created / updated")}">${escape(clockText(card.clock))}</span></header>
-      <h3>${label} requested${card.repo ? ` · ${escape(card.repo)}` : ""}</h3>
-      <dl class="call-context">${row("About", about)}${row("Decide", decide, ` class="call-clamp" data-call-clamp id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}`)}${linkedAsksHtml(card)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
-      <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden>
-        ${shortened ? `<p>Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.</p>` : ""}
-        <p class="call-meta">Task <code>${escape(card.task || "unknown")}</code></p>
-      </div>
-      <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
+    return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span>${card.repo ? `<span class="call-repo">${escape(card.repo)}</span>` : ""}<span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Created / updated")}">${escape(clockText(card.clock))}</span></header>
+      <h3 id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}>${escape(decide)}</h3>
+      <dl class="call-context">${row("About", about)}${linkedAsksHtml(card)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
+      <p class="call-id">Task <code>${escape(card.task || "unknown")}</code></p>
+      ${shortened ? `<p class="call-shortened">Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.</p>` : ""}
       ${url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : merge ? '<p class="call-meta">Merge link unavailable</p>' : ""}
       ${card.answer ? "" : `<p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>`}
+      ${threadHistoryHtml(id)}
       <div class="call-answer-actions">${threadToggleHtml(id)}</div>
       ${threadHtml(id, `${label} ${card.task || ""}`.trim())}</div>
       ${answerHtml(card, `${label} ${card.task || ""}`.trim())}`;

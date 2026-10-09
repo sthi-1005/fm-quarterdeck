@@ -1768,57 +1768,56 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 
 .call-sort { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: var(--text-small); }
 .call-sort select { min-height: 44px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
-.call-head { flex-wrap: wrap; }
-/* Live Captain's Call: mute chrome, never editable or copyable content. */
-.call-cards { display: flex; flex-direction: column; gap: var(--space-3); overflow-anchor: auto; }
-.call-card { min-width: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.call-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.call-chat-chip { border: 1px dashed var(--control-line); }
-.call-card[data-call-type="chat"] { border-left-width: 3px; border-left-style: double; }
+/* Live Captain's Call: poster cards on Quarterdeck's light canvas and forest ink.
+   Held cards keep their update notice and stay full strength; nothing is dimmed. */
+.call-cards { display: flex; flex-direction: column; gap: 14px; overflow-anchor: auto; }
+.call-card { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 16px; border: 2px solid var(--text); border-radius: 12px; background: var(--surface); box-shadow: 3px 3px 0 var(--text); }
+.call-chrome { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.call-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+.call-card .state-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 5px 9px 4px; border: 1.5px solid var(--text); border-radius: 6px; box-shadow: 2px 2px 0 var(--text); background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; line-height: 1.2; letter-spacing: 0.07em; text-transform: uppercase; white-space: normal; overflow-wrap: anywhere; }
+.call-card[data-call-type="merge"] .state-chip { background: color-mix(in srgb, var(--amber) 72%, white); color: var(--text); }
+.call-chat-chip, .call-card[data-call-type="chat"] .state-chip { background: var(--surface); color: var(--text); border-style: dashed; }
+.call-card[data-call-type="chat"] { border-left-width: 6px; border-left-style: double; }
+.call-repo { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); text-align: right; overflow-wrap: anywhere; white-space: normal; }
 .call-dismiss-confirm { margin-top: 12px; padding: 12px; border: 1px dashed var(--control-line); border-radius: 6px; background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; }
 .call-dismiss-confirm p { margin: 0 0 12px; overflow-wrap: anywhere; }
 .call-dismiss-confirm[hidden], [data-call-dismiss][hidden], [data-call-dismiss-error][hidden] { display: none; }
-.call-card h3 { margin: 12px 0 8px; font-size: var(--text-body); line-height: 1.5; overflow-wrap: anywhere; }
-.call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
+.call-card h3 { margin: 0; font-size: 1.15rem; font-weight: 800; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+.call-meta, .call-answer-hint, .call-age, .call-coverage, .call-read-only, .call-id, .call-shortened { color: var(--muted); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; white-space: normal; }
+.call-age { flex: 1 1 100%; }
+.call-id, .call-shortened { margin: 0; }
+.call-id code, .call-shortened code, .call-meta code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; overflow-wrap: anywhere; }
 .call-read-only { font-weight: 400; margin-left: 8px; }
-.call-link { display: block; overflow-wrap: anywhere; }
-.call-context { display: grid; gap: 10px; margin: 12px 0; }
-.call-context-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 10px; align-items: baseline; }
-.call-context dt { color: var(--muted); font-size: var(--text-small); font-weight: 600; text-transform: uppercase; }
-.call-context dd { margin: 0; min-width: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
-.call-source-gap { margin: 12px 0; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); color: var(--muted); font-size: var(--text-small); line-height: 1.6; }
+.call-link { display: block; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; color: var(--blue); overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
+.call-context { display: grid; gap: 6px; margin: 0; }
+.call-context-row { display: grid; grid-template-columns: minmax(4.75rem, auto) minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.call-context dt { color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; overflow-wrap: anywhere; white-space: normal; }
+.call-context dd { margin: 0; min-width: 0; font-size: 0.9375rem; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.call-source-gap { margin: 0; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); color: var(--muted); font-size: var(--text-small); line-height: 1.6; }
 .call-note { display: block; margin-top: 16px; font-size: var(--text-small); }
 .call-note span { color: var(--muted); }
 .call-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
 .call-empty { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); }
-.call-card-notice { margin-top: 12px; padding: 8px; border: 1px solid var(--amber); border-radius: 6px; color: var(--muted); font-size: var(--text-small); }
+.call-card-notice { margin: 0; padding: 8px; border: 1px solid var(--amber); border-radius: 6px; color: var(--text); font-size: var(--text-small); }
 [data-call-sort-pending][hidden] { display: none; }
 .call-status[hidden], .call-badge[hidden] { display: none; }
 .call-card-notice button, [data-call-sort-pending] button, .call-stub-actions button { min-height: 44px; margin: 4px 4px 0 0; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
-.call-card[data-held="true"] .call-chrome { opacity: .65; filter: saturate(.5); }
-/* Long text: clamp until More details; the control shows only when text is actually cut (BEARINGS.md "Long text"). */
-.call-card { --call-clamp-lines: 4; }
-.call-card:not([data-call-expanded]) .call-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--call-clamp-lines); line-clamp: var(--call-clamp-lines); overflow: hidden; }
-.call-more { min-height: 44px; margin: 0 0 8px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
-.call-more[hidden], .call-more-detail[hidden] { display: none; }
-.call-more-detail { margin: 0 0 12px; padding: 10px; border-left: 2px solid var(--line); background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; overflow-wrap: anywhere; }
-.call-more-detail p { margin: 0 0 6px; }
-.call-more-detail p:last-child { margin-bottom: 0; }
 /* Answer form (BEARINGS.md "Answers"): nothing sends without Review answer, then Send to Firstmate. */
-.call-answer { display: grid; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.call-answer { display: grid; gap: 12px; margin-top: 0; padding-top: 0; border-top: 1.5px solid var(--line); }
 .call-answer-fields { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .call-answer-fields[hidden], .call-answer-actions[hidden], .call-answer-confirm[hidden], .call-answer-receipt[hidden], .call-answer-error[hidden] { display: none; }
 .call-answer-legend { margin-bottom: 10px; padding: 0; font-size: var(--text-body); font-weight: 600; }
 .call-answer-gap { margin: 0; color: var(--muted); font-size: var(--text-small); }
-.call-opts { display: grid; gap: 8px; }
-.call-opt { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; box-sizing: border-box; min-height: 44px; padding: 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); cursor: pointer; }
-.call-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.call-opts { display: grid; gap: 7px; }
+.call-opt { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; box-sizing: border-box; min-height: 44px; padding: 9px 12px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: var(--surface-soft); cursor: pointer; }
+.call-opt:hover { border-color: var(--control-line); }
+.call-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .call-opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-.call-opt input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); }
+.call-opt input { flex: none; width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent); }
 .call-opt-body { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; overflow-wrap: anywhere; }
-.call-opt-label { font-weight: 600; }
-.call-opt-hint { color: var(--muted); font-size: var(--text-small); }
-.call-opt-rec { flex: none; align-self: center; padding: 2px 8px; border: 1px solid var(--accent); border-radius: 12px; color: var(--accent); background: var(--surface); font-size: var(--text-small); font-weight: 600; }
+.call-opt-label { font-size: 0.9375rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.call-opt-hint { color: var(--muted); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.call-opt-rec { flex: none; align-self: center; max-width: 100%; padding: 3px 7px 2px; border: 1px solid var(--amber); border-radius: 6px; color: var(--text); background: color-mix(in srgb, var(--amber) 24%, var(--surface)); font-size: 11px; font-weight: 800; letter-spacing: 0.07em; line-height: 1.2; text-transform: uppercase; overflow-wrap: anywhere; white-space: normal; }
 .call-answer-note { display: block; font-size: var(--text-small); }
 .call-answer-note span { color: var(--muted); }
 .call-answer-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
@@ -1834,18 +1833,23 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-answer-actions.call-answer-bar button:not([hidden]) ~ button:not([hidden]) { border-left: 0; }
 .call-answer-actions.call-answer-bar { overflow: hidden; border-radius: 0 0 6px 6px; }
 .call-answer-actions.call-answer-bar button:focus-visible { outline-offset: -3px; }
-.call-answer-actions .call-answer-queue { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.call-answer-actions .call-answer-queue { border: 2px solid var(--text); background: var(--accent); color: #fff; font-weight: 800; }
+.call-card[data-call-type="merge"] .call-answer-actions .call-answer-queue { background: color-mix(in srgb, var(--amber) 70%, var(--surface)); color: var(--text); }
 .call-thread-toggle[aria-expanded="true"] { border-color: var(--accent); }
-.call-thread { margin: 12px 0 0; padding: 12px; border: 1px solid var(--control-line); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface-soft); }
+.call-thread-history { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 10px 12px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: var(--surface-soft); }
+.call-thread-history[hidden] { display: none; }
+.call-thread-history h4, .call-thread h4 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.07em; line-height: 1.2; text-transform: uppercase; color: var(--muted); }
+.call-thread-history-toggle { align-self: flex-start; max-width: 100%; min-height: 44px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.call-thread { margin: 0; padding: 12px; border: 1.5px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 9px; background: var(--surface-soft); }
 .call-thread[hidden] { display: none; }
-.call-thread h4 { margin: 0 0 4px; font-size: var(--text-body); }
-.call-thread-log { display: grid; gap: 8px; max-height: min(50vh, 480px); margin: 8px 0 12px; padding: 0; overflow: auto; list-style: none; overscroll-behavior: contain; }
+.call-thread-log { display: grid; gap: 8px; margin: 0; padding: 0; overflow: visible; list-style: none; }
 .call-thread-log[hidden] { display: none; }
-.call-thread-entry { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.call-thread-entry { min-width: 0; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--surface); }
 .call-thread-captain { border-left: 3px solid var(--accent); }
-.call-thread-head { margin: 0 0 4px; color: var(--muted); font-size: var(--text-small); }
+.call-thread-head { margin: 0 0 4px; color: var(--muted); font-size: var(--text-small); overflow-wrap: anywhere; }
 .call-thread-head strong { color: var(--text); }
 .call-thread-text { margin: 0; font-size: var(--text-small); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.call-thread-entry button { min-height: 44px; margin-top: 8px; white-space: normal; }
 .call-thread-form { display: grid; min-width: 0; }
 .call-answer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .call-answer-actions button, .call-answer-receipt button { min-height: 44px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
@@ -1863,17 +1867,17 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-badge { display: inline-block; min-width: 1.6em; padding: 0 4px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-size: 11px; text-align: center; }
 .mobile-dock [data-mobile-view="overview"] { position: relative; }
 .mobile-dock .call-badge { position: absolute; top: 2px; right: max(2px, calc(50% - 32px)); font-size: 10px; line-height: 1.5; }
-@keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: none; } }
+@keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent), 3px 3px 0 var(--text); } to { box-shadow: 3px 3px 0 var(--text); } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
 @media (forced-colors: active) {
-  .call-card[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; }
+  .call-card, .call-card .state-chip, .call-opt-rec, .call-answer-actions .call-answer-queue { border-color: CanvasText; box-shadow: none; background: Canvas; color: CanvasText; }
   .call-opt:has(input:checked), .call-answer-confirm, .call-answer-receipt, .call-status { border-color: Highlight; }
   .call-opt:has(input:focus-visible), .call-answer-receipt:focus { outline-color: Highlight; }
   .call-answer-fields[data-locked] .call-opt, .call-answer-fields[data-locked] textarea, .call-answer-fields[data-locked] .call-opt-rec { color: GrayText; border-color: GrayText; }
   .call-thread, .call-thread-captain { border-color: Highlight; }
   .call-opt-rec { color: CanvasText; border-color: CanvasText; }
 }
-@media (max-width: 720.005px) { .call-card { padding: 12px; --call-clamp-lines: 6; } .call-answer-actions button { flex: 1 1 auto; } .call-answer-fields-split { grid-template-columns: minmax(0, 1fr); } .call-thread { padding: 10px; } .call-opt-body { flex-basis: calc(100% - 28px); } .call-opt-rec { margin-left: 28px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } }
+@media (max-width: 720.005px) { .call-card { padding: 14px 12px 12px; } .call-answer-actions button { flex: 1 1 auto; } .call-answer-fields-split { grid-template-columns: minmax(0, 1fr); } .call-thread, .call-thread-history { padding: 10px; } .call-opt-body { flex-basis: calc(100% - 28px); } .call-opt-rec { margin-left: 28px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } .call-repo { flex-basis: 100%; text-align: left; } }
 
 /* Taxonomy is presentation-only; compact native disclosures keep all slices usable.
    Cohesive 3-tier visual hierarchy: Repository (Deck) -> Lane (Workstream) -> Theme (Grouping) */

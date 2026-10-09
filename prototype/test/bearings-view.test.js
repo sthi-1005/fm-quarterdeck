@@ -27,27 +27,30 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
 test('rich context expands source choices without inventing controls, risk or a recommendation', () => {
   const summary = `Pick a release. ${'Full context. '.repeat(60)}Recommended: staged — fewer users affected. Immediate — faster.`;
   const html = view.cardHtml({ type: 'decision', summary, repo: 'example-app', owner: 'acme-mate', url: 'https://example.invalid/acme/example-app/pull/42' });
-  assert.match(html, /<h3>Decision requested · example-app<\/h3>/);
+  assert.match(html, /<span class="state-chip">Decision<\/span>/);
+  assert.match(html, /<span class="call-repo">example-app<\/span>/);
+  assert.ok(html.includes(`<h3 id="call-decide-${view.idFor('Decision')}">${summary}</h3>`));
   assert.match(html, /<dt>About<\/dt><dd>example-app · acme-mate/);
-  assert.ok(html.includes(`data-call-clamp id="call-decide-${view.idFor('Decision')}">${summary}</dd>`));
+  assert.doesNotMatch(html, /call-clamp|data-call-more|More details/);
   assert.match(html, /href="https:\/\/example.invalid\/acme\/example-app\/pull\/42"/);
   assert.doesNotMatch(withoutThread(html), /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
   const merge = view.cardHtml({ type: 'merge', reason: summary, kind: 'pr', repo: 'example-app' });
-  assert.ok(merge.includes(summary));
+  assert.ok(merge.includes(`<h3 id="call-decide-${view.idFor('Merge')}">${summary}</h3>`));
   assert.match(merge, /<dt>Risk<\/dt><dd>Not provided by the snapshot/);
   assert.doesNotMatch(merge, /risk low|risk high|checks green/i);
 });
 
-test('long text is clamped with a More details control; Firstmate shortening is detected and disclosed', () => {
+test('long text stays in the title; Firstmate shortening is disclosed beside the task id', () => {
   const card = { key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick the alpha rollout window: staged or immediate, with the…' };
   const html = view.cardHtml(card);
   const id = view.idFor(card.key);
-  assert.match(html, new RegExp(`<dd class="call-clamp" data-call-clamp id="call-decide-${id}" data-call-truncated>`));
-  assert.match(html, new RegExp(`<button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>`));
-  assert.match(html, new RegExp(`id="call-more-${id}" data-call-more-detail hidden`));
+  assert.match(html, new RegExp(`<h3 id="call-decide-${id}" data-call-truncated>`));
   assert.match(html, /snapshot shortened this ask[\s\S]*<code>alpha-call<\/code>/);
+  assert.match(html, /class="call-id">Task <code>alpha-call<\/code>/);
+  assert.doesNotMatch(html, /data-call-more|call-clamp|More details/);
   const whole = view.cardHtml({ ...card, summary: 'Pick the alpha rollout window' });
   assert.doesNotMatch(whole, /data-call-truncated|snapshot shortened/);
+  assert.match(whole, /class="call-id">Task <code>alpha-call<\/code>/);
   assert.notEqual(view.idFor('decision:a.b'), view.idFor('decision:a-b'), 'ids stay distinct when keys sanitize alike');
 });
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {

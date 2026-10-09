@@ -80,7 +80,8 @@ test('chat cards arrive and resolve immediately while another card is engaged, w
   assert.ok(s.node(chat.key));
   s.outside.focus(); s.timers.advance(600);
   assert.equal(s.node(hold.key), held);
-  assert.match(s.node(chat.key).textContent, /Approval asked in chat/);
+  assert.match(s.node(chat.key).textContent, /Approval · Chat ask/);
+  assert.match(s.node(chat.key).textContent, /Publish synthetic notes/);
   s.button('').click(); s.button('send').click();
   held.querySelector('textarea').focus();
   s.timers.advance(600); // Finish the dismissed chat's own focus-release grace.

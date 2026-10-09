@@ -329,32 +329,24 @@ test("receipt polling batches at most twenty ids and leaves unavailable receipts
   assert.equal(t.answers.state(cards[20].key).receipt.state, "received");
 });
 
-test("More details appears only when text is cut, expands in place, and survives patches", () => {
+test("asks, task ids and upstream shortening stay readable without a clamp", () => {
   const t = setup();
   const key = "decision:alpha-call";
   t.patcher.update(model([decision("a1", "A short ask")]));
-  const clamp = () => t.node(key).querySelector("[data-call-clamp]");
-  const more = () => t.node(key).querySelector("[data-call-more]");
-  t.overflow.measureAll();
-  assert.equal(more().hidden, true, "nothing is cut");
-  Object.assign(clamp(), { scrollHeight: 200, clientHeight: 96 });
-  t.overflow.measureAll();
-  assert.equal(more().hidden, false);
-  assert.equal(more().getAttribute("aria-expanded"), "false");
-  more().click();
-  assert.equal(t.node(key).hasAttribute("data-call-expanded"), true);
-  assert.equal(more().getAttribute("aria-expanded"), "true");
-  assert.equal(more().textContent, "Fewer details");
-  assert.equal(t.node(key).querySelector("[data-call-more-detail]").hidden, false);
-  assert.equal(t.node(key).getAttribute("aria-current"), null, "the control never selects the card");
+  const title = () => t.node(key).querySelector("h3");
+  assert.equal(title().textContent, "A short ask");
+  assert.equal(t.node(key).querySelector("[data-call-more]"), null);
+  assert.equal(t.node(key).querySelector("[data-call-clamp]"), null);
+  assert.match(t.node(key).querySelector(".call-id").textContent, /alpha-call/);
   t.leave();
   t.patcher.update(model([decision("a2", "A changed short ask")]));
-  assert.equal(more().getAttribute("aria-expanded"), "true", "expansion survives a card refill");
-  more().click();
-  assert.equal(more().hidden, true, "collapsed and nothing cut");
-  t.timers.advance(600); // Finish the card's pointer-release grace.
+  assert.equal(title().textContent, "A changed short ask");
+  t.timers.advance(600);
   t.patcher.update(model([decision("a3", "Pick the window: staged or immediate, with the…")]));
-  assert.equal(more().hidden, false, "Firstmate's own shortening shows the control without any overflow");
+  assert.equal(title().textContent, "Pick the window: staged or immediate, with the…");
+  assert.equal(title().hasAttribute("data-call-truncated"), true);
+  assert.match(t.node(key).querySelector(".call-shortened").textContent, /shortened this ask/);
+  assert.match(t.node(key).querySelector(".call-id").textContent, /alpha-call/);
 });
 
 // Arrays built inside the vm context are not this realm's arrays.

@@ -1,8 +1,7 @@
-// Captain's Call "More details" (BEARINGS.md "Long text"). Long card text is clamped to a
-// few lines; the control appears only when something is actually cut off - the clamp is
-// hiding lines at the current width, or Firstmate's snapshot itself shortened the text
-// (it ends in "…") - and expands the card in place. Expansion is per card key and
-// survives patches; it is presentation only and never selects or holds the card.
+// Retained clamp controller (BEARINGS.md "Long text"). Cards no longer render
+// [data-call-more], so apply() returns immediately. If a control is present it still
+// expands that card in place. Expansion is per card key, survives patches, and never
+// selects or holds the card.
 window.bearingsOverflow = (() => {
   const keyOf = (node) => node?.getAttribute?.("data-call-key") || null;
 
