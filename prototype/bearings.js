@@ -116,6 +116,48 @@ export function backlogTitles(text) {
   }
   return titles;
 }
+// Durable lifecycle blocks are scoped to their ledger item, not arbitrary prose.
+// Duplicate ids invalidate evidence, including checked/unchecked duplicates.
+export function backlogHoldRecords(text) {
+  const records = new Map(), seen = new Set();
+  const allItems = text.replace(/^(\s*-\s+)\[[xX]\]/gm, "$1[ ]");
+  const reasons = backlogHoldReasons(allItems), titles = backlogTitles(allItems);
+  let current = null;
+  for (const line of text.split(/\r?\n/)) {
+    const item = /^\s*-\s+\[([ xX])\]\s+(\S+)\s+-\s+(.+)$/.exec(line);
+    if (item) {
+      const [, checked, id, fields] = item;
+      current = null;
+      if (!TASK_ID.test(id)) continue;
+      if (seen.has(id)) { records.delete(id); continue; }
+      seen.add(id);
+      current = { task: id, type: "decision", title: titles.get(id), reason: reasons.get(id),
+        open: checked === " " && fields.includes("(hold-kind: captain)"),
+        closed: checked !== " ", captain: fields.includes("(hold-kind: captain)"), source: "data/backlog.md", resolution: checked !== " " ? "closed" : null };
+      records.set(id, current);
+    } else if (/^##\s/.test(line) || (line.trim() && !/^\s{2,}/.test(line))) current = null;
+    else if (current && /^  Resolution recorded by fm-captain-hold\.$/.test(line)) current.recorded = true;
+    else if (current?.recorded) {
+      const mode = /^  Resolution mode: (released|done|answered|closed)$/.exec(line)?.[1];
+      // A still-open captain hold may have historical resolution prose from an older cycle.
+      if (mode && !current.open) { current.closed = true; current.resolution = mode; }
+    }
+  }
+  return [...records.values()].filter(row => row.open || (row.closed && (row.captain || row.recorded))).map(({ recorded, captain, ...row }) => row);
+}
+
+export async function readBacklogHoldRecords(home) {
+  const file = await open(path.join(home, "data", "backlog.md"), "r");
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new Error("Backlog exceeds bounded regular-file contract");
+    const buffer = Buffer.alloc(2 * 1024 * 1024 + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead === buffer.length) throw new Error("Backlog exceeds read bound");
+    return backlogHoldRecords(new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead)));
+  } finally { await file.close(); }
+}
+
 async function addBacklogEvidence(output, home) {
   let file;
   try {
@@ -128,6 +170,7 @@ async function addBacklogEvidence(output, home) {
     const raw = JSON.parse(output);
     const text = buffer.subarray(0, bytesRead).toString("utf8");
     const clocks = backlogClocks(text), reasons = backlogHoldReasons(text), titles = backlogTitles(text);
+    raw.quarterdeck_holds = backlogHoldRecords(text);
     if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
       object(row) && row.owner === "(main)" ? {
         ...clocks.get(row.id), ...row,
@@ -235,11 +278,13 @@ export function normalizeSnapshot(raw, enabled = ["call"]) {
   validateSnapshot(raw);
   const content = { cards: [], coverage: null, omitted: [] };
   for (const name of enabled) Object.assign(content, SECTIONS[name](raw));
-  return { ...content, generatedAt: isoDate(raw.generated) };
+  const holds = Array.isArray(raw.quarterdeck_holds) ? raw.quarterdeck_holds.filter(row => object(row) && TASK_ID.test(row.task) && row.source === "data/backlog.md")
+    .map(row => ({ ...row, reason: publicText(row.reason, Infinity), title: publicText(row.title, Infinity) })) : [];
+  return { ...content, holds, generatedAt: isoDate(raw.generated) };
 }
 // The revision covers only what the captain sees, never the snapshot clock, so an
 // unchanged Captain's Call is never pushed again.
-export const contentRevision = ({ cards, coverage, omitted }) => shortHash({ cards, coverage, omitted });
+export const contentRevision = ({ cards, coverage, omitted, holds }) => shortHash({ cards, coverage, omitted, ...(holds?.length ? { holds } : {}) });
 
 export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = access, setPriority = os.setPriority, timeoutMs = 45000, maxStdout = 2 * 1024 * 1024, maxStderr = 4096 } = {}) {
   let pending = null;
@@ -353,7 +398,7 @@ export function createBearingsHub({ home, runner = createSnapshotRunner(home), f
     try {
       const content = normalizeSnapshot(JSON.parse(await runner()));
       const at = new Date(now()).toISOString();
-      lastGood = { schema: MODEL_SCHEMA, rev: contentRevision(content), state: "ready", observedAt: at, checkedAt: at, generatedAt: content.generatedAt, stale: false, error: null, cards: content.cards, coverage: content.coverage, omitted: content.omitted };
+      lastGood = { schema: MODEL_SCHEMA, rev: contentRevision(content), state: "ready", observedAt: at, checkedAt: at, generatedAt: content.generatedAt, stale: false, error: null, cards: content.cards, coverage: content.coverage, omitted: content.omitted, holds: content.holds };
       publish(lastGood);
     } catch (error) {
       const reason = error instanceof BearingsUnavailable ? error.message : error instanceof SyntaxError ? "Bearings output is not JSON" : "Bearings snapshot failed";

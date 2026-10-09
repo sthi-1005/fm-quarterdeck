@@ -18,7 +18,11 @@ const MAX_ASK_CHARS = 4000;
 const MAX_REPLIES = 6;
 const MAX_OPEN = 100;
 const MAX_TOMBSTONES = 5000;
-const MATCHING_VERSION = 3;
+const MATCHING_VERSION = 4;
+
+export function taskMarkers(text) {
+  return [...new Set([...String(text).matchAll(/\[task:([A-Za-z0-9][A-Za-z0-9._-]{0,159})\]/g)].map(match => match[1]))];
+}
 const MiB = 1024 * 1024;
 
 // ---------------------------------------------------------------------------------------
@@ -84,7 +88,7 @@ export function extractAsks(text) {
     if (!current) return;
     const raw = current.body.filter(Boolean).join("\n");
     const clipped = raw.length > MAX_ASK_CHARS ? `${raw.slice(0, MAX_ASK_CHARS - 1)}…` : raw;
-    asks.push({ kind: current.kind, marker: current.marker, line: current.line, text: readable(clipped), replies: extractReplies(raw) });
+    asks.push({ kind: current.kind, marker: current.marker, line: current.line, taskMarkers: taskMarkers(current.line), text: readable(clipped), replies: extractReplies(raw) });
     current = null;
   };
   for (const line of String(text ?? "").split(/\r?\n/)) {
@@ -111,11 +115,11 @@ const hasReply = (text, reply) => {
 const HOLD_QUOTE = /"([^"\n]{1,200})"|“([^”\n]{1,200})”|`([^`\n]{1,200})`|'([^'\n]{1,200})'|‘([^’\n]{1,200})’/g;
 function matchesHold(ask, card) {
   if (!card.task) return false;
-  if (mentionsTask(ask.text, card.task)) return true;
+  if (ask.taskMarkers?.includes(card.task) || mentionsTask(ask.text, card.task)) return true;
   if (card.type !== "decision") return false;
   const replies = new Set(ask.replies.map(normalizeReply).filter(Boolean));
-  return [card.summary, card.title, card.reason].some(text => typeof text === "string" &&
-    [...text.matchAll(HOLD_QUOTE)].some(match => replies.has(normalizeReply(match.slice(1).find(value => value !== undefined)))));
+  return [card.summary, card.title, card.reason, card.backlogTitle, card.backlogReason].some(text => typeof text === "string" &&
+    (replies.has(normalizeReply(text)) || [...text.matchAll(HOLD_QUOTE)].some(match => replies.has(normalizeReply(match.slice(1).find(value => value !== undefined))))));
 }
 // In-source byte order proves "later" even without clocks; known reversed clocks fail.
 // Across sources only a strictly newer clock proves order. Equal timestamps alone do not.
@@ -337,9 +341,10 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
           const key = `chat:${shortHash([recordId, turn.part, found.line])}`;
           if (target.tombstones[key] || (target.asks[key] && target.asks[key].status !== "open")) continue;
           const existing = target.asks[key];
-          const ask = existing || { key, kind: found.kind, marker: found.marker, text: found.text, replies: found.replies, source, offset, part: turn.part, recordId, at, status: "open", linkedTasks: [] };
+          const ask = existing || { key, kind: found.kind, marker: found.marker, text: found.text, taskMarkers: found.taskMarkers, replies: found.replies, source, offset, part: turn.part, recordId, at, status: "open", linkedTasks: [] };
           // Replay refreshes extraction on existing open cards, not just their cursors.
-          if (existing && JSON.stringify(existing.replies) !== JSON.stringify(found.replies)) {
+          if (existing && (JSON.stringify(existing.replies) !== JSON.stringify(found.replies) || JSON.stringify(existing.taskMarkers) !== JSON.stringify(found.taskMarkers))) {
+            existing.taskMarkers = found.taskMarkers;
             existing.replies = found.replies;
             changed = true;
           }
@@ -451,23 +456,36 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
   return {
     // Coalesces concurrent callers; resolves true when open asks changed.
     scan: () => (scanning ||= scanOnce().finally(() => { scanning = null; })),
-    view: () => view,
+    view: () => ({ ...view, resolved: Object.values(state?.asks || {}).filter(ask => ask.status === "resolved" && ask.resolutionSource)
+      .sort((a, b) => String(b.resolvedAt).localeCompare(String(a.resolvedAt))).slice(0, 50)
+      .map(ask => ({ key: ask.key, status: "answered", resolvedAt: ask.resolvedAt, tasks: ask.resolvedTasks, source: ask.resolutionSource, resolutions: ask.holdResolutions || [] })) }),
     asks: () => openAsks(),
     // Link by task id or a filed decision's quoted reply. String task ids remain supported
-    // for callers with no card text. A linked ask closes only on fresh hold disappearance.
-    async applySnapshot(cards, fresh) {
+    // for callers with no card text. Ledger evidence also covers holds omitted by bearings.
+    async applySnapshot(cards, fresh, holds = [], omitted = []) {
       if (!state) return false;
+      const evidence = fresh ? holds : [];
       cards = cards.map(card => typeof card === "string" ? { task: card } : card);
-      const tasks = cards.map(card => card.task).filter(Boolean);
+      cards = [...cards, ...evidence];
+      const tasks = cards.filter(card => !card.closed).map(card => card.task).filter(Boolean);
+      const closed = new Map(evidence.filter(row => row.closed).map(row => [row.task, row]));
+      const closure = ask => {
+        const rows = ask.linkedTasks.map(task => closed.get(task));
+        if (rows.length && rows.every(Boolean)) return { resolvedTasks: ask.linkedTasks, resolutionSource: "data/backlog.md", holdResolutions: rows.map(row => ({ task: row.task, resolution: row.resolution })) };
+        // Missing calls can be bucketed/aged/bounded rather than answered.
+        if (fresh && !omitted.length && ask.linkedTasks.length && !ask.linkedTasks.some(task => tasks.includes(task))) return { resolvedTasks: ask.linkedTasks, resolutionSource: "bearings snapshot" };
+        return null;
+      };
       const work = openAsks().some((ask) => cards.some(card => !ask.linkedTasks.includes(card.task) && matchesHold(ask, card)))
-        || (fresh && openAsks().some((ask) => ask.linkedTasks.length && !ask.linkedTasks.some((task) => tasks.includes(task))));
+        || openAsks().some(ask => closure(ask));
       if (!work) return false;
       return (await mutate((target) => {
         let dirty = false;
         for (const ask of Object.values(target.asks)) {
           if (ask.status !== "open") continue;
           for (const card of cards) if (!ask.linkedTasks.includes(card.task) && matchesHold(ask, card)) { ask.linkedTasks.push(card.task); dirty = true; }
-          if (fresh && ask.linkedTasks.length && !ask.linkedTasks.some((task) => tasks.includes(task))) dirty = resolveAsk(target, ask, "hold-closed") || dirty;
+          const resolved = closure(ask);
+          if (resolved) dirty = resolveAsk(target, ask, "answered", resolved) || dirty;
         }
         return { dirty, write: dirty };
       })).dirty;
@@ -517,7 +535,7 @@ export function composeCallModel(base, asks, chatView) {
   });
   const chatCards = unlinked.slice(0, MAX_OPEN).map(chatCard);
   const chat = { state: chatView.state, error: chatView.error, open: unlinked.length, linked: asks.length - unlinked.length, omitted: Math.max(0, unlinked.length - MAX_OPEN), behind: Boolean(chatView.behind),
-    sources: chatView.sources.map(({ source, backfillOmittedBytes }) => ({ source: source.split("/")[0], backfillOmittedBytes })) };
+    sources: chatView.sources.map(({ source, backfillOmittedBytes }) => ({ source: source.split("/")[0], backfillOmittedBytes })), resolved: chatView.resolved || [] };
   const content = { cards: [...cards, ...chatCards], coverage: base.coverage, omitted: base.omitted, chat };
   return { ...base, cards: content.cards, chat, chatCheckedAt: chatView.checkedAt, rev: shortHash([contentRevision(content), chat]) };
 }
@@ -540,7 +558,7 @@ export function createCallSource({ hub, chat, home = null, receipts = inboxRecei
     if (base !== composedBase || signature !== composedFrom) { composed = composeCallModel(base, asks, view); composed.cards = classifyAnsweredCalls(composed.cards, answerReceipts); composed.rev = shortHash([contentRevision(composed), composed.chat]); composedBase = base; composedFrom = signature; }
     return composed;
   }
-  const baseCards = () => hub.current().cards;
+  const applyHolds = () => { const base = hub.current(); return chat.applySnapshot(base.cards, fresh(), base.holds || [], base.omitted || []); };
   const fresh = () => hub.current().state === "ready";
   let lastRev = null;
   function emit() {
@@ -557,7 +575,7 @@ export function createCallSource({ hub, chat, home = null, receipts = inboxRecei
       try { answerReceipts = await receipts(home); receiptsSignature = JSON.stringify(answerReceipts); } catch { /* Keep the last durable evidence on a failed read. */ }
     }
     await chat.scan();
-    await chat.applySnapshot(baseCards(), fresh()).catch(() => false);
+    await applyHolds().catch(() => false);
   })().finally(() => { refreshing = null; }));
   // A scan publishes only new content. Unchanged scans stay silent: every observed event
   // costs each stream a revision check and an activity read, and the stream's own
@@ -576,7 +594,7 @@ export function createCallSource({ hub, chat, home = null, receipts = inboxRecei
       listeners.add(listener);
       lastRev ??= current().rev;
       unsubscribeHub ||= hub.subscribe(async (event) => {
-        if (event.type === "model") await chat.applySnapshot(baseCards(), fresh()).catch(() => false);
+        if (event.type === "model") await applyHolds().catch(() => false);
         emit();
       });
       timer ||= timers.setInterval(() => { void tick(); }, scanEveryMs);

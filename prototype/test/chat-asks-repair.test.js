@@ -136,7 +136,7 @@ test("legacy main-home reasons supplement only snapshot-authorized tasks; late c
   assert.equal(model.chat.linked, 2);
   assert.equal(model.cards.filter(c => c.type === "chat").length, 0);
   await source.refresh();
-  assert.deepEqual(f.scanner.asks().map(a => a.linkedTasks), [["route-hold"], ["release-hold"]]);
+  assert.deepEqual(f.scanner.asks().map(a => a.linkedTasks), [["route-hold", "not-filed", "other-task"], ["release-hold"]], "selected-home ledger holds link even when omitted by the snapshot; snapshot row enrichment still respects owner");
 });
 
 test("encoded hold reasons reject closed/noncaptain, duplicate, malformed, oversized and invalid UTF-8 fields", () => {
