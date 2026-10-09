@@ -1712,7 +1712,7 @@ const freshness = Object.fromEntries(["dashboard", "quota", "lanes", "bearings"]
 const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", bearings: "Captain's Call" };
 let callCount = 0;
 function renderCallBadge(model) {
-  const count = model.cards.length;
+  const count = model.cards.filter((card) => !card.answered && !(callAnswers?.state(card.key)?.phase === "sent" && callAnswers.state(card.key).cardRev === card.rev)).length;
   for (const id of ["#call-badge", "#call-mobile-badge"]) {
     const badge = $(id);
     if (!badge) continue;
@@ -1740,14 +1740,44 @@ function observeBearings(data) {
 }
 // Answer and overflow controllers re-apply their per-card state after every patcher fill.
 let callAnswers = null, callOverflow = null, callDismiss = null, callThreads = null;
+let showAnsweredCalls = false;
+function renderAnsweredCalls() {
+  const model = callPatcher?.applied;
+  if (!model) return;
+  const list = $("#call-cards"), toggle = $("#call-answered-toggle");
+  let heading = list.querySelector("[data-call-answered-heading]");
+  if (!heading) { heading = document.createElement("h3"); heading.setAttribute("data-call-answered-heading", ""); heading.textContent = "Answered, awaiting Firstmate"; }
+  const waiting = [], active = [];
+  for (const card of window.bearingsPatch.sortCards(model.cards, callPatcher.sortOrder)) {
+    const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.dataset.callKey === card.key);
+    if (!node) continue;
+    const state = callAnswers?.state(card.key);
+    const answered = card.answered || (state?.phase === "sent" && state.cardRev === card.rev);
+    node.hidden = Boolean(answered && !showAnsweredCalls);
+    node.toggleAttribute("data-call-answered", Boolean(answered));
+    if (answered) {
+      waiting.push(node);
+      if (node.hidden && node.contains(document.activeElement)) { toggle.hidden = false; callPatcher.tracker.deselect(); toggle.focus(); }
+    } else active.push(node);
+  }
+  toggle.hidden = !waiting.length;
+  toggle.textContent = `${showAnsweredCalls ? "Hide" : "Show"} answered calls (${waiting.length})`;
+  toggle.setAttribute("aria-expanded", String(showAnsweredCalls));
+  heading.hidden = !showAnsweredCalls || !waiting.length;
+  const grouped = [...active, heading, ...waiting];
+  const desired = [...grouped, ...[...list.children].filter((node) => !grouped.includes(node))];
+  desired.forEach((node, index) => { if (list.children[index] !== node) list.insertBefore(node, list.children[index] || null); });
+  renderCallBadge(model);
+}
+$("#call-answered-toggle").addEventListener("click", () => { showAnsweredCalls = !showAnsweredCalls; renderAnsweredCalls(); });
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
   onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); callThreads?.render(node); },
-  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); window.quarterdeckReviewQueue?.refresh(); },
+  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); renderAnsweredCalls(); window.quarterdeckReviewQueue?.refresh(); },
 });
 // Queued answers join the review panel's queue; its Send batch sends them with the notes.
-callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => window.quarterdeckReviewQueue?.refresh() });
+callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => { renderAnsweredCalls(); window.quarterdeckReviewQueue?.refresh(); } });
 if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key) };
 callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });

@@ -1,3 +1,5 @@
+import { classifyAnsweredCalls } from "./answered-calls.js";
+import { inboxReceipts } from "./inbox.js";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -522,7 +524,8 @@ export function composeCallModel(base, asks, chatView) {
 
 // Wrap the snapshot hub so every consumer (GET, ?since, the stream, answers) sees one
 // composed model. Chat scanning runs on each read and every scanEveryMs while streamed.
-export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs = 3000 } = {}) {
+export function createCallSource({ hub, chat, home = null, receipts = inboxReceipts, timers = globalThis, scanEveryMs = 3000 } = {}) {
+  let answerReceipts = null, receiptsSignature = "", receiptsCheckedAt = 0;
   let composed = null, composedFrom = null;
   const listeners = new Set();
   let timer = null;
@@ -533,8 +536,8 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
     const base = hub.current();
     const asks = chat.asks();
     const view = chat.view();
-    const signature = JSON.stringify([asks.map((ask) => [ask.key, ask.linkedTasks]), view.state, view.error, view.behind, view.sources, view.checkedAt]);
-    if (base !== composedBase || signature !== composedFrom) { composed = composeCallModel(base, asks, view); composedBase = base; composedFrom = signature; }
+    const signature = JSON.stringify([asks.map((ask) => [ask.key, ask.linkedTasks]), view.state, view.error, view.behind, view.sources, view.checkedAt, receiptsSignature]);
+    if (base !== composedBase || signature !== composedFrom) { composed = composeCallModel(base, asks, view); composed.cards = classifyAnsweredCalls(composed.cards, answerReceipts); composed.rev = shortHash([contentRevision(composed), composed.chat]); composedBase = base; composedFrom = signature; }
     return composed;
   }
   const baseCards = () => hub.current().cards;
@@ -549,6 +552,10 @@ export function createCallSource({ hub, chat, timers = globalThis, scanEveryMs =
   }
   let refreshing = null;
   const refresh = () => (refreshing ||= (async () => {
+    if (home && Date.now() - receiptsCheckedAt >= 15000) {
+      receiptsCheckedAt = Date.now();
+      try { answerReceipts = await receipts(home); receiptsSignature = JSON.stringify(answerReceipts); } catch { /* Keep the last durable evidence on a failed read. */ }
+    }
     await chat.scan();
     await chat.applySnapshot(baseCards(), fresh()).catch(() => false);
   })().finally(() => { refreshing = null; }));

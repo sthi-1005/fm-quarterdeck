@@ -140,6 +140,12 @@ Firstmate's lavish adapter rule maps it to one keyed line: `<question>\t<selecti
 
 **Firstmate follow-up (separate repository, not done here):** the bearings skill must route an inbox note carrying a `json fm-bearings-answer` block with `channel:"quarterdeck"` exactly like a board answer — feed `<question>\t<answer>\t<label>[\t<close>]` to `fm-captain-hold.sh answers`, handle `merge.<task>` through the merge-click ruling, and record "later" as `hold --until`. Until then Firstmate reads the note as an ordinary captain note.
 
+## Answered calls on Overview
+
+Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N)** reveals a separate **Answered, awaiting Firstmate** group; the same button hides it again. It defaults closed on page load, works on desktop and phone, and preserves card nodes, threads and correction controls. Queue, failed/uncertain sends and received thread questions do not count as answers. A successful send moves focus to the toggle if hiding would strand focus.
+
+`answered-calls.js` classifies open cards from the existing inbox's pending/handled `quarterdeck-call:` notes and their validated `fm-bearings-answer.v1` envelopes (channel, type, question and reviewed card revision). The selected home's receipts are read at most once per 15 seconds while the call source refreshes; a failed read retains previous evidence. The sending tab also uses its accepted answer state immediately, including across reload. A changed call revision needs a new answer, so an old receipt cannot hide a changed/re-held call. Reply or receipt intake status is **not confirmation**: Firstmate confirms by removing the call from bearings. Gone calls disappear from both groups; the existing unsent-text stub protection still applies. Chat-only cards retain their existing accepted-answer resolution behavior.
+
 ## Card threads
 
 "Ask more info" opens a thread scoped to one card, for when a call no longer explains itself. Its stable id is the card key (`decision:<task>`, `merge:<task>`, `chat:<16 hex>`). There is no model call: Quarterdeck relays the captain's question and joins existing records; Firstmate answers.
