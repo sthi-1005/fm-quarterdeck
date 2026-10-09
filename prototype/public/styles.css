@@ -147,7 +147,9 @@ input[type="search"]::-webkit-search-results-decoration {
 .review-note-summary::-webkit-details-marker { display: none; }
 .review-note-preview { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; font-size: 12px; }
 .review-note-toggle { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--accent); padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); }
-.review-note-full { margin: 6px 0 2px; white-space: pre-wrap; font-size: var(--text-ui); }
+.review-note-text,
+.review-batch > p { font-size: 12px; line-height: 1.25; }
+.review-note-full { margin: 6px 0 2px; white-space: pre-wrap; }
 #review-form-close { display: none; }
 #review-form.review-form-anchored #review-form-close { display: block; margin-left: auto; min-height: 44px; }
 #review-form label { display: block; margin-top: 12px; font-weight: 600; }
