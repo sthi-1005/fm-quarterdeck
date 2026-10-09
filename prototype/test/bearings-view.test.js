@@ -72,6 +72,8 @@ test('long text stays in the title; Firstmate shortening is disclosed beside the
 });
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
   const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
+  assert.match(freeform, /data-call-sent-label hidden>Sent - waiting for Firstmate<\/p>\s*<section class="call-your-answer" data-call-answer-summary hidden><h4>Your answer<\/h4>/);
+  assert.match(freeform, /data-call-answer-summary hidden>[\s\S]*?<h3 /, "the sent answer summary sits above the ask");
   assert.match(freeform, /<form class="call-answer" data-call-answer data-call-answer-label="Decision alpha-call" novalidate/);
   assert.match(freeform, /No structured options for this call yet; any recorded choices are in the full ask above/);
   assert.doesNotMatch(freeform, /\$\{/);

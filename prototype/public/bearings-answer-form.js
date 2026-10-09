@@ -49,6 +49,46 @@ window.bearingsAnswerForm = (() => {
     return `${sent} · waiting for Firstmate to pick it up`;
   }
 
+  function setText(node, text) {
+    if (node && node.textContent !== text) node.textContent = text;
+  }
+
+  // The option hint already rendered for this value. No second store: the sent state
+  // keeps the label, value and note, and the card still has the hint.
+  function optionHint(node, selection) {
+    if (!selection) return "";
+    const input = [...node.querySelectorAll('input[type="radio"]')].find((item) => item.getAttribute("value") === selection);
+    return input?.closest(".call-opt")?.querySelector(".call-opt-hint")?.textContent || "";
+  }
+
+  function paintSummary(node, state, sentLock) {
+    const block = node.querySelector("[data-call-answer-summary]");
+    if (!block) return;
+    block.hidden = !sentLock;
+    if (!sentLock || !state) return;
+    const label = state.selectionLabel || "";
+    const selection = state.selection || "";
+    const note = state.note || "";
+    const recordedHint = optionHint(node, selection);
+    const valueHint = recordedHint || (selection && selection !== label ? selection : "");
+    const labelNode = block.querySelector("[data-call-answer-summary-label]");
+    const hintNode = block.querySelector("[data-call-answer-summary-hint]");
+    const noteNode = block.querySelector("[data-call-answer-summary-note]");
+    const choice = block.querySelector(".call-your-answer-choice");
+    const sent = block.querySelector("[data-call-answer-summary-sent]");
+    setText(labelNode, label);
+    if (labelNode) labelNode.hidden = !label;
+    setText(hintNode, valueHint);
+    if (hintNode) hintNode.hidden = !valueHint;
+    if (choice) choice.hidden = !label && !valueHint;
+    setText(noteNode, note);
+    if (noteNode) noteNode.hidden = !note;
+    const sentAt = typeof state.sentAt === "string" ? state.sentAt : "";
+    const parsed = Date.parse(sentAt);
+    setText(sent, Number.isFinite(parsed) ? `Sent ${new Date(sentAt).toLocaleString()}` : "Sent time unknown");
+    if (sent && sent.getAttribute("datetime") !== sentAt) sent.setAttribute("datetime", sentAt);
+  }
+
   function createAnswerController({ list, drafts, doc = window.document, win = window, storage = (() => { try { return win.sessionStorage; } catch { return null; } })(),
     fetchImpl = (...args) => win.fetch(...args), timers = win, pollMs = 15000, uuid = () => win.crypto.randomUUID(), onChange = () => {}, onAsked = () => {} } = {}) {
     const states = createStateStore(storage);
@@ -109,8 +149,9 @@ window.bearingsAnswerForm = (() => {
         fields.hidden = false;
         if (locked) fields.setAttribute("data-locked", ""); else fields.removeAttribute("data-locked");
         if (sentLock) fields.setAttribute("data-sent", ""); else fields.removeAttribute("data-sent");
-        for (const input of fields.querySelectorAll('input[type="radio"]')) {
+        for (const input of fields.querySelectorAll('input[type="radio"], select')) {
           input.disabled = locked;
+          if (!input.matches('input[type="radio"]')) continue;
           if (sentLock) input.checked = Boolean(state?.selection) && input.getAttribute("value") === state.selection;
           else if (previousPhase === "sent") input.checked = false;
         }
@@ -126,6 +167,7 @@ window.bearingsAnswerForm = (() => {
           if (!locked) grow(text);
         }
       }
+      paintSummary(node, state, sentLock);
       const bar = form.querySelector(".call-answer-bar");
       if (bar) bar.hidden = sentLock;
       const confirmNote = part(form, "confirm-note");

@@ -351,6 +351,19 @@ try {
       const label=merge.querySelector('[data-call-sent-label]');
       if(!radios.length||radios.some((radio)=>!radio.disabled)||note.disabled||!note.readOnly||!label||label.hidden||label.textContent!=='Sent - waiting for Firstmate')throw Error('sent answer is not locked');
       if(!getComputedStyle(merge).backgroundImage.includes('linear-gradient'))throw Error('sent hatch missing');
+      const summary=merge.querySelector('[data-call-answer-summary]');
+      const headline=merge.querySelector('h3');
+      const hint=summary&&summary.querySelector('[data-call-answer-summary-hint]');
+      const sentAt=summary&&summary.querySelector('[data-call-answer-summary-sent]');
+      if(!summary||summary.hidden||summary.querySelector('h4').textContent!=='Your answer'||summary.querySelector('[data-call-answer-summary-label]').textContent!=='Merge now'||!hint||hint.hidden||!hint.textContent.includes('Firstmate re-checks')||summary.querySelector('[data-call-answer-summary-note]').hidden!==true||!sentAt||!sentAt.dateTime||!sentAt.textContent.startsWith('Sent '))throw Error('your answer is not laid out');
+      if(!(summary.compareDocumentPosition(headline)&Node.DOCUMENT_POSITION_FOLLOWING))throw Error('your answer is not above the ask');
+      const rows=[...merge.querySelectorAll('.call-opt')];
+      const chosen=rows.find((row)=>row.querySelector('input:checked'));
+      if(!rows.length||!chosen||rows.some((row)=>!getComputedStyle(row).backgroundImage.includes('linear-gradient')))throw Error('option hatch missing');
+      const mark=getComputedStyle(chosen).boxShadow;
+      if(mark==='none'||rows.some((row)=>row!==chosen&&getComputedStyle(row).boxShadow===mark))throw Error('chosen option is not marked');
+      const threadSummary=alpha.querySelector('[data-call-answer-summary]');
+      if(threadSummary&&!threadSummary.hidden)throw Error('thread sent card shows an answer summary');
       note.focus();
       if(document.activeElement!==note)throw Error('sent note cannot be focused '+(document.activeElement&&(document.activeElement.id||document.activeElement.tagName))+' modal='+!!document.querySelector('dialog[open]'));
       merge.scrollIntoView({block:'start'});
@@ -372,7 +385,7 @@ try {
   }
   await browser('emulate', '--color-scheme', 'dark');
   await browser('resize', '390', '844');
-  await evaluate(`() => { const card=document.querySelector('[data-call-key="merge:beta-merge"]'); card.scrollIntoView({block:'center'}); const label=card.querySelector('[data-call-sent-label]'); const ink=getComputedStyle(card.querySelector('h3')).color; if(label.hidden||!getComputedStyle(card).backgroundImage.includes('linear-gradient')||ink==='rgba(0, 0, 0, 0)'||document.documentElement.scrollWidth>innerWidth)throw Error('dark sent card'); return 'dark sent card'; }`);
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="merge:beta-merge"]'); card.scrollIntoView({block:'center'}); const label=card.querySelector('[data-call-sent-label]'); const ink=getComputedStyle(card.querySelector('h3')).color; const option=card.querySelector('.call-opt'); const summary=card.querySelector('[data-call-answer-summary]'); if(label.hidden||!getComputedStyle(card).backgroundImage.includes('linear-gradient')||!option||!getComputedStyle(option).backgroundImage.includes('linear-gradient')||!summary||summary.hidden||getComputedStyle(summary).color==='rgba(0, 0, 0, 0)'||ink==='rgba(0, 0, 0, 0)'||document.documentElement.scrollWidth>innerWidth)throw Error('dark sent card'); return 'dark sent card'; }`);
   await browser('screenshot', path.join(proof, 'captain-sent-underway-dark-390.png'));
   await browser('emulate', '--color-scheme', 'light');
   const queueIds = (await readFile(path.join(home, 'answer-attempts'), 'utf8')).trim().split('\n').slice(queueAttempts);

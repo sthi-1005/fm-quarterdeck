@@ -122,6 +122,7 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   card.answer = { ...card.answer, options: [{ value: "staged", label: "Staged", hint: "Fewer users" }], recommend: "staged" };
   t.patcher.update(model([card]));
   const key = "decision:alpha-call";
+  assert.equal(t.part(key, "summary").hidden, true, "compose does not show a sent answer");
   assert.equal(t.part(key, "confirm").hidden, true);
   assert.equal(t.part(key, "compose").textContent, "Queue");
   assert.equal(t.part(key, "send").hidden, true, "Send appears only for a queued answer");
@@ -136,6 +137,7 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   assert.equal(t.part(key, "confirm").hidden, false);
   assert.equal(t.part(key, "text").readOnly, true, "the queued text cannot change while queued");
   assert.equal(t.part(key, "fields").hasAttribute("data-locked"), true);
+  assert.equal(t.part(key, "summary").hidden, true, "a queued answer is not yet Your answer");
   assert.equal(t.part(key, "compose").hidden, true, "Queue gives way to Send and Edit");
   assert.equal(t.part(key, "edit").hidden, false);
   assert.equal(t.document.activeElement, t.part(key, "send"));
@@ -152,6 +154,29 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   assert.equal(t.patcher.drafts.text(key), "", "sent words are not 'unsent text'");
   assert.equal(t.part(key, "receipt").hidden, false);
   assert.match(t.part(key, "receipt-text").textContent, /^Sent to Firstmate: Staged - Use the Tuesday window · waiting/);
+  assert.equal(t.part(key, "summary").hidden, false);
+  assert.equal(t.part(key, "summary").querySelector("h4").textContent, "Your answer");
+  assert.equal(t.part(key, "summary-label").textContent, "Staged");
+  assert.equal(t.part(key, "summary-label").hidden, false);
+  assert.equal(t.part(key, "summary-hint").textContent, "Fewer users");
+  assert.equal(t.part(key, "summary-hint").hidden, false);
+  assert.equal(t.part(key, "summary-note").textContent, "Use the Tuesday window");
+  assert.equal(t.part(key, "summary-note").hidden, false);
+  assert.equal(t.part(key, "summary-sent").getAttribute("datetime"), "2026-01-02T03:04:05.000Z");
+  assert.match(t.part(key, "summary-sent").textContent, /^Sent /);
+  const summary = t.part(key, "summary");
+  const ask = t.node(key).querySelector("h3");
+  let seenSummary = false;
+  let summaryBeforeAsk = false;
+  const walk = (entry) => {
+    for (const child of entry.childNodes || []) {
+      if (child === summary) seenSummary = true;
+      if (child === ask && seenSummary) summaryBeforeAsk = true;
+      walk(child);
+    }
+  };
+  walk(t.node(key));
+  assert.equal(summaryBeforeAsk, true, "Your answer sits above the ask");
   assert.equal(t.part(key, "fields").hidden, false, "a sent answer keeps its choices visible");
   assert.equal(t.part(key, "fields").hasAttribute("data-locked"), true);
   assert.equal(t.part(key, "fields").hasAttribute("data-sent"), true);
@@ -290,6 +315,7 @@ test("option drafts restore after a refill; Edit preserves drafts and Answer aga
   assert.equal(t.part(key, "text").disabled, false);
   assert.equal(radio().disabled, false, "Answer again unlocks the choices");
   assert.equal(radio().checked, false);
+  assert.equal(t.part(key, "summary").hidden, true, "Answer again clears Your answer");
   t.submit(key);
   assert.equal(t.answers.state(key).phase, "refused");
   assert.equal(t.fetches.length, 1, "Answer again never sends the old words");
@@ -318,6 +344,10 @@ test("tab storage restores confirmation and receipts; prune forgets a re-held ta
   receiptReload.patcher.update(model([decision()]));
   assert.equal(receiptReload.answers.state(key).phase, "sent");
   assert.equal(receiptReload.part(key, "receipt").hidden, false);
+  assert.equal(receiptReload.part(key, "summary").hidden, false);
+  assert.equal(receiptReload.part(key, "summary-label").textContent, "Staged");
+  assert.equal(receiptReload.part(key, "summary-hint").textContent, "staged", "a missing option hint falls back to the sent value");
+  assert.equal(receiptReload.part(key, "summary-note").textContent, "Tuesday");
   assert.equal(receiptReload.fetches.length, 0, "reload does not resend");
   receiptReload.patcher.update(model([]));
   receiptReload.timers.advance(1000);
@@ -417,6 +447,7 @@ test("queued answers list for the review queue, send together with their own ids
     ["/api/bearings/answer", second, uuid(2), null, "", "ship it"],
   ], "text alone is a thread note; a suggested chat reply stays an answer in the captain's words");
   assert.equal(t.answers.state(first), null, "a thread note does not become a sent answer");
+  assert.equal(t.part(first, "summary").hidden, true, "a thread note does not show Your answer");
   assert.deepEqual(plain(t.answers.queued()).map((entry) => [entry.key, entry.phase]), [[second, "failed"]]);
   t.answers.unqueue(second);
   assert.equal(t.answers.state(second).phase, "compose");

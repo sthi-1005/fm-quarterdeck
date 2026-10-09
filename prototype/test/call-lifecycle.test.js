@@ -133,6 +133,9 @@ test("a Sent card shows the underway label and hatch, and only that state does",
   assert.equal(view.match(/data-call-sent-label hidden>Sent - waiting for Firstmate/g).length, 1);
   assert.match(css, /\.call-card\[data-call-lifecycle="sent"\] \{[^}]*repeating-linear-gradient\(-45deg/);
   assert.match(css, /\.call-sent-label\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.call-answer-fields\[data-sent\] :is\(\.call-opt, select\) \{[^}]*repeating-linear-gradient\(-45deg/);
+  assert.match(css, /\.call-answer-fields\[data-sent\] \.call-opt:has\(input:checked\) \{[^}]*box-shadow: inset/);
+  assert.match(view, /data-call-answer-summary hidden><h4>Your answer<\/h4>/);
   assert.match(css, /\.call-answer-fields\[data-sent\] textarea \{[^}]*user-select: text/);
   assert.match(app, /underway\.hidden = state !== "sent"/);
 });

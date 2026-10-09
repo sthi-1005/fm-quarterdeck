@@ -33,6 +33,7 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Chat asks keep a double left border at the same width as other cards, so the mark does not indent the card. Also asked in chat stacks on its own line and does not widen the context column.
 - A decision title is the filed hold's full reason when one is recorded. Also asked in chat is a smaller secondary line, and a `[task:...]` marker is omitted. Reply phrases from that ask are option choices under the reason.
 - Captain's Call answer forms separate source context from input with a quiet rule; option cards use native radios, a textual Recommended chip and visible keyboard focus. All call buttons and option targets are at least 44px high. Confirmation and receipt panels retain readable text (disabled fields use muted ink, not whole-form opacity), and phone actions wrap without overflow.
+- A sent answer's option rows, and any select, reuse the card's grey diagonal hatch. The chosen option keeps an accent bar. Your answer is a solid block under the sent label so the submitted label, hint, note and time stay readable on the hatch in light and dark.
 - The content canvas is light, including under an OS dark preference; the app shell remains dark. Forced colors use system outlines and disabled text, not color-only selection.
 
 ## Acceptance, not historical results

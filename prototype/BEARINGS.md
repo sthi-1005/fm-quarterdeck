@@ -216,6 +216,13 @@ The status word lives on the toggle.
 A Sent card also shows **Sent - waiting for Firstmate**, a muted card body, and a subtle diagonal hatch.
 Card text stays readable and selectable, and the thread control stays usable.
 A sent answer keeps its radios and note on the card: the radios are disabled, and the note is read-only so it can still be selected.
+A sent answer also shows **Your answer** under that label and above the ask.
+The block lists the chosen option's label, that option's value hint when the card still shows one (otherwise the sent value when it differs from the label), the typed note, and the local time it was sent.
+It is filled from the sending tab's sent-answer state (`selection`, `selectionLabel`, `note`, `sentAt`) and the option hint already on the card.
+A card that is Sent only because of a thread note does not show it.
+On a sent answer, each option row and any select uses the same muted diagonal hatch as the card.
+The chosen radio keeps an accent bar, and a select keeps its selected text.
+Queued review does not use that hatch.
 Queue stays hidden, and **Answer again** returns that box to compose.
 A thread note that marked the card Sent leaves the box in compose for a follow-up; the hatch and label still show.
 A dashed border marks the Sent dot and a dotted border marks the Procrastinated dot, so the colour is not the only signal.
