@@ -327,9 +327,15 @@ try {
   await evaluate(`() => { const delta=proof.anchor.getBoundingClientRect().top-proof.anchorTop; if(Math.abs(delta)>2)throw Error('scroll anchor moved '+delta); return {scrollAnchorDelta:delta}; }`);
   for (const width of [360,390]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { document.querySelector('#overview-view').scrollTop=0; const kpi=(${captureKpiGeometry.toString()})(); if(innerWidth!==${width}||document.querySelector('#call-mobile-badge').hidden||document.querySelector('#call-mobile-badge').textContent!=='16'||document.documentElement.scrollWidth>innerWidth||kpi.cards.length!==3||kpi.cards.some((c,i)=>c.width<=0||Math.abs(c.top-kpi.cards[0].top)>1||c.scrollWidth>c.clientWidth+1))throw Error('phone/KPI geometry'); return {width:innerWidth,kpi,calls:document.querySelectorAll('[data-call-key]').length}; }`);
+    await evaluate(`() => { document.querySelector('#overview-view').scrollTop=0; const kpi=(${captureKpiGeometry.toString()})(); if(innerWidth!==${width}||document.querySelector('#call-mobile-badge').hidden||document.querySelector('#call-mobile-badge').textContent!=='15'||document.documentElement.scrollWidth>innerWidth||kpi.cards.length!==3||kpi.cards.some((c,i)=>c.width<=0||Math.abs(c.top-kpi.cards[0].top)>1||c.scrollWidth>c.clientWidth+1))throw Error('phone/KPI geometry'); return {width:innerWidth,kpi,calls:document.querySelectorAll('[data-call-key]').length}; }`);
     await browser('screenshot', path.join(proof, `captain-call-${width}.png`));
   }
+  // Firstmate confirmation is disappearance from bearings, not a receipt reply.
+  await disengage();
+  raw.contributions.captain = raw.contributions.captain.filter(c => c.task !== 'beta-merge');
+  await change();
+  await until(`!document.querySelector('[data-call-key="merge:beta-merge"]')`);
+  await evaluate(`() => { if(!document.querySelector('#call-answered-toggle').hidden||!document.querySelector('[data-call-answered-heading]').hidden)throw Error('confirmed call remains in answered group'); return 'confirmed call removed from both groups'; }`);
   await evaluate("() => { location.hash='#work'; return 'Work Split smoke'; }");
   await until("document.querySelector('#work-view').classList.contains('active') && document.querySelector('#tight-work').innerText.includes('No work matches')");
   await evaluate("() => { if(!document.querySelector('#work-phase-buttons').children.length||document.documentElement.scrollWidth>innerWidth)throw Error('Work Split smoke failed'); location.hash='#expenses'; return 'Work Split intact'; }");
