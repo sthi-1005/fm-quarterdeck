@@ -1777,6 +1777,8 @@ function renderCallLifecycle() {
       badge.setAttribute("title", label);
       if (badge.textContent) badge.textContent = "";
     }
+    const underway = node.querySelector("[data-call-sent-label]");
+    if (underway) underway.hidden = state !== "sent";
     callProcrastinate?.render(node);
     const focused = node.contains(document.activeElement);
     const selected = callPatcher.tracker.state().selected === card.key;
@@ -1788,6 +1790,12 @@ function renderCallLifecycle() {
   }
   const tally = api.counts(states);
   api.paintToggle(filter, tally, callLifecycleFilter);
+  const queuedItems = callAnswers?.queued?.() || [];
+  api.paintSendQueued?.($("#call-send-queued"), {
+    filter: callLifecycleFilter,
+    count: queuedItems.length,
+    sending: queuedItems.some((entry) => entry.phase === "sending") || window.quarterdeckReviewQueue?.sending?.() === true,
+  });
   const empty = $("#call-lifecycle-empty");
   if (empty) {
     const text = api.emptyText(callLifecycleFilter, tally);
@@ -1803,6 +1811,13 @@ $("#call-lifecycle-filter")?.addEventListener("click", (event) => {
   callLifecycleFilter = api.writeFilter(localStorage, button.getAttribute("data-call-lifecycle"));
   renderCallLifecycle();
 });
+$("#call-send-queued")?.addEventListener("click", () => {
+  const button = $("#call-send-queued");
+  const sendCalls = window.quarterdeckReviewQueue?.sendCallAnswers;
+  if (!button || button.hidden || button.disabled || typeof sendCalls !== "function") return;
+  button.disabled = true;
+  void Promise.resolve(sendCalls()).finally(() => renderCallLifecycle());
+});
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
@@ -1811,7 +1826,7 @@ const callPatcher = window.bearingsPatch?.createCallPatcher({
 });
 // Queued answers join the review panel's queue; its Send batch sends them with the notes.
 callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => { renderCallLifecycle(); window.quarterdeckReviewQueue?.refresh(); }, onAsked: (key) => { callThreads?.noteSent(key); renderCallLifecycle(); } });
-if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key) };
+if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key), refresh: () => renderCallLifecycle() };
 callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => renderCallLifecycle() });
 callText = callPatcher && window.bearingsView?.createTextController?.({ list: $("#call-cards") });
 callProcrastinate = callPatcher && window.bearingsProcrastinate?.createController?.({ list: $("#call-cards"), onChange: () => renderCallLifecycle() });

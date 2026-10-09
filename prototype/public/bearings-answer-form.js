@@ -96,18 +96,37 @@ window.bearingsAnswerForm = (() => {
         states.set(key, state);
       }
       const phase = state?.phase || "compose";
+      const previousPhase = form.getAttribute("data-call-answer-phase") || "";
       form.setAttribute("data-call-answer-phase", phase);
       const fields = part(form, "fields");
-      const locked = ["confirm", "sending", "failed"].includes(phase);
-      // Lock fields one by one, not the fieldset: Send and Edit live beside the text box
-      // inside it. A read-only textarea stays focusable and selectable.
+      // Sent stays on the card: the choices are visible and locked, and the thread
+      // control in this fieldset stays usable. A read-only textarea can still be focused
+      // and selected. Answer again clears the echo and returns to compose.
+      const sentLock = phase === "sent";
+      const locked = sentLock || ["confirm", "sending", "failed"].includes(phase);
       if (fields) {
-        fields.hidden = phase === "sent";
+        fields.hidden = false;
         if (locked) fields.setAttribute("data-locked", ""); else fields.removeAttribute("data-locked");
-        for (const input of fields.querySelectorAll('input[type="radio"]')) input.disabled = locked;
+        if (sentLock) fields.setAttribute("data-sent", ""); else fields.removeAttribute("data-sent");
+        for (const input of fields.querySelectorAll('input[type="radio"]')) {
+          input.disabled = locked;
+          if (sentLock) input.checked = Boolean(state?.selection) && input.getAttribute("value") === state.selection;
+          else if (previousPhase === "sent") input.checked = false;
+        }
         const text = part(form, "text");
-        if (text) { text.readOnly = locked; text.setAttribute("aria-readonly", String(locked)); if (!locked) grow(text); }
+        if (text) {
+          text.disabled = false;
+          text.readOnly = locked;
+          text.setAttribute("aria-readonly", String(locked));
+          if (sentLock) {
+            const note = state?.note || "";
+            if (text.value !== note) text.value = note;
+          } else if (previousPhase === "sent") text.value = "";
+          if (!locked) grow(text);
+        }
       }
+      const bar = form.querySelector(".call-answer-bar");
+      if (bar) bar.hidden = sentLock;
       const confirmNote = part(form, "confirm-note");
       if (confirmNote) {
         const text = state?.path === "thread"

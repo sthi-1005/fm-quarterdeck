@@ -123,6 +123,37 @@ test("Overview retains KPIs, replaces only the project tree with accessible live
   assert.equal(app.node('#call-badge').hidden, true);
 });
 
+test("Active view shows Send queued for the staged count and the click reuses the review sender", () => {
+  const app = ui();
+  const button = app.node("#call-send-queued");
+  app.run(`callPatcher.applied = { cards: [] };
+    callLifecycleFilter = "active";
+    callAnswers = { queued: () => [] };
+    renderCallLifecycle();`);
+  assert.equal(button.hidden, true, "nothing queued keeps the button hidden");
+  app.run(`callAnswers = { queued: () => [{ phase: "confirm" }, { phase: "failed" }] };
+    callLifecycleFilter = "queued";
+    renderCallLifecycle();`);
+  assert.equal(button.hidden, true, "other status views hide it even when answers are queued");
+  app.run(`callLifecycleFilter = "active"; renderCallLifecycle();`);
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, "Send queued (2)");
+  assert.equal(button.getAttribute("aria-label"), "Send 2 queued Captain's Call answers");
+  app.run(`callAnswers = { queued: () => [{ phase: "sending" }] }; renderCallLifecycle();`);
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, "Send queued (1)");
+  assert.equal(button.getAttribute("aria-label"), "Sending 1 queued Captain's Call answer");
+  app.run(`window.__sends = 0; window.quarterdeckReviewQueue = { sendCallAnswers() { window.__sends += 1; return Promise.resolve(true); }, sending() { return false; } };`);
+  button.disabled = false;
+  button.hidden = false;
+  button.dispatchEvent({ type: "click" });
+  assert.equal(app.run("window.__sends"), 1, "the header button calls the shared review sender");
+  button.disabled = true;
+  button.dispatchEvent({ type: "click" });
+  assert.equal(app.run("window.__sends"), 1, "a disabled button does not send again");
+});
+
 test("phone shell preserves navigation and leaves feed clear of fixed controls", () => {
   const phone = css.slice(css.lastIndexOf("@media (max-width: 720px) {"), css.indexOf("@media (max-width: 720px) and (min-width: 600px)"));
   assert.match(phone, /\.primary-nav \{[^}]*repeat\(5, minmax\(0, 1fr\)\)[^}]*48px 48px/);
@@ -306,6 +337,7 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
           closest() { return null; },
           getBoundingClientRect() { return { top: 0, bottom: 100, height: 100 }; },
           querySelectorAll() { return []; },
+          querySelector() { return null; },
           focus() { document.activeElement = node; },
         };
         nodes.set(selector, node);

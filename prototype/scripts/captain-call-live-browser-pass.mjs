@@ -310,8 +310,12 @@ try {
       const style = getComputedStyle(label);
       const fullStyle = getComputedStyle(full);
       if (style.whiteSpace !== 'nowrap' || style.fontSize !== '12px') throw Error('compact header style ' + style.fontSize + ' ' + style.whiteSpace);
+      const summaryStyle = getComputedStyle(summary);
+      if (summaryStyle.display !== 'flex' || summaryStyle.whiteSpace !== 'nowrap') throw Error('summary is not one line');
+      const labelBox = label.getBoundingClientRect();
+      if (Math.abs((labelBox.top + labelBox.height / 2) - (box.top + box.height / 2)) > 4) throw Error('title is not on the marker line');
       if (fullStyle.position !== 'absolute') throw Error('closed header shows the long title');
-      if (box.width < 40 || box.height < 8 || box.height > 56) throw Error('header box ' + Math.round(box.width) + 'x' + Math.round(box.height));
+      if (box.width < 40 || box.height < 8 || box.height > 36) throw Error('header box ' + Math.round(box.width) + 'x' + Math.round(box.height));
       if (label.scrollWidth > label.clientWidth + 1) throw Error('short title overflows');
       return 'closed batch header ' + Math.round(box.height);
     }`);
@@ -331,11 +335,43 @@ try {
   }
   await evaluate(`() => { document.querySelector('#review-phone-thread .review-call-answer button').click(); if(window.quarterdeckCallQueue.list().length!==1||document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Remove did not return answer'); document.querySelector('#review-close').click(); document.querySelector('[data-call-key="decision:alpha-call"] .call-answer-queue').click(); document.querySelector('#review-panel-toggle').click(); document.querySelector('#review-send').click(); return 'send queued batch'; }`);
   await until(`window.quarterdeckCallQueue.list().length===0 && document.querySelector('[data-call-key="merge:beta-merge"]').dataset.callLifecycle==='sent' && document.querySelector('[data-call-key="decision:alpha-call"]').dataset.callLifecycle==='sent'`);
-  for (const width of [1280, 390]) {
+  for (const width of [1280, 390, 360]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { document.querySelector('#call-lifecycle-filter [data-call-lifecycle="sent"]').click(); const cards=['decision:alpha-call','merge:beta-merge'].map((key)=>document.querySelector('[data-call-key="'+key+'"]')); const button=document.querySelector('#call-lifecycle-filter [data-call-lifecycle="sent"]'); if(cards.some((card)=>card.hidden||card.dataset.callLifecycle!=='sent'||card.querySelector('[data-call-lifecycle-badge]').getAttribute('aria-label')!=='Sent'||card.querySelector('[data-call-lifecycle-badge]').textContent!=='')||button.getAttribute('aria-pressed')!=='true'||button.getBoundingClientRect().height<44||document.documentElement.scrollWidth>innerWidth)throw Error('sent filter after batch'); return 'sent filter'; }`);
+    await evaluate(`() => {
+      document.querySelector('#call-lifecycle-filter [data-call-lifecycle="sent"]').click();
+      const cards=['decision:alpha-call','merge:beta-merge'].map((key)=>document.querySelector('[data-call-key="'+key+'"]'));
+      const button=document.querySelector('#call-lifecycle-filter [data-call-lifecycle="sent"]');
+      if(cards.some((card)=>card.hidden||card.dataset.callLifecycle!=='sent'||card.querySelector('[data-call-lifecycle-badge]').getAttribute('aria-label')!=='Sent'||card.querySelector('[data-call-lifecycle-badge]').textContent!=='')||button.getAttribute('aria-pressed')!=='true'||button.getBoundingClientRect().height<44||document.documentElement.scrollWidth>innerWidth)throw Error('sent filter after batch');
+      const merge=cards[1];
+      const alpha=cards[0];
+      const radios=[...merge.querySelectorAll('input[type=radio]')];
+      const note=merge.querySelector('[data-call-answer-text]');
+      const label=merge.querySelector('[data-call-sent-label]');
+      if(!radios.length||radios.some((radio)=>!radio.disabled)||note.disabled||!note.readOnly||!label||label.hidden||label.textContent!=='Sent - waiting for Firstmate')throw Error('sent answer is not locked');
+      if(!getComputedStyle(merge).backgroundImage.includes('linear-gradient'))throw Error('sent hatch missing');
+      note.focus();
+      if(document.activeElement!==note)throw Error('sent note cannot be focused');
+      const receipt=merge.querySelector('[data-call-answer-receipt-text]');
+      const range=document.createRange();
+      range.selectNodeContents(receipt);
+      const selection=getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      if(selection.toString()!==receipt.textContent)throw Error('sent text is not selectable');
+      selection.removeAllRanges();
+      if(alpha.querySelector('[data-call-answer-text]').readOnly||alpha.querySelector('[data-call-answer-text]').disabled||[...alpha.querySelectorAll('input[type=radio]')].some((radio)=>radio.disabled))throw Error('thread follow-up is locked');
+      const expand=alpha.querySelector('[data-call-thread-expand]');
+      if(expand&&!expand.hidden&&(expand.disabled||getComputedStyle(expand).pointerEvents==='none'))throw Error('thread cannot expand');
+      if(cards.some((card)=>card.scrollWidth>card.clientWidth+1))throw Error('sent card overflow');
+      return 'sent underway';
+    }`);
     await browser('screenshot', path.join(proof, `captain-lifecycle-sent-${width}.png`));
   }
+  await browser('emulate', '--color-scheme', 'dark');
+  await browser('resize', '390', '844');
+  await evaluate(`() => { const card=document.querySelector('[data-call-key="merge:beta-merge"]'); card.scrollIntoView({block:'center'}); const label=card.querySelector('[data-call-sent-label]'); const ink=getComputedStyle(card.querySelector('h3')).color; if(label.hidden||!getComputedStyle(card).backgroundImage.includes('linear-gradient')||ink==='rgba(0, 0, 0, 0)'||document.documentElement.scrollWidth>innerWidth)throw Error('dark sent card'); return 'dark sent card'; }`);
+  await browser('screenshot', path.join(proof, 'captain-sent-underway-dark-390.png'));
+  await browser('emulate', '--color-scheme', 'light');
   const queueIds = (await readFile(path.join(home, 'answer-attempts'), 'utf8')).trim().split('\n').slice(queueAttempts);
   assert.equal(queueIds.length, 1, 'only the picked option is an answer');
   const queuedAnswer = JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(await readFile(path.join(home, `answer-${queueIds[0]}.txt`), 'utf8'))[1]);
@@ -347,6 +383,120 @@ try {
   assert.deepEqual([queuedThread.key, queuedThread.question], ['decision:alpha-call', 'Queue rollout Tuesday']);
   assert.doesNotMatch(queuedThreadNote, /fm-bearings-answer/, 'a queued thread note is not an answer');
   await evaluate(`() => { if(window.reviewPosts)throw Error('answer batch used review delivery'); document.querySelector('#review-close').click(); const merge=document.querySelector('[data-call-key="merge:beta-merge"]'); merge.querySelector('[data-call-answer-again]').click(); const alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); if(alpha.querySelector('[data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('thread send left alpha queued'); if(merge.querySelector('[data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Answer again did not return merge'); document.activeElement?.blur(); document.body.click(); return 'queue uses both paths'; }`);
+  // Active header sends the same queued card answers as Send batch, including at 360 and 390.
+  const headerAnswersBefore = (await readFile(path.join(home, 'answer-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
+  const headerThreadsBefore = (await readFile(path.join(home, 'thread-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
+  await evaluate(`() => {
+    document.querySelector('#call-lifecycle-filter [data-call-lifecycle="active"]').click();
+    const button = document.querySelector('#call-send-queued');
+    if (!button || !button.hidden) throw Error('send queued shown before anything is queued');
+    const alpha = document.querySelector('[data-call-key="decision:alpha-call"]');
+    const field = alpha.querySelector('[data-call-answer-text]');
+    field.value = 'Queue the window note';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    alpha.querySelector('.call-answer-queue').click();
+    const merge = document.querySelector('[data-call-key="merge:beta-merge"]');
+    const radio = merge.querySelector('input[value="merge"]');
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    merge.querySelector('.call-answer-queue').click();
+    if (window.quarterdeckCallQueue.list().length !== 2) throw Error('header queue missing');
+    if (typeof window.quarterdeckReviewQueue.sendCallAnswers !== 'function') throw Error('shared sender missing');
+    return 'queued for header button';
+  }`);
+  await evaluate(`() => {
+    const button = document.querySelector('#call-send-queued');
+    const active = document.querySelector('#call-lifecycle-filter [data-call-lifecycle="active"]');
+    if (active.getAttribute('aria-pressed') !== 'true' || button.hidden || button.disabled || button.textContent !== 'Send queued (2)' || button.getAttribute('aria-label') !== "Send 2 queued Captain's Call answers") throw Error('active label ' + button.textContent + ' / ' + button.getAttribute('aria-label'));
+    for (const name of ['queued', 'sent', 'procrastinated', 'all']) {
+      document.querySelector('#call-lifecycle-filter [data-call-lifecycle="' + name + '"]').click();
+      if (!document.querySelector('#call-send-queued').hidden) throw Error('shown on ' + name);
+    }
+    active.click();
+    if (button.hidden || button.textContent !== 'Send queued (2)') throw Error('not restored on active');
+    return 'header visibility';
+  }`);
+  for (const width of [360, 390]) {
+    await browser('resize', String(width), '844');
+    await evaluate(`() => {
+      const button = document.querySelector('#call-send-queued');
+      button.scrollIntoView({ block: 'nearest' });
+      const box = button.getBoundingClientRect();
+      if (button.hidden || box.height < 44 || box.width < 40 || box.left < 0 || box.right > innerWidth + 1 || document.documentElement.scrollWidth > innerWidth) throw Error('send queued fit ' + innerWidth + ' ' + JSON.stringify({ left: box.left, right: box.right, top: box.top, height: box.height, width: box.width, page: document.documentElement.scrollWidth }));
+      return { width: innerWidth, sendQueued: { width: Math.round(box.width), height: Math.round(box.height) } };
+    }`);
+    await browser('screenshot', path.join(proof, `captain-send-queued-${width}.png`));
+  }
+  await writeFile(path.join(home, 'delay-answer'), '1');
+  await evaluate(`() => {
+    const button = document.querySelector('#call-send-queued');
+    const send = window.quarterdeckReviewQueue.sendCallAnswers;
+    window.__headerSend = send();
+    const second = send();
+    window.__headerSecond = second;
+    button.click();
+    if (!button.disabled && !button.hidden) throw Error('button stayed enabled while sending');
+    return 'header double send attempted';
+  }`);
+  await until(`window.quarterdeckCallQueue.list().length===0 && document.querySelector('#call-send-queued').hidden`);
+  await rm(path.join(home, 'delay-answer'), { force: true });
+  const headerAnswerLines = (await readFile(path.join(home, 'answer-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  const headerThreadLines = (await readFile(path.join(home, 'thread-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  assert.equal(headerAnswerLines.length - headerAnswersBefore, 1, 'header send delivers the queued answer once');
+  assert.equal(headerThreadLines.length - headerThreadsBefore, 1, 'header send delivers the queued thread note once');
+  await evaluate(`() => { if (window.reviewPosts) throw Error('header send used review delivery'); return 'header send stayed on the call routes'; }`);
+  await browser('resize', '390', '844');
+  await evaluate(`() => { document.querySelector('#call-lifecycle-filter [data-call-lifecycle="active"]').click(); const button=document.querySelector('#call-send-queued'); if (!button.hidden || document.documentElement.scrollWidth > innerWidth) throw Error('button remained after send'); return 'header button hidden after send'; }`);
+  await browser('screenshot', path.join(proof, 'captain-send-queued-done-390.png'));
+  await evaluate(`() => {
+    if (document.querySelector('#review-panel-toggle').getAttribute('aria-expanded') !== 'true') document.querySelector('#review-panel-toggle').click();
+    const message = document.querySelector('#review-message');
+    message.value = 'Synthetic batch header note';
+    message.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('#review-queue').click();
+    if (!document.querySelector('#review-thread').textContent.includes('Synthetic batch header note')) throw Error('review note not queued');
+    document.querySelector('#review-send').click();
+    return 'review note sending';
+  }`);
+  await until(`document.querySelector('#review-sent-count').textContent!=='0'`);
+  for (const width of [390, 360]) {
+    await browser('resize', String(width), '844');
+    await evaluate(`() => {
+      const phone = innerWidth < 721;
+      if (phone) document.querySelector('#review-history-tab').click();
+      else document.querySelector('#review-sent').open = true;
+      const root = document.querySelector(phone ? '#review-phone-thread' : '#review-sent-list');
+      const summary = [...root.querySelectorAll('.review-batch > summary')].find((node) => node.querySelector('.review-batch-id'));
+      if (!summary) throw Error('sent batch header missing');
+      const batch = summary.parentElement;
+      batch.open = false;
+      const box = summary.getBoundingClientRect();
+      const time = summary.querySelector('time');
+      const id = summary.querySelector('.review-batch-id');
+      if (!time || !time.dateTime || !(/ago$/.test(time.title) || time.title === 'just now') || !time.textContent) throw Error('sent time missing');
+      if (!id || id.textContent.length < 6 || id.textContent.length > 7 || id.title.length < 8 || !id.getAttribute('aria-label').includes(id.title)) throw Error('short batch id');
+      const label = summary.querySelector('.review-batch-label');
+      const labelBox = label.getBoundingClientRect();
+      if (getComputedStyle(summary).display !== 'flex' || box.height > 36 || Math.abs((labelBox.top + labelBox.height / 2) - (box.top + box.height / 2)) > 4) throw Error('sent header is not one line ' + Math.round(box.height));
+      id.click();
+      if (batch.open) throw Error('copying the batch id toggled the batch');
+      if (document.documentElement.scrollWidth > innerWidth) throw Error('sent header overflow');
+      return 'sent batch header';
+    }`);
+    await browser('screenshot', path.join(proof, `review-batch-sent-${width}.png`));
+  }
+  await evaluate(`() => { document.querySelector('#review-close').click(); return 'review closed after batch header'; }`);
+  await evaluate(`() => {
+    document.querySelector('#call-lifecycle-filter [data-call-lifecycle="sent"]').click();
+    const merge = document.querySelector('[data-call-key="merge:beta-merge"]');
+    merge.querySelector('[data-call-answer-again]').click();
+    const alpha = document.querySelector('[data-call-key="decision:alpha-call"]');
+    if (alpha.querySelector('[data-call-answer]').dataset.callAnswerPhase !== 'compose') throw Error('header thread send did not return alpha to compose');
+    if (merge.querySelector('[data-call-answer]').dataset.callAnswerPhase !== 'compose') throw Error('header answer did not return to compose');
+    document.activeElement?.blur();
+    document.body.click();
+    return 'restored compose after header send';
+  }`);
   // Phase 2: synthetic source options, merge, changed confirmation, failed retry and receipts.
   const phase = (key, value) => until(`document.querySelector('[data-call-key="${key}"] [data-call-answer]').dataset.callAnswerPhase==='${value}'`);
   const answer = async (key, text, selection = '') => evaluate(`() => { const card=document.querySelector('[data-call-key="${key}"]'); const field=card.querySelector('[data-call-answer-text]'); field.focus(); field.value=${JSON.stringify(text)}; field.dispatchEvent(new Event('input',{bubbles:true})); ${selection ? `const radio=card.querySelector('input[value="${selection}"]'); radio.checked=true; radio.dispatchEvent(new Event('change',{bubbles:true}));` : ''} return 'draft'; }`);

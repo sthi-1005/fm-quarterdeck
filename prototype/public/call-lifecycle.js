@@ -84,5 +84,28 @@ window.callLifecycle = (() => {
     }
   }
 
-  return { FILTERS, STORAGE_KEY, LABELS, derive, cardState, counts, readFilter, writeFilter, visible, emptyText, paintToggle, answerQueued, answerSent, threadSent };
+  // Send queued (N) sits beside the status control. N is the staged-item count Send batch
+  // would send. The button exists only on Active while that count is positive.
+  function sendQueuedControl({ filter = "active", count = 0, sending = false } = {}) {
+    const n = Math.max(0, Math.trunc(Number(count) || 0));
+    const busy = Boolean(sending);
+    const noun = n === 1 ? "answer" : "answers";
+    return {
+      hidden: filter !== "active" || n === 0,
+      disabled: busy,
+      text: `Send queued (${n})`,
+      label: `${busy ? "Sending" : "Send"} ${n} queued Captain's Call ${noun}`,
+    };
+  }
+
+  function paintSendQueued(button, options) {
+    if (!button) return;
+    const view = sendQueuedControl(options);
+    button.hidden = view.hidden;
+    button.disabled = view.disabled;
+    if (button.textContent !== view.text) button.textContent = view.text;
+    if (button.getAttribute("aria-label") !== view.label) button.setAttribute("aria-label", view.label);
+  }
+
+  return { FILTERS, STORAGE_KEY, LABELS, derive, cardState, counts, readFilter, writeFilter, visible, emptyText, paintToggle, sendQueuedControl, paintSendQueued, answerQueued, answerSent, threadSent };
 })();

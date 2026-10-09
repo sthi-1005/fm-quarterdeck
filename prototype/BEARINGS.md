@@ -173,6 +173,9 @@ Only the buttons for the current phase are shown (Queue in *compose*; Send and E
 **Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`.
 The review panel (`review-client.js`) lists queued items above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the item to its card for editing (keeping its request id once a send was attempted).
 **Send batch** and Ctrl+Enter send queued items first, each with its own request id: an answer through `POST /api/bearings/answer` and a thread note through `POST /api/bearings/thread`, then the review notes through review delivery.
+On the Active status view, **Send queued (N)** calls that same `sendCallAnswers` sender when N staged items exist.
+It stays hidden on every other status and when N is 0, and it is disabled while a send is in flight.
+A second activation, including a concurrent **Send batch**, does not deliver those items again.
 A card that was Queued only because of that staged item becomes Sent after the item is accepted.
 Batching changes no intake, and review delivery being unavailable does not block the items.
 A queued item survives reload in its *confirm* state; only an explicit click sends it.
@@ -209,10 +212,17 @@ A Firstmate question, chat line, or reply is not Sent.
 Failed and in-flight sends stay Queued until accepted.
 The state is a small coloured dot on the card, one colour per state: Active green, Queued amber, Sent blue, Procrastinated muted.
 The dot's accessible name is that state.
-The word itself lives on the status toggle, not on the card.
-A dashed border marks Sent and a dotted border marks Procrastinated, so the colour is not the only signal.
+The status word lives on the toggle.
+A Sent card also shows **Sent - waiting for Firstmate**, a muted card body, and a subtle diagonal hatch.
+Card text stays readable and selectable, and the thread control stays usable.
+A sent answer keeps its radios and note on the card: the radios are disabled, and the note is read-only so it can still be selected.
+Queue stays hidden, and **Answer again** returns that box to compose.
+A thread note that marked the card Sent leaves the box in compose for a follow-up; the hatch and label still show.
+A dashed border marks the Sent dot and a dotted border marks the Procrastinated dot, so the colour is not the only signal.
 
 The status control above the cards is one group: **Active**, **Queued**, **Sent**, **Procrastinated**, and **All**, each with its count.
+Beside it, **Send queued (N)** is shown only while Active is selected and N staged items exist.
+Queue integration owns that sender.
 It shows Active on the first load.
 The choice is remembered per viewer in `localStorage` under `fm-quarterdeck-call-lifecycle.v1`.
 An unknown stored value falls back to Active.

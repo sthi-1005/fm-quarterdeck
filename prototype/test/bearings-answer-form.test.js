@@ -152,6 +152,16 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   assert.equal(t.patcher.drafts.text(key), "", "sent words are not 'unsent text'");
   assert.equal(t.part(key, "receipt").hidden, false);
   assert.match(t.part(key, "receipt-text").textContent, /^Sent to Firstmate: Staged - Use the Tuesday window · waiting/);
+  assert.equal(t.part(key, "fields").hidden, false, "a sent answer keeps its choices visible");
+  assert.equal(t.part(key, "fields").hasAttribute("data-locked"), true);
+  assert.equal(t.part(key, "fields").hasAttribute("data-sent"), true);
+  assert.equal(radio.disabled, true, "sent radios cannot be changed");
+  assert.equal(radio.checked, true, "the sent choice stays shown");
+  assert.equal(t.part(key, "text").readOnly, true);
+  assert.equal(t.part(key, "text").disabled, false, "the sent note stays selectable");
+  assert.equal(t.part(key, "text").value, "Use the Tuesday window");
+  assert.equal(t.part(key, "compose").hidden, true);
+  assert.equal(t.node(key).querySelector(".call-answer-bar").hidden, true);
 
   t.timers.advance(15000);
   await flush();
@@ -273,6 +283,9 @@ test("option drafts restore after a refill; Edit preserves drafts and Answer aga
   t.part(key, "again").click();
   assert.equal(t.answers.state(key), null);
   assert.equal(t.part(key, "text").value, "");
+  assert.equal(t.part(key, "text").readOnly, false);
+  assert.equal(t.part(key, "text").disabled, false);
+  assert.equal(radio().disabled, false, "Answer again unlocks the choices");
   assert.equal(radio().checked, false);
   t.submit(key);
   assert.equal(t.answers.state(key).phase, "refused");
@@ -430,6 +443,9 @@ test("Send batch relays every queued card on its own route and those cards becom
   assert.equal(await t.answers.sendQueued(), true);
   assert.deepEqual(t.fetches.map((entry) => [entry.url, entry.body.key]), [["/api/bearings/thread", first], ["/api/bearings/answer", second]]);
   assert.equal(t.answers.state(first), null, "a sent thread note stays out of the answer sent phase");
+  assert.equal(t.part(first, "text").readOnly, false, "a sent thread card can still ask a follow-up");
+  assert.equal(t.part(first, "text").disabled, false);
+  assert.equal(Boolean(t.node(first).querySelector("input[type='radio']")?.disabled), false);
   assert.equal(t.answers.state(second).phase, "sent");
   assert.deepEqual(plain(t.answers.queued()), []);
   assert.equal(stateOf(first, decision()), "sent");

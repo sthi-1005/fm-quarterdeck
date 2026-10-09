@@ -164,12 +164,15 @@
               <p id="overview-state" class="notice hidden" role="status"></p>
               <section id="captain-call" aria-labelledby="call-heading">
                 <h2 id="call-heading" class="section-heading">Captain's Call <span class="call-read-only">Live · answers need your confirmation</span></h2>
+                <div class="call-lifecycle-bar">
                 <div id="call-lifecycle-filter" class="call-lifecycle-filter" role="group" aria-label="Show Captain's Call cards by status">
                   <button type="button" data-call-lifecycle="active" aria-pressed="true">Active (0)</button>
                   <button type="button" data-call-lifecycle="queued" aria-pressed="false">Queued (0)</button>
                   <button type="button" data-call-lifecycle="sent" aria-pressed="false">Sent (0)</button>
                   <button type="button" data-call-lifecycle="procrastinated" aria-pressed="false">Procrastinated (0)</button>
                   <button type="button" data-call-lifecycle="all" aria-pressed="false">All (0)</button>
+                </div>
+                <button type="button" id="call-send-queued" class="call-send-queued" hidden aria-label="Send 0 queued Captain's Call answers">Send queued (0)</button>
                 </div>
                 <p id="call-lifecycle-empty" class="call-meta" hidden></p>
                 <label class="call-sort">Sort calls <select id="call-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>

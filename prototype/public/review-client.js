@@ -283,9 +283,49 @@ function batchStatusShort(batch) {
   if (batch.state === "accepted" && batch.intake === "accepted" && batch.announced) return "Queued for Firstmate";
   return statusShort[batch.state] || "Accepted";
 }
-// The closed summary shows one short line. The full sentence stays on the summary
-// tooltip and in the first span, which opens into view with the batch.
-function fillBatchSummary(summary, short, full) {
+// A real batch id is shortened for the closed header. The call-answer group and an
+// unsaved draft are not batch ids, so they do not invent one.
+function batchIdShort(id) {
+  if (typeof id !== "string") return "";
+  const trimmed = id.trim();
+  if (!trimmed || trimmed === "call-answers" || trimmed === "draft") return "";
+  return trimmed.slice(0, 7);
+}
+function batchWhen(sentAt, now = Date.now()) {
+  const date = new Date(sentAt);
+  const stamp = date.getTime();
+  if (!Number.isFinite(stamp)) return null;
+  const delta = now - stamp;
+  const abs = Math.abs(delta);
+  let relative = "just now";
+  if (abs >= 60000) {
+    const unitMs = abs < 3600000 ? 60000 : abs < 86400000 ? 3600000 : 86400000;
+    const unit = unitMs === 60000 ? "minute" : unitMs === 3600000 ? "hour" : "day";
+    const count = Math.max(1, Math.round(abs / unitMs));
+    const phrase = `${count} ${unit}${count === 1 ? "" : "s"}`;
+    relative = delta >= 0 ? `${phrase} ago` : `in ${phrase}`;
+  }
+  return { iso: date.toISOString(), short: date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), relative };
+}
+function copyBatchId(node, text) {
+  const mark = () => node.setAttribute("data-copied", "true");
+  const select = () => {
+    const selection = document.getSelection?.();
+    if (!selection || !document.createRange) return;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+  const write = typeof navigator !== "undefined" && navigator.clipboard?.writeText;
+  if (typeof write !== "function") { select(); return; }
+  try { Promise.resolve(write.call(navigator.clipboard, text)).then(mark).catch(select); }
+  catch { select(); }
+}
+// The closed summary shows one short line: chevron, title, then sent time and a
+// short batch id when this batch has them. The full sentence stays on the tooltip
+// and in the first span, which opens into view with the batch.
+function fillBatchSummary(summary, short, full, meta = {}) {
   summary.className = "review-batch-summary";
   summary.title = full;
   summary.textContent = "";
@@ -297,6 +337,34 @@ function fillBatchSummary(summary, short, full) {
   label.textContent = short;
   label.setAttribute("aria-hidden", "true");
   summary.append(fullText, label);
+  const id = batchIdShort(meta.id);
+  const when = batchWhen(meta.sentAt);
+  if (!id && !when) return;
+  const row = document.createElement("span");
+  row.className = "review-batch-meta";
+  row.addEventListener("click", (event) => event.stopPropagation?.());
+  if (when) {
+    const time = document.createElement("time");
+    time.setAttribute("datetime", when.iso);
+    time.title = when.relative;
+    time.textContent = when.short;
+    row.append(time);
+  }
+  if (id) {
+    const code = document.createElement("button");
+    code.type = "button";
+    code.className = "review-batch-id";
+    code.textContent = id;
+    code.title = meta.id;
+    code.setAttribute("aria-label", `Copy batch id ${meta.id}`);
+    code.addEventListener("click", (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      copyBatchId(code, meta.id);
+    });
+    row.append(code);
+  }
+  summary.append(row);
 }
 async function refreshStatuses() {
   if (config.delivery !== "local") return;
@@ -428,7 +496,7 @@ function update() {
     const summary = document.createElement("summary");
     // A delivery receipt proves sent, not that another device or a reviewer received it.
     const sentFull = `${batchStatusFull(batch)} · ${noteCount(batch.entries.length)} · receipt ${batch.receiptId}`;
-    fillBatchSummary(summary, `${batchStatusShort(batch)} · ${noteCount(batch.entries.length)}`, sentFull);
+    fillBatchSummary(summary, `${batchStatusShort(batch)} · ${noteCount(batch.entries.length)}`, sentFull, { id: batch.id, sentAt: batch.sentAt });
     details.append(summary);
     for (const [index, entry] of batch.entries.entries()) details.append(renderNote({ ...entry, delivered: true }, `${batch.id}:${index}`));
     if (batch.reply) {
@@ -458,7 +526,7 @@ function update() {
     details.className = "review-batch";
     details.open = openBatches.has(batchId || "draft");
     const summary = document.createElement("summary");
-    fillBatchSummary(summary, `Queued · ${noteCount(queue.length)}`, `Queued batch · ${noteCount(queue.length)}`);
+    fillBatchSummary(summary, `Queued · ${noteCount(queue.length)}`, `Queued batch · ${noteCount(queue.length)}`, { id: batchId });
     details.append(summary);
     for (const [index, entry] of queue.entries()) details.append(renderNote(entry, `queued:${index}`, index));
     details.addEventListener("toggle", () => {
@@ -473,7 +541,7 @@ function update() {
     details.open = openBatches.has(captured.id);
     const summary = document.createElement("summary");
     const capturedCount = noteCount(captured.payload.entries.length);
-    fillBatchSummary(summary, `${title === "Retry needed" ? "Retry" : title} · ${capturedCount}`, `${title} batch · ${capturedCount}`);
+    fillBatchSummary(summary, `${title === "Retry needed" ? "Retry" : title} · ${capturedCount}`, `${title} batch · ${capturedCount}`, { id: captured.id });
     details.append(summary);
     captured.payload.entries.forEach((entry, index) => details.append(renderNote(entry, `${captured.id}:${index}`)));
     if (title === "Retry needed") {
@@ -533,7 +601,7 @@ function update() {
     details.className = "review-batch";
     details.open = openBatches.has("call-answers");
     const summary = document.createElement("summary");
-    fillBatchSummary(summary, `Call answers · ${calls.length}`, `Queued Captain's Call answers · ${calls.length}`);
+    fillBatchSummary(summary, `Call answers · ${calls.length}`, `Queued Captain's Call answers · ${calls.length}`, { id: "call-answers" });
     details.append(summary, ...calls.map(renderCallAnswer));
     details.addEventListener("toggle", () => { if (details.open) openBatches.add("call-answers"); else openBatches.delete("call-answers"); });
     return details;
@@ -882,7 +950,7 @@ el("review-form").addEventListener("submit", (event) => { event.preventDefault()
 let sendingCalls = false;
 async function sendCallAnswers() {
   const ready = callQueue().filter((entry) => entry.phase !== "sending");
-  if (!ready.length || sendingCalls) return;
+  if (!ready.length || sendingCalls) return false;
   sendingCalls = true;
   el("review-state").textContent = `Sending ${ready.length} Captain's Call ${ready.length === 1 ? "answer" : "answers"}…`;
   let ok = false;
@@ -890,6 +958,8 @@ async function sendCallAnswers() {
   finally { sendingCalls = false; }
   el("review-state").textContent = ok ? `Sent ${ready.length} Captain's Call ${ready.length === 1 ? "answer" : "answers"}; receipts show on each card.` : "Some Captain's Call answers were not confirmed; their cards say why and keep them for retry.";
   update();
+  try { window.quarterdeckCallQueue?.refresh?.(); } catch {}
+  return ok;
 }
 async function send(end) {
   // Await only when answers are queued, so an ordinary batch posts in the same tick.
@@ -958,7 +1028,7 @@ async function submitBatch(captured) {
     // Only a confirmed receipt closes a review; keep later queued notes and
     // independent unconfirmed identities available for their own delivery.
     if (captured.payload.end) { sent = []; openBatches.clear(); openNotes.clear(); }
-    else sent.push({ id: captured.id, receiptId: result.receiptId, state: result.delivery === "local" ? "accepted" : null, entries: captured.payload.entries, route: payload.route, version: payload.version, end: false });
+    else sent.push({ id: captured.id, receiptId: result.receiptId, state: result.delivery === "local" ? "accepted" : null, sentAt: new Date().toISOString(), entries: captured.payload.entries, route: payload.route, version: payload.version, end: false });
     void loadConfig();
     retryBatches = retryBatches.filter((batch) => batch.id !== captured.id);
     openBatches.delete(captured.id);
@@ -976,6 +1046,6 @@ async function submitBatch(captured) {
   } finally { inFlight = null; inFlightIndex = null; pending = false; update(); }
 }
 el("review-send").addEventListener("click", () => send(false));
-window.quarterdeckReviewQueue = { refresh: () => update() };
+window.quarterdeckReviewQueue = { refresh: () => update(), sendCallAnswers, sending: () => sendingCalls };
 el("review-end").addEventListener("click", () => send(true));
 update();
