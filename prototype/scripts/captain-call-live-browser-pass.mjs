@@ -380,7 +380,8 @@ try {
   await until(`!document.querySelector('[data-call-key="merge:beta-merge"]')`);
   await evaluate(`() => { if(!document.querySelector('#call-answered-toggle').hidden||!document.querySelector('[data-call-answered-heading]').hidden)throw Error('confirmed call remains in answered group'); return 'confirmed call removed from both groups'; }`);
   await evaluate("() => { location.hash='#work'; return 'Work Split smoke'; }");
-  await until("document.querySelector('#work-view').classList.contains('active') && document.querySelector('#tight-work').innerText.includes('No work matches')");
+  // The fixture publishes one unchecked backlog row so the call can show its full title.
+  await until("document.querySelector('#work-view').classList.contains('active') && document.querySelector('#tight-work').innerText.includes('alpha-call')");
   await evaluate("() => { if(!document.querySelector('#work-phase-buttons').children.length||document.documentElement.scrollWidth>innerWidth)throw Error('Work Split smoke failed'); location.hash='#expenses'; return 'Work Split intact'; }");
   await until("document.querySelector('#expenses-view').classList.contains('active')");
   await evaluate("() => { if(!document.querySelector('#expense-entries')||document.documentElement.scrollWidth>innerWidth)throw Error('Expenses smoke failed'); return 'PASS Work Split and Expenses route containment'; }");
