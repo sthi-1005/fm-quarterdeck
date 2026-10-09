@@ -23,7 +23,7 @@ const INBOX_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const PREFIX = "quarterdeck-thread:";
 const MAX_REMEMBERED = 200;
 const MAX_ENTRIES = 80;
-const MAX_ENTRY_CHARS = 4000;
+const MAX_ENTRY_CHARS = 16000;
 const TRANSCRIPT_WINDOW_BYTES = 4 * 1024 * 1024;
 
 export class ThreadRefused extends Error {
@@ -194,8 +194,10 @@ export function createThreadRelay({ home, note = noteWithRequestId, receipts = i
       for (const item of notes.values()) {
         const match = noteForCard(item, key, card);
         if (!match) continue;
-        entries.push({ kind: match.kind, from: "captain", at: item.at || null, text: threadText(match.text), noteId: item.id, state: item.reply ? "replied" : data.handled.some((entry) => entry.id === item.id) ? "received" : "waiting" });
-        if (item.reply?.body) entries.push({ kind: "reply", from: "firstmate", at: item.reply.at || null, text: threadText(item.reply.body), noteId: item.id });
+        const reply = data.replies?.find((entry) => entry.id === item.id || entry.note_id === item.id || entry.in_reply_to === item.id) || item.reply;
+        const replyText = typeof reply?.body === "string" ? reply.body : typeof reply?.text === "string" ? reply.text : null;
+        entries.push({ kind: match.kind, from: "captain", at: item.at || null, text: threadText(match.text), noteId: item.id, state: reply ? "replied" : data.handled.some((entry) => entry.id === item.id) ? "received" : "waiting" });
+        if (replyText !== null) entries.push({ kind: "reply", from: "firstmate", at: reply.at || null, text: threadText(replyText), noteId: item.id });
       }
       if (card?.type === "chat") entries.push({ kind: "chat-ask", from: "firstmate", at: card.clock?.at || null, text: threadText(`${card.marker}: ${card.summary}`) });
       for (const ask of card?.chatAsks || []) entries.push({ kind: "chat-ask", from: "firstmate", at: ask.clock?.at || null, text: threadText(`${ask.kind ? `${ask.kind.toUpperCase()} NEEDED: ` : ""}${ask.summary}`) });

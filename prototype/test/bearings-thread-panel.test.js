@@ -50,7 +50,7 @@ function setup({ responses = [], storage = null } = {}) {
   return { document, timers, list, patcher, threads, fetches, node, part, ask };
 }
 
-test("Ask more info opens the card's thread, loads its history oldest first and polls only while open", async () => {
+test("Ask more info opens the card's thread, loads its history oldest first and watches visited cards for replies without auto-opening", async () => {
   const t = setup({ responses: [history([
     { kind: "chat", from: "firstmate", at: "2026-01-02T09:00:00.000Z", text: "Filed a hold for alpha-call." },
     { kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "replied" },
@@ -86,7 +86,7 @@ test("Ask more info opens the card's thread, loads its history oldest first and 
   t.part("toggle").click();
   t.timers.advance(60000);
   await flush();
-  assert.equal(t.fetches.length, 2, "a closed thread stops polling");
+  assert.equal(t.fetches.length, 3, "a visited closed thread watches for replies");
 });
 
 test("Ask Firstmate sends only on an explicit click, retries an unconfirmed send with the same id, and clears on 202", async () => {
@@ -144,4 +144,47 @@ test("a refused question is not retried, a new question gets a new id, and a rel
   again.patcher.update(model([]));
   assert.equal(again.threads.state(KEY), null, "a call that left forgets its thread");
   assert.ok(![...Array(storage.length).keys()].some((index) => storage.key(index).startsWith("fm-quarterdeck-call-thread.v1:")), "its saved state is removed");
+});
+
+
+test("closed visited thread marks new replies politely and opening acknowledges them", async () => {
+  const reply = { kind: "reply", from: "firstmate", noteId: "n1", at: "2026-01-02T11:00:00Z", text: "The rollout window." };
+  const t = setup({ responses: [history(), history([reply]), history([reply])] });
+  t.patcher.update(model([decision()]));
+  t.part("toggle").click();
+  await flush();
+  t.part("toggle").click();
+  t.timers.advance(15000);
+  await flush();
+  assert.match(t.part("toggle").textContent, /1 new reply/);
+  assert.equal(t.part("replies").getAttribute("role"), "status");
+  assert.match(t.part("replies").textContent, /1 new reply from Firstmate/);
+  assert.equal(t.node().querySelector("[data-call-thread]").hidden, true);
+  t.part("toggle").click();
+  await flush();
+  assert.equal(t.part("replies").textContent, "");
+  t.document.visibilityState = "hidden";
+  const count = t.fetches.length;
+  await t.threads.poll();
+  assert.equal(t.fetches.length, count, "hidden tabs never poll");
+  t.threads.destroy();
+});
+
+test("long entries expand without losing text and copy fails visibly", async () => {
+  const text = "Synthetic context ".repeat(300);
+  const t = setup({ responses: [history([{ kind: "chat", from: "firstmate", at: "2026-01-02T11:00:00Z", text }])] });
+  t.patcher.update(model([decision()]));
+  t.part("toggle").click();
+  await flush();
+  const entry = t.part("log").children[0];
+  const buttons = entry.querySelectorAll("button");
+  assert.equal(buttons[0].textContent, "More");
+  assert.ok(entry.querySelector(".call-thread-text").textContent.length < text.length);
+  buttons[0].click();
+  assert.equal(entry.querySelector(".call-thread-text").textContent, text);
+  assert.equal(buttons[0].getAttribute("aria-expanded"), "true");
+  assert.match(entry.querySelector("time").textContent, /ago/);
+  buttons[1].click();
+  await flush();
+  assert.match(t.part("status").textContent, /Copy unavailable/);
 });

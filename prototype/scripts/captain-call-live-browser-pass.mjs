@@ -40,19 +40,29 @@ await chmod(script, 0o755);
 const inbox = path.join(home, 'bin/fm-inbox.sh');
 await writeFile(inbox, `#!/bin/sh
 case "$1" in
-  note) case "$3" in quarterdeck-thread:*) cat > "$FM_HOME/thread-note.txt"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"thread-1","announced":true,"outcome":"created"}\\n' "$3"; exit 0 ;; esac
-    printf '%s\\n' "$3" >> "$FM_HOME/answer-attempts"; cat > "$FM_HOME/answer-note.txt"; [ ! -e "$FM_HOME/fail-answer" ] || exit 1; [ ! -e "$FM_HOME/delay-answer" ] || sleep 5; printf '%s' "$3" > "$FM_HOME/answer-request-id"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"note-1","announced":true,"outcome":"created"}\\n' "$3" ;;
+  note) case "$3" in quarterdeck-thread:*) printf '%s' "$3" > "$FM_HOME/thread-request-id"; cat > "$FM_HOME/thread-note.txt"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"thread-1","announced":true,"outcome":"created"}\\n' "$3"; exit 0 ;; esac
+    printf '%s\\n' "$3" >> "$FM_HOME/answer-attempts"; cat > "$FM_HOME/answer-note.txt"; cp "$FM_HOME/answer-note.txt" "$FM_HOME/answer-$3.txt"; [ ! -e "$FM_HOME/fail-answer" ] || exit 1; [ ! -e "$FM_HOME/delay-answer" ] || sleep 5; printf '%s' "$3" > "$FM_HOME/answer-request-id"; printf '{"schema":"fm-inbox-note.v1","request_id":"%s","saved":true,"id":"note-1","announced":true,"outcome":"created"}\\n' "$3" ;;
   receipts)
-    id="$(cat "$FM_HOME/answer-request-id" 2>/dev/null)"
-    case "$(cat "$FM_HOME/receipt-state" 2>/dev/null)" in
-      replied) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[{"id":"note-1","body":"Synthetic answer recorded"}]}\\n' "$id" ;;
-      received) printf '{"schema":"fm-inbox-receipts.v1","pending":[],"handled":[{"id":"note-1","request_id":"%s"}],"replies":[]}\\n' "$id" ;;
-      *) printf '{"schema":"fm-inbox-receipts.v1","pending":[{"id":"note-1","request_id":"%s"}],"handled":[],"replies":[]}\\n' "$id" ;;
-    esac ;;
+    node "$FM_HOME/receipts.mjs" ;;
   *) exit 2 ;;
 esac
 `);
 await chmod(inbox, 0o755);
+await writeFile(path.join(home, 'receipts.mjs'), `
+import { readFile } from 'node:fs/promises';
+const read = async name => readFile(process.env.FM_HOME + '/' + name, 'utf8').catch(() => '');
+const id = await read('answer-request-id');
+const state = await read('receipt-state');
+const note = { id: 'note-1', request_id: id };
+const data = { schema: 'fm-inbox-receipts.v1', pending: state === 'received' || state === 'replied' ? [] : [note], handled: state === 'received' || state === 'replied' ? [note] : [], replies: state === 'replied' ? [{ id: 'note-1', body: 'Synthetic answer recorded' }] : [] };
+const thread = await read('thread-request-id');
+if (thread) {
+  const at = '2026-01-02T10:00:00Z';
+  data.handled.push({ id: 'thread-1', request_id: thread, at, body: await read('thread-note.txt') });
+  if (await read('thread-replied')) data.replies.push({ id: 'thread-1', at: '2026-01-02T11:00:00Z', body: 'This call chooses the synthetic release window.' });
+}
+console.log(JSON.stringify(data));
+`);
 const env = { ...process.env, HOME: temp, CHROME_DEVTOOLS_AXI_SESSION: `quarterdeck-call-${process.pid}`, CHROME_DEVTOOLS_AXI_HEADED: '0', CHROME_DEVTOOLS_AXI_USER_DATA_DIR: path.join(temp, 'profile'), CHROME_DEVTOOLS_AXI_IDLE_TIMEOUT_MS: '60000' };
 for (const name of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BROWSER_URL', 'CHROME_DEVTOOLS_AXI_MCP_SERVER_URL']) delete env[name];
 // Launch exactly one bounded fixture browser; all page operations go through axi.
@@ -134,7 +144,7 @@ try {
   // Card thread: Ask more info opens a card-scoped thread; only Ask Firstmate relays a question note.
   for (const width of [1280, 390]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { const flush=(card)=>{ for(const bar of card.querySelectorAll('.call-answer-bar')){ if(!bar.getClientRects().length)continue; const box=bar.parentElement.querySelector('textarea').getBoundingClientRect(); const top=bar.getBoundingClientRect().top; if(Math.abs(top-box.bottom)>0.5)throw Error('action bar not flush: '+(top-box.bottom)); const shown=[...bar.querySelectorAll('button')].filter(b=>!b.hidden); for(let i=1;i<shown.length;i++){ const gap=shown[i].getBoundingClientRect().left-shown[i-1].getBoundingClientRect().right; if(Math.abs(gap)>0.5)throw Error('buttons not joined: '+gap); } } }; const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const toggle=card.querySelector('[data-call-thread-toggle]'); if(toggle.textContent!=='Ask more info'||toggle.getAttribute('aria-expanded')!=='false')throw Error('thread toggle'); toggle.click(); const panel=card.querySelector('[data-call-thread]'); if(panel.hidden||document.activeElement!==card.querySelector('[data-call-thread-text]'))throw Error('thread did not open'); flush(card); if(document.documentElement.scrollWidth>innerWidth||card.scrollWidth>card.clientWidth+1)throw Error('thread overflow'); panel.scrollIntoView({block:'center'}); return {thread:'open',width:innerWidth}; }`);
+    await evaluate(`() => { const flush=(card)=>{ for(const bar of card.querySelectorAll('.call-answer-bar')){ if(!bar.getClientRects().length)continue; const box=bar.parentElement.querySelector('textarea').getBoundingClientRect(); const top=bar.getBoundingClientRect().top; if(Math.abs(top-box.bottom)>0.5)throw Error('action bar not flush: '+(top-box.bottom)); const shown=[...bar.querySelectorAll('button')].filter(b=>!b.hidden); for(let i=1;i<shown.length;i++){ const gap=shown[i].getBoundingClientRect().left-shown[i-1].getBoundingClientRect().right; if(Math.abs(gap)>0.5)throw Error('buttons not joined: '+gap); } } }; const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const toggle=card.querySelector('[data-call-thread-toggle]'); if(!toggle.textContent.startsWith('Ask more info')||toggle.getAttribute('aria-expanded')!=='false')throw Error('thread toggle'); toggle.click(); const panel=card.querySelector('[data-call-thread]'); if(panel.hidden||document.activeElement!==card.querySelector('[data-call-thread-text]'))throw Error('thread did not open'); flush(card); if(document.documentElement.scrollWidth>innerWidth||card.scrollWidth>card.clientWidth+1)throw Error('thread overflow'); panel.scrollIntoView({block:'center'}); return {thread:'open',width:innerWidth}; }`);
     await until(`/about this call/.test(document.querySelector('[data-call-key="decision:alpha-call"] [data-call-thread-status]').textContent)`);
     await browser('screenshot', path.join(proof, `captain-thread-open-${width}.png`));
     if (width === 1280) {
@@ -146,7 +156,17 @@ try {
       assert.doesNotMatch(asked, /fm-bearings-answer/, 'a question is never an answer');
       assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'asking never answers');
     }
+    if (width === 390) {
+      await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-thread-log]').textContent.includes('Firstmate replied')`);
+      await evaluate(`() => { const entries=[...document.querySelectorAll('[data-call-key="decision:alpha-call"] .call-thread-entry')]; if(entries.length!==2||!entries[0].textContent.includes('You asked')||!entries[1].textContent.includes('Firstmate replied')||!entries[1].textContent.includes('synthetic release window'))throw Error('thread reply/order missing'); if(!entries.every(e=>e.querySelector('time[datetime]')&&e.querySelector('button')))throw Error('thread time/copy missing'); return 'thread history reply ordered'; }`);
+      await browser('screenshot', path.join(proof, 'captain-thread-replied-390.png'));
+    }
     await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); card.querySelector('[data-call-thread-toggle]').click(); document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'thread closed'; }`);
+    if (width === 1280) {
+      await writeFile(path.join(home, 'thread-replied'), 'yes');
+      await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-thread-toggle]').textContent.includes('1 new reply')`);
+      await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); if(!card.querySelector('[data-call-thread]').hidden||!card.querySelector('[data-call-thread-replies]').textContent.includes('1 new reply'))throw Error('closed reply marker auto-opened'); return 'closed thread reply marker'; }`);
+    }
   }
   await browser('resize', '1280', '844');
   // Answer: Queue never sends; only Send relays one note through the guarded inbox.
@@ -159,6 +179,22 @@ try {
   const envelope = JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(note)[1]);
   assert.deepEqual([envelope.schema, envelope.question, envelope.selection, envelope.note, envelope.channel], ['fm-bearings-answer.v1', 'gamma-credential', '', 'Synthetic credential is in the vault', 'quarterdeck']);
   await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); if(!card.querySelector('[data-call-answer-receipt]').innerText.includes('Sent to Firstmate: Synthetic credential is in the vault'))throw Error('receipt missing'); document.activeElement?.blur(); document.getSelection().removeAllRanges(); document.body.click(); return 'PASS confirmed answer relayed once'; }`);
+  // Shared queue: two answers, phone/desktop list, Remove, then Send batch via answer intake only.
+  const queueAttempts = (await readFile(path.join(home, 'answer-attempts'), 'utf8')).trim().split('\n').length;
+  await evaluate(`() => { window.reviewPosts=0; const original=window.fetch; window.fetch=(url,init)=>{ if(String(url).includes('/api/review')&&init?.method==='POST')window.reviewPosts++; return original(url,init); }; document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-answer-again]').click(); for(const [key,text] of [['decision:alpha-call','Queue rollout Tuesday'],['decision:gamma-credential','Queue credential in vault']]){const c=document.querySelector('[data-call-key="'+key+'"]');const field=c.querySelector('[data-call-answer-text]');field.value=text;field.dispatchEvent(new Event('input',{bubbles:true}));c.querySelector('.call-answer-queue').click();} if(window.quarterdeckCallQueue.list().length!==2)throw Error('two answers not queued'); return 'two queued'; }`);
+  for (const width of [1280,390]) {
+    await browser('resize', String(width), '844');
+    await evaluate(`() => { if(document.querySelector('#review-panel-toggle').getAttribute('aria-expanded')!=='true')document.querySelector('#review-panel-toggle').click(); if(innerWidth<721)document.querySelector('#review-history-tab').click(); const root=document.querySelector(innerWidth<721?'#review-phone-thread':'#review-thread'); if(root.querySelectorAll('.review-call-answer').length!==2||!document.querySelector('#review-count').textContent.includes('2'))throw Error('queue list/count missing'); const batch=root.querySelector('details'); if(batch){batch.open=true;if(!batch.querySelector('summary').textContent.includes("Queued Captain's Call answers · 2"))throw Error('phone batch missing');} return 'shared queue list'; }`);
+    await browser('screenshot', path.join(proof, `captain-shared-queue-${width}.png`));
+  }
+  await evaluate(`() => { document.querySelector('#review-phone-thread .review-call-answer button').click(); if(window.quarterdeckCallQueue.list().length!==1||document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Remove did not return answer'); document.querySelector('#review-close').click(); document.querySelector('[data-call-key="decision:alpha-call"] .call-answer-queue').click(); document.querySelector('#review-panel-toggle').click(); document.querySelector('#review-send').click(); return 'send queued batch'; }`);
+  await until(`window.quarterdeckCallQueue.list().length===0`);
+  const queueIds = (await readFile(path.join(home, 'answer-attempts'), 'utf8')).trim().split('\n').slice(queueAttempts);
+  assert.equal(queueIds.length,2);
+  assert.equal(new Set(queueIds).size,2,'queued answers have distinct request ids');
+  const queueNotes = await Promise.all(queueIds.map(id => readFile(path.join(home, `answer-${id}.txt`), 'utf8')));
+  assert.deepEqual(queueNotes.map(note => JSON.parse(/```json fm-bearings-answer\n([\s\S]*?)\n```/.exec(note)[1]).task).sort(), ['alpha-call','gamma-credential']);
+  await evaluate(`() => { if(window.reviewPosts)throw Error('answer batch used review delivery'); document.querySelector('#review-close').click(); for(const key of ['decision:alpha-call','decision:gamma-credential'])document.querySelector('[data-call-key="'+key+'"] [data-call-answer-again]').click(); document.activeElement?.blur();document.body.click();return 'queue uses answer intake only'; }`);
   // Phase 2: synthetic source options, merge, changed confirmation, failed retry and receipts.
   const phase = (key, value) => until(`document.querySelector('[data-call-key="${key}"] [data-call-answer]').dataset.callAnswerPhase==='${value}'`);
   const answer = async (key, text, selection = '') => evaluate(`() => { const card=document.querySelector('[data-call-key="${key}"]'); const field=card.querySelector('[data-call-answer-text]'); field.focus(); field.value=${JSON.stringify(text)}; field.dispatchEvent(new Event('input',{bubbles:true})); ${selection ? `const radio=card.querySelector('input[value="${selection}"]'); radio.checked=true; radio.dispatchEvent(new Event('change',{bubbles:true}));` : ''} return 'draft'; }`);

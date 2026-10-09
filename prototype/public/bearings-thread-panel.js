@@ -38,7 +38,12 @@ window.bearingsThread = (() => {
     const cardNode = (key) => [...list.querySelectorAll("[data-call-key]")].find((node) => keyOf(node) === key) || null;
     const part = (node, name) => node.querySelector(`[data-call-thread-${name}]`);
 
-    function entryNode(entry) {
+    const identity = (entry) => JSON.stringify([entry.kind, entry.noteId, entry.at, entry.text]);
+    const replies = (state) => (state.entries || []).filter((entry) => entry.kind === "reply");
+    const unread = (state) => replies(state).filter((entry) => !state.seen?.has(identity(entry))).length;
+    const markRead = (state) => { state.seen = new Set(replies(state).map(identity)); };
+
+    function entryNode(entry, state) {
       const item = doc.createElement("li");
       item.className = `call-thread-entry call-thread-${entry.from === "captain" ? "captain" : "firstmate"}`;
       const head = doc.createElement("p");
@@ -47,7 +52,9 @@ window.bearingsThread = (() => {
       who.textContent = LABELS[entry.kind] || "Firstmate";
       const when = doc.createElement("time");
       if (entry.at) when.setAttribute("datetime", entry.at);
-      when.textContent = entry.at && Number.isFinite(Date.parse(entry.at)) ? new Date(entry.at).toLocaleString() : "time unknown";
+      const age = Math.max(0, Math.floor((Date.now() - Date.parse(entry.at)) / 60000));
+      const relative = age < 1 ? "just now" : age < 60 ? `${age}m ago` : age < 1440 ? `${Math.floor(age / 60)}h ago` : `${Math.floor(age / 1440)}d ago`;
+      when.textContent = entry.at && Number.isFinite(Date.parse(entry.at)) ? `${new Date(entry.at).toLocaleString()} · ${relative}` : "time unknown";
       const meta = doc.createElement("span");
       meta.textContent = entry.from === "captain" && entry.state ? ` · ${entry.state === "replied" ? "replied" : entry.state === "received" ? "received by Firstmate" : "waiting for Firstmate"}` : "";
       const dot = doc.createElement("span");
@@ -55,8 +62,36 @@ window.bearingsThread = (() => {
       head.append(who, dot, when, meta);
       const body = doc.createElement("p");
       body.className = "call-thread-text";
-      body.textContent = entry.text || "";
+      const text = entry.text || "";
+      const id = identity(entry);
+      const expanded = state.expanded?.has(id);
+      body.textContent = text.length > 800 && !expanded ? `${text.slice(0, 800)}…` : text;
       item.append(head, body);
+      if (text.length > 800) {
+        const more = doc.createElement("button");
+        more.type = "button";
+        more.textContent = expanded ? "Less" : "More";
+        more.setAttribute("aria-expanded", String(Boolean(expanded)));
+        more.addEventListener("click", () => {
+          state.expanded ||= new Set();
+          if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+          body.textContent = state.expanded.has(id) ? text : `${text.slice(0, 800)}…`;
+          more.textContent = state.expanded.has(id) ? "Less" : "More";
+          more.setAttribute("aria-expanded", String(state.expanded.has(id)));
+        });
+        item.append(more);
+      }
+      const copy = doc.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy";
+      copy.setAttribute("aria-label", `Copy ${LABELS[entry.kind] || "message"}`);
+      copy.addEventListener("click", async () => {
+        try { await win.navigator.clipboard.writeText(text); state.notice = "Message copied"; }
+        catch { state.notice = "Copy unavailable; select the message text to copy it"; }
+        const status = part(cardNode(state.key), "status");
+        if (status) status.textContent = statusText(state);
+      });
+      item.append(copy);
       return item;
     }
 
@@ -80,14 +115,25 @@ window.bearingsThread = (() => {
       if (!key || !toggle || !panel) return;
       const state = stateOf(key);
       toggle.setAttribute("aria-expanded", String(state.open));
-      toggle.textContent = state.open ? "Hide thread" : "Ask more info";
+      state.key = key;
+      const newReplies = state.open ? 0 : unread(state);
+      toggle.textContent = state.open ? "Hide thread" : `Ask more info${newReplies ? ` · ${newReplies} new ${newReplies === 1 ? "reply" : "replies"}` : ""}`;
+      const replyStatus = part(node, "replies");
+      if (replyStatus) {
+        const message = newReplies ? `${newReplies} new ${newReplies === 1 ? "reply" : "replies"} from Firstmate for this call` : "";
+        if (replyStatus.textContent !== message) replyStatus.textContent = message;
+      }
       panel.hidden = !state.open;
       const log = part(node, "log");
       if (log) {
-        const items = (state.entries || []).map(entryNode);
-        log.textContent = "";
-        log.append(...items);
-        log.hidden = !items.length;
+        const signature = JSON.stringify(state.entries || []);
+        if (log.getAttribute("data-history") !== signature) {
+          const items = (state.entries || []).map((entry) => entryNode(entry, state));
+          log.textContent = "";
+          log.append(...items);
+          log.hidden = !items.length;
+          log.setAttribute("data-history", signature);
+        }
       }
       const status = part(node, "status");
       const text = state.open ? statusText(state) : "";
@@ -105,6 +151,7 @@ window.bearingsThread = (() => {
         if (error.textContent !== message) error.textContent = message;
         error.hidden = !message;
       }
+      schedulePoll();
     }
     const rerender = (key) => { const node = cardNode(key); if (node) render(node); };
 
@@ -122,8 +169,9 @@ window.bearingsThread = (() => {
       state.loading = false;
       if (response?.ok && body && Array.isArray(body.entries)) {
         Object.assign(state, { entries: body.entries, omitted: body.omitted || 0, transcript: body.transcript || null, checkedAt: body.checkedAt || null });
+        if (state.open) markRead(state);
         if (!state.pending || state.pending.phase !== "failed") state.error = null;
-      } else if (!state.pending) state.error = body?.error || "This call's history is unavailable right now; it retries while the thread is open.";
+      } else if (!state.pending) state.error = body?.error || "This call's history is unavailable right now; it retries while this card is present.";
       rerender(key);
       schedulePoll();
     }
@@ -131,6 +179,7 @@ window.bearingsThread = (() => {
     function setOpen(key, open) {
       const state = stateOf(key);
       state.open = open;
+      if (open) markRead(state);
       save(key);
       rerender(key);
       if (open) {
@@ -183,15 +232,16 @@ window.bearingsThread = (() => {
       cardNode(key)?.querySelector("[data-call-thread-send]")?.focus?.();
     }
 
-    function openKeys() { return [...states.keys()].filter((key) => states.get(key)?.open && cardNode(key)); }
+    // Only threads visited in this tab are watched; unopened cards cause no extra reads.
+    function watchedKeys() { return [...states.keys()].filter((key) => (states.get(key)?.open || states.get(key)?.entries) && cardNode(key)); }
     async function poll() {
       pollTimer = null;
       if (destroyed) return;
-      if (doc.visibilityState !== "hidden") for (const key of openKeys()) await load(key);
+      if (doc.visibilityState !== "hidden") for (const key of watchedKeys()) await load(key);
       schedulePoll();
     }
     function schedulePoll() {
-      if (pollTimer || destroyed || !openKeys().length) return;
+      if (pollTimer || destroyed || !watchedKeys().length) return;
       pollTimer = timers.setTimeout(() => { void poll(); }, pollMs);
     }
 

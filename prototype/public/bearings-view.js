@@ -69,7 +69,7 @@ window.bearingsView = (() => {
   }
   // "Ask more info": a card-scoped thread with Firstmate (BEARINGS.md "Card threads").
   // The thread controller fills the log; the textarea is a protected draft like any other.
-  const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button>`;
+  const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button><span class="call-meta" data-call-thread-replies role="status" aria-live="polite"></span>`;
   const threadHtml = (id, label) => `<section class="call-thread" id="call-thread-${id}" data-call-thread aria-label="Thread with Firstmate: ${escape(label)}" hidden>
       <h4>Thread with Firstmate</h4>
       <p class="call-meta" data-call-thread-status role="status"></p>

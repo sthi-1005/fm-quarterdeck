@@ -86,6 +86,8 @@ test("noteForCard matches thread asks by key and answers by their envelope, neve
 test("history joins the card's notes, replies, chat asks and Firstmate chat turns, oldest first", async () => {
   const askNote = { id: "note-ask", at: "2026-01-02T10:00:00Z", request_id: threadRequestId(decision.key, uuid(1)), body: formatThreadNote({ key: decision.key, card: decision, text: "What is alpha?", requestId: uuid(1) }),
     reply: { id: "note-ask", at: "2026-01-02T11:00:00Z", body: "Alpha picks the rollout window; see /srv/synthetic/home/data/alpha.md" } };
+  const reply = askNote.reply;
+  delete askNote.reply; // Real receipts return replies in a separate collection.
   const answerNote = { id: "note-answer", at: "2026-01-02T12:00:00Z", request_id: answerRequestId(uuid(2)), body: formatAnswerNote(answerEnvelope({ card: decision, selection: "", note: "Tuesday" }, "m1")) };
   const other = { id: "note-other", at: "2026-01-02T09:30:00Z", request_id: threadRequestId("decision:gamma", uuid(3)), body: "elsewhere" };
   const turns = [
@@ -94,7 +96,7 @@ test("history joins the card's notes, replies, chat asks and Firstmate chat turn
     { at: null, text: "alpha-call is still waiting." },
   ];
   const relay = createThreadRelay({ home: "/synthetic/home", now: () => Date.parse("2026-01-03T00:00:00Z"), transcript: async () => ({ turns, omitted: true }),
-    receipts: async () => ({ pending: [answerNote, other], handled: [askNote], replies: [] }) });
+    receipts: async () => ({ pending: [answerNote, other], handled: [askNote], replies: [reply] }) });
   const history = await relay.history(decision.key, model());
   assert.equal(history.task, "alpha-call");
   assert.deepEqual(history.transcript, { state: "ready", windowed: true });
@@ -182,4 +184,25 @@ test("thread history fails visibly when Firstmate receipts are unavailable", asy
   const response = await fetch(`${base}/api/bearings/thread?key=decision:alpha-call`);
   assert.equal(response.status, 502);
   assert.equal((await response.json()).code, "unavailable");
+});
+
+
+test("Pi primary transcript joins only Firstmate text naming the whole card task", async (context) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "fm-thread-pi-"));
+  context.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "session.jsonl");
+  const line = (role, content) => JSON.stringify({ type: "message", timestamp: "2026-01-02T08:01:00Z", message: { role, content } });
+  await writeFile(file, [
+    line("user", "captain mentions alpha-call"),
+    line("assistant", [{ type: "thinking", thinking: "alpha-call private reasoning" }, { type: "text", text: "Firstmate explains alpha-call: " + "context ".repeat(600) }]),
+    line("assistant", "Unrelated alpha-callback"),
+    line("toolResult", "Tool mentions alpha-call"),
+  ].join("\n") + "\n");
+  const transcript = createTranscriptTurns({ home: "/synthetic/home", discover: async () => ({ sources: [{ file, origin: "pi", source: "primary" }] }) });
+  const relay = createThreadRelay({ home: "/synthetic/home", receipts: empty, transcript });
+  const result = await relay.history(decision.key, model());
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].kind, "chat");
+  assert.equal(result.entries[0].at, "2026-01-02T08:01:00.000Z");
+  assert.ok(result.entries[0].text.length > 4000, "More can reveal long context instead of the old 4000-character cut");
 });
