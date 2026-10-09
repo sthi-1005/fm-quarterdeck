@@ -7,8 +7,8 @@ import path from "node:path";
 
 // Live Captain's Call. Contract: BEARINGS.md. Quarterdeck runs only Firstmate's own
 // bounded bearings projection to build calls. A bounded read of the selected home's
-// backlog adds durable clocks and existing main-home hold reasons only; it never creates
-// calls or writes under FM_HOME.
+// backlog adds durable clocks plus existing main-home titles and hold reasons; it never
+// creates calls or writes under FM_HOME.
 export const MODEL_SCHEMA = "fm-quarterdeck-call.v1";
 const SOURCE_SCHEMA = "fm-bearings.v1";
 const MIN_GAP_FLOOR_MS = 15000;
@@ -96,6 +96,26 @@ export function backlogHoldReasons(text) {
   }
   return reasons;
 }
+// Unchecked item titles. Colon metadata uses the work-view field split. A
+// space-separated (since|done|reported|merged YYYY-MM-DD) date is the same ledger
+// form the clock reader already accepts, so it is not part of the title. Duplicates
+// fail closed. Body prose is never a title.
+export function backlogTitles(text) {
+  const titles = new Map(), seen = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const item = line.match(/^\s*-\s+\[ \]\s+(\S+)\s+-\s+(.+)$/);
+    if (!item || !TASK_ID.test(item[1])) continue;
+    const [, id, fields] = item;
+    if (seen.has(id)) { titles.delete(id); continue; }
+    seen.add(id);
+    const title = fields
+      .replace(/\s+\((?:since|done|reported|merged)\s+\d{4}-\d\d-\d\d\)/gi, "")
+      .split(/\s+\((?:repo|epic|theme|kind|since|done|merged|hold|hold-kind):/i)[0]
+      .trim();
+    if (title) titles.set(id, title);
+  }
+  return titles;
+}
 async function addBacklogEvidence(output, home) {
   let file;
   try {
@@ -107,11 +127,13 @@ async function addBacklogEvidence(output, home) {
     if (bytesRead === buffer.length) return output;
     const raw = JSON.parse(output);
     const text = buffer.subarray(0, bytesRead).toString("utf8");
-    const clocks = backlogClocks(text), reasons = backlogHoldReasons(text);
+    const clocks = backlogClocks(text), reasons = backlogHoldReasons(text), titles = backlogTitles(text);
     if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
       object(row) && row.owner === "(main)" ? {
         ...clocks.get(row.id), ...row,
         ...(typeof row.reason !== "string" && reasons.has(row.id) ? { reason: reasons.get(row.id) } : {}),
+        ...(titles.has(row.id) ? { backlogTitle: titles.get(row.id) } : {}),
+        ...(reasons.has(row.id) ? { backlogReason: reasons.get(row.id) } : {}),
       } : row);
     return JSON.stringify(raw);
   } catch { return output; } finally { await file?.close(); }
@@ -182,7 +204,8 @@ function callSection(raw) {
     const contribution = raw.contributions.captain.find((entry) => object(entry) && entry.task === id && httpsUrl(entry.url));
     // Optional source title/reason retain quoted replies for chat-ask deduplication.
     const title = publicText(row.title, Infinity), reason = publicText(row.reason, Infinity);
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
+    const backlogTitle = publicText(row.backlogTitle, Infinity), backlogReason = publicText(row.backlogReason, Infinity);
+    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), ...(backlogTitle ? { backlogTitle } : {}), ...(backlogReason ? { backlogReason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) ?? null, clock: decisionClock(row), answer: decisionAnswer(row, id) }));
   }
   const merges = new Set();
   for (const row of raw.contributions.captain) {

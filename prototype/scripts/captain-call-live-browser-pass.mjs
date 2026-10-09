@@ -23,15 +23,18 @@ await mkdir(transcriptDir, { recursive: true });
 await writeFile(path.join(home, 'state/.lock-session'), 'synthetic-main\n');
 const transcriptPath = path.join(transcriptDir, 'synthetic-main.jsonl');
 const chatRecord = (uuid, text) => `${JSON.stringify({ type: 'assistant', uuid, timestamp: new Date().toISOString(), message: { role: 'assistant', model: 'synthetic-model', content: [{ type: 'text', text }] } })}\n`;
-await writeFile(transcriptPath, chatRecord('synthetic-ask-one', '**APPROVAL NEEDED:** Publish the sample notes. Reply "publish" or "wait".'));
+await writeFile(transcriptPath, chatRecord('synthetic-ask-one', '**APPROVAL NEEDED:** Publish the sample notes. Reply "publish" or "wait".') + chatRecord('synthetic-ask-link', 'DECISION NEEDED: Also weigh alpha-call before publishing.'));
 const fixturePath = path.join(home, 'snapshot.json');
 let raw = JSON.parse(await readFile(new URL('../test/fixtures/bearings/two-calls.json', import.meta.url), 'utf8'));
 raw.decisions_open[0].updated_at = new Date(Date.now() - 120000).toISOString();
-raw.decisions_open[0].summary = `Choose the example-app release window. ${'The staged release limits exposure while validation continues. '.repeat(8)}Recommended: staged — smaller blast radius. Immediate — faster delivery.`;
+const alphaFull = `Choose the example-app release window. ${'The staged release limits exposure while validation continues. '.repeat(8)}Recommended: staged — smaller blast radius. Immediate — faster delivery.`;
+raw.decisions_open[0].summary = `${alphaFull.slice(0, 96).replace(/\s+$/, '')}…`;
+raw.decisions_open.find(row => row.id === 'gamma-credential').summary = 'Provide the gamma sandbox credential…';
 raw.contributions.captain.find(row => row.task === 'alpha-call').url = 'https://example.invalid/acme/example-app/pull/42';
 raw.contributions.captain.find(row => row.task === 'beta-merge').reason = `Review example-app compatibility. ${'The change is ready for review but older clients need attention. '.repeat(6)}Risk: older clients may require a migration.`;
 await writeFile(fixturePath, JSON.stringify(raw));
-await writeFile(path.join(home, 'data/backlog.md'), '# Synthetic backlog\n');
+const alphaBacklog = () => `# Synthetic backlog ${raw.generated}\n- [ ] alpha-call - ${alphaFull} (repo: example-app)\n`;
+await writeFile(path.join(home, 'data/backlog.md'), alphaBacklog());
 await writeFile(path.join(home, 'data/projects.md'), '- synthetic-repository - Offline fixture\n');
 const script = path.join(home, 'bin/fm-bearings-snapshot.sh');
 await writeFile(script, '#!/bin/sh\ncat "$FM_HOME/snapshot.json"\n');
@@ -87,7 +90,7 @@ const change = async () => {
   raw.generated = new Date().toISOString();
   await writeFile(fixturePath, JSON.stringify(raw));
   // Exercise the filtered watch trigger (not a private record parser or manual API).
-  await writeFile(path.join(home, 'data/backlog.md'), `# Synthetic backlog ${raw.generated}\n`);
+  await writeFile(path.join(home, 'data/backlog.md'), alphaBacklog());
 };
 const server = createServer({ FM_HOME: home, CLAUDE_CONFIG_DIR: config, FM_BEARINGS_MIN_GAP_MS: '15000', FM_QUARTERDECK_STATE_PATH: path.join(temp, 'presentation.json') }, {
   quotaReader: async () => ({ providers: [], stale: false, error: 'Offline fixture' }),
@@ -100,7 +103,7 @@ try {
   const port = await waitForBrowserPort(chrome, profile, { spawnError: () => spawnError, diagnostics: () => diagnostics });
   env.CHROME_DEVTOOLS_AXI_BROWSER_URL = `http://127.0.0.1:${port}`;
   await browser('newpage', `http://127.0.0.1:${server.address().port}/#overview`);
-  await until("document.querySelectorAll('[data-call-key]').length===4 && document.querySelectorAll('#summary .metric-card').length===3");
+  await until("document.querySelectorAll('[data-call-key]').length===4 && document.querySelectorAll('#summary .metric-card').length===3 && document.querySelector('[data-call-key=\"decision:alpha-call\"]').innerText.includes('Also asked in chat')");
   // Transcript cards load and stream without a snapshot write or an AI call.
   for (const scheme of ['light', 'dark']) {
     await browser('emulate', '--color-scheme', scheme);
@@ -108,6 +111,8 @@ try {
       await browser('resize', String(width), '844');
       await evaluate(`() => { const c=document.querySelector('[data-call-type="chat"]'); c.scrollIntoView({block:'center'}); if(!c.innerText.includes('Approval · Chat ask')||c.querySelectorAll('input[type=radio]').length!==2||document.documentElement.scrollWidth>innerWidth||c.scrollWidth>c.clientWidth+1||getComputedStyle(c).borderLeftStyle!=='double')throw Error('chat card identity or geometry'); for(const b of c.querySelectorAll('button')){if(b.getBoundingClientRect().height && b.getBoundingClientRect().height<44)throw Error('chat touch target');} return {chat:true,width:innerWidth,scheme:'${scheme}'}; }`);
       await browser('screenshot', path.join(proof, `captain-chat-${scheme}-${width}.png`));
+      await evaluate(`() => { const decision=document.querySelector('[data-call-key="decision:alpha-call"]'); const chat=document.querySelector('[data-call-type="chat"]'); const d=decision.getBoundingClientRect(); const c=chat.getBoundingClientRect(); if(Math.abs(d.left-c.left)>2||Math.abs(d.width-c.width)>2||getComputedStyle(decision).borderLeftWidth!==getComputedStyle(chat).borderLeftWidth)throw Error('chat card does not share the decision card edge'); const row=decision.querySelector('.call-context-ask'); const dt=row.querySelector('dt').getBoundingClientRect(); const dd=row.querySelector('dd').getBoundingClientRect(); if(dd.left>d.left+28||dt.bottom>dd.top+1||document.documentElement.scrollWidth>innerWidth||decision.scrollWidth>decision.clientWidth+1)throw Error('also asked indents the card'); if(decision.querySelector('h3').textContent.includes('…'))throw Error('alpha headline stayed shortened'); return {askLayout:true,width:innerWidth}; }`);
+      if (scheme === 'light' && (width === 1280 || width === 390)) await browser('screenshot', path.join(proof, `captain-ask-layout-${width}.png`));
     }
   }
   await browser('emulate', '--color-scheme', 'light');
@@ -136,6 +141,31 @@ try {
     await browser('screenshot', path.join(proof, `captain-call-rich-${width}.png`));
     await evaluate(`() => { const columns=document.querySelector('#overview-columns'); const primary=document.querySelector('#overview-primary'); const secondary=document.querySelector('#overview-secondary'); const summary=document.querySelector('#summary'); if(!columns||!primary||!secondary||secondary.textContent.trim()||!primary.contains(document.querySelector('#captain-call')))throw Error('overview columns'); if(innerWidth<=720){ if(secondary.getClientRects().length!==0)throw Error('secondary takes phone space'); } else { const p=primary.getBoundingClientRect(); const s=secondary.getBoundingClientRect(); if(s.width<40||Math.abs(p.width-s.width)>2||s.left<p.right-1)throw Error('secondary is not beside the first column'); if(getComputedStyle(columns).columnGap!=='22px')throw Error('column gap'); if(summary.getBoundingClientRect().bottom>p.top+1)throw Error('summary is not above the columns'); } return {overviewColumns:true,width:innerWidth}; }`);
   }
+  const attemptsBefore = await readFile(path.join(home, 'answer-attempts'), 'utf8').catch(() => '');
+  const backlogBefore = await readFile(path.join(home, 'data/backlog.md'), 'utf8');
+  for (const width of [1280, 390]) {
+    await browser('resize', String(width), '844');
+    await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); card.scrollIntoView({block:'center'}); const text=card.querySelector('[data-call-text-toggle]'); const panel=card.querySelector('[data-call-full]'); if(!text||!panel)throw Error('shortened headline is not tappable'); if(panel.hidden)text.click(); if(panel.hidden||!panel.textContent.includes('full text Quarterdeck received'))throw Error('full text panel'); const toggle=card.querySelector('[data-call-procrastinate-toggle]'); if(toggle.getBoundingClientRect().height<44)throw Error('procrastinate target'); toggle.click(); const menu=card.querySelector('[data-call-procrastinate-menu]'); if(menu.hidden)throw Error('menu closed'); for (const label of ['3h','6h','1d','3d']) if(!menu.querySelector('[data-call-procrastinate-for="'+label+'"]'))throw Error('missing '+label); if(document.documentElement.scrollWidth>innerWidth||card.scrollWidth>card.clientWidth+1)throw Error('menu overflow'); return 'procrastinate menu'; }`);
+    await browser('screenshot', path.join(proof, `captain-procrastinate-menu-${width}.png`));
+    await evaluate(`() => { document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-procrastinate-for="3h"]').click(); return 'parked 3h'; }`);
+    await until(`document.querySelector('[data-call-key="decision:gamma-credential"]').hidden && document.querySelector('#call-procrastinated-toggle').textContent==='Procrastinated (1)'`);
+    await evaluate(`() => { document.querySelector('#call-procrastinated-toggle').click(); return 'opened backlog'; }`);
+    await until(`!document.querySelector('[data-call-key="decision:gamma-credential"]').hidden && /Returns /.test(document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-procrastinate-until]').textContent)`);
+    await browser('screenshot', path.join(proof, `captain-procrastinated-list-${width}.png`));
+    if (width === 390) {
+      await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); window.procrastinateUntil=card.querySelector('[data-call-procrastinate-until]').textContent; card.querySelector('[data-call-procrastinate-toggle]').click(); card.querySelector('[data-call-procrastinate-for="6h"]').click(); return 'extend 6h'; }`);
+      await until(`document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-procrastinate-until]').textContent!==window.procrastinateUntil && /Returns /.test(document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-procrastinate-until]').textContent)`);
+    }
+    await evaluate(`() => { document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-procrastinate-return]').click(); return 'bring back'; }`);
+    await until(`!document.querySelector('[data-call-key="decision:gamma-credential"]').hidden && !document.querySelector('[data-call-key="decision:gamma-credential"]').hasAttribute('data-call-procrastinated') && document.querySelector('#call-procrastinated-toggle').hidden`);
+    await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:gamma-credential"]'); const panel=card.querySelector('[data-call-full]'); if(panel && !panel.hidden)card.querySelector('[data-call-text-toggle]').click(); return 'text closed'; }`);
+  }
+  assert.equal(await readFile(path.join(home, 'answer-attempts'), 'utf8').catch(() => ''), attemptsBefore, 'procrastinate never answers');
+  assert.equal(await readFile(path.join(home, 'data/backlog.md'), 'utf8'), backlogBefore, 'procrastinate never writes the backlog');
+  const parkedFile = path.join(temp, 'quarterdeck-call-procrastination.json');
+  assert.equal(JSON.parse(await readFile(parkedFile, 'utf8')).until['decision:gamma-credential'], undefined);
+  assert.equal(path.dirname(parkedFile), path.dirname(path.join(temp, 'presentation.json')));
+  assert.equal(path.relative(home, parkedFile).startsWith('..'), true);
   await evaluate(`() => { const alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); const field=alpha.querySelector('[data-call-answer-text]'); window.sortProof={alpha,field}; field.focus(); field.value='Sort-protected draft'; field.dispatchEvent(new Event('input',{bubbles:true})); const sort=document.querySelector('#call-sort'); sort.value='oldest'; sort.dispatchEvent(new Event('change',{bubbles:true})); if(document.querySelector('[data-call-key]')!==alpha||document.querySelector('[data-call-sort-pending]').hidden||!document.querySelector('[data-call-sort-pending]').textContent.includes('Sort waits')||!document.querySelector('#call-status').hidden||document.querySelector('#captain-call').hasAttribute('data-held'))throw Error('sort hold must stay on sort control'); if(!alpha.querySelector('[data-call-clock]').textContent.includes('Updated:')||!alpha.querySelector('[data-call-clock]').textContent.includes('ago')||!document.querySelector('[data-call-key="decision:gamma-credential"] [data-call-clock]').textContent.includes('unknown'))throw Error('card clocks missing'); document.activeElement.blur(); document.body.click(); return 'sort held on phone'; }`);
   await until(`document.querySelector('[data-call-key]').dataset.callKey==='merge:beta-merge'`);
   await evaluate(`() => { const alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); if(alpha!==sortProof.alpha||alpha.querySelector('[data-call-answer-text]')!==sortProof.field||sortProof.field.value!=='Sort-protected draft'||localStorage.getItem('fm-quarterdeck-call-sort.v1')!=='oldest')throw Error('sort lost draft, node or preference'); const sort=document.querySelector('#call-sort'); sort.value='newest'; sort.dispatchEvent(new Event('change',{bubbles:true})); sortProof.field.value=''; sortProof.field.dispatchEvent(new Event('input',{bubbles:true})); const clock=alpha.querySelector('[data-call-clock]'); clock.textContent='waiting for tick'; return 'oldest applied and newest requested'; }`);
@@ -162,14 +192,16 @@ try {
       assert.equal(await readFile(path.join(home, 'answer-note.txt'), 'utf8').catch(() => null), null, 'asking never answers');
     }
     if (width === 390) {
-      await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-thread-log]').textContent.includes('Firstmate replied')`);
-      await evaluate(`() => { const entries=[...document.querySelectorAll('[data-call-key="decision:alpha-call"] .call-thread-entry')]; if(entries.length!==2||!entries[0].textContent.includes('You asked')||!entries[1].textContent.includes('Firstmate replied')||!entries[1].textContent.includes('synthetic release window'))throw Error('thread reply/order missing'); if(!entries.every(e=>e.querySelector('time[datetime]')&&e.querySelector('button')))throw Error('thread time/copy missing'); return 'thread history reply ordered'; }`);
+      await browser('screenshot', path.join(proof, 'captain-thread-collapsed-390.png'));
+      await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const history=card.querySelector('[data-call-thread-history]'); const expand=card.querySelector('[data-call-thread-expand]'); if(!history.hidden||!expand||expand.hidden)throw Error('thread should start collapsed'); expand.click(); if(history.hidden)throw Error('expand did not open the thread'); if(!card.querySelector('[data-call-thread-log]').textContent.includes('Firstmate replied')){ const more=card.querySelector('[data-call-thread-history-toggle]'); if(more&&!more.hidden)more.click(); } const entries=[...card.querySelectorAll('.call-thread-entry')]; if(!entries.some(e=>e.textContent.includes('You asked'))||!entries.some(e=>e.textContent.includes('Firstmate replied')&&e.textContent.includes('synthetic release window')))throw Error('thread reply/order missing'); if(!entries.every(e=>e.querySelector('time[datetime]')&&e.querySelector('button')))throw Error('thread time/copy missing'); return 'thread history reply ordered'; }`);
+      await browser('screenshot', path.join(proof, 'captain-thread-expanded-390.png'));
       await browser('screenshot', path.join(proof, 'captain-thread-replied-390.png'));
     }
     if (width === 1280) {
       await writeFile(path.join(home, 'thread-replied'), 'yes');
       await until(`document.querySelector('[data-call-key="decision:alpha-call"] [data-call-thread-count]').textContent.includes('1 new reply')`);
-      await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const count=card.querySelector('[data-call-thread-count]').textContent; const replies=card.querySelector('[data-call-thread-replies]').textContent; if(!count.includes('1 new reply')||!replies.includes('1 new reply'))throw Error('new reply marker missing'); return 'thread reply marker'; }`);
+      await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:alpha-call"]'); const count=card.querySelector('[data-call-thread-count]').textContent; const replies=card.querySelector('[data-call-thread-replies]').textContent; const history=card.querySelector('[data-call-thread-history]'); if(!count.includes('1 new reply')||!replies.includes('1 new reply')||!history.hidden)throw Error('new reply marker missing'); return 'thread reply marker'; }`);
+      await browser('screenshot', path.join(proof, 'captain-thread-collapsed-1280.png'));
     }
   }
   await browser('resize', '1280', '844');

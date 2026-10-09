@@ -4,7 +4,7 @@ import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import { backlogClocks, decisionClock, normalizeSnapshot, createSnapshotRunner } from '../bearings.js';
+import { backlogClocks, backlogTitles, decisionClock, normalizeSnapshot, createSnapshotRunner } from '../bearings.js';
 const window = {};
 for (const name of ['bearings-view', 'bearings-patch']) vm.runInNewContext(await readFile(new URL(`../public/${name}.js`, import.meta.url), 'utf8'), { window, URL });
 const raw = { schema: 'fm-bearings.v1', decisions_open: [{ id: 'alpha', owner: '(main)', summary: 'Pick a window' }], contributions: { captain: [], known: 0, checked: 0, proven_clear: false }, omitted: [] };
@@ -28,7 +28,38 @@ test('snapshot runner supplements only selected-home main cards without mutating
     await writeFile(path.join(home, 'bin/fm-bearings-snapshot.sh'), `#!/bin/sh\nprintf '%s' '${JSON.stringify({ ...raw, decisions_open: [...raw.decisions_open, { id: 'beta', owner: 'other', summary: 'Choose' }] })}'\n`, { mode: 0o755 });
     const content = normalizeSnapshot(JSON.parse(await createSnapshotRunner(home)()));
     assert.equal(content.cards[0].clock.at, '2026-01-02T03:04:05.000Z');
+    assert.equal(content.cards[0].summary, 'Pick a window');
+    assert.equal(content.cards[0].backlogTitle, 'Pick a window');
     assert.equal(content.cards[1].clock.at, null);
+    assert.equal(content.cards[1].backlogTitle, undefined, 'another owner is not supplemented');
+    assert.equal(await readFile(path.join(home, 'data/backlog.md'), 'utf8'), ledger);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test('main-home title and hold reason supplement a shortened ask without replacing its summary or a source reason', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'call-title-'));
+  try {
+    await mkdir(path.join(home, 'bin')); await mkdir(path.join(home, 'data'));
+    const title = 'Pick a window and keep the rest of the recorded ask';
+    const reason = 'Pick a window and keep the hold reason';
+    const encoded = Buffer.from(reason).toString('base64');
+    const ledger = `## In Flight\n- [ ] alpha - ${title} (hold: fm-hold-v1:${encoded}) (hold-kind: captain)\n- [ ] twin - First title\n- [ ] twin - Second title\n`;
+    const snapshot = { ...raw, decisions_open: [
+      { id: 'alpha', owner: '(main)', summary: 'Pick a window…', reason: 'Upstream reason wins' },
+      { id: 'twin', owner: '(main)', summary: 'Twin…' },
+      { id: 'beta', owner: 'other', summary: 'Choose…' },
+    ] };
+    await writeFile(path.join(home, 'data/backlog.md'), ledger);
+    await writeFile(path.join(home, 'bin/fm-bearings-snapshot.sh'), `#!/bin/sh\nprintf '%s' '${JSON.stringify(snapshot)}'\n`, { mode: 0o755 });
+    const content = normalizeSnapshot(JSON.parse(await createSnapshotRunner(home)()));
+    const alpha = content.cards.find((card) => card.task === 'alpha');
+    assert.equal(alpha.summary, 'Pick a window…');
+    assert.equal(alpha.reason, 'Upstream reason wins');
+    assert.equal(alpha.backlogTitle, title);
+    assert.equal(alpha.backlogReason, reason);
+    assert.equal(content.cards.find((card) => card.task === 'twin').backlogTitle, undefined, 'duplicate ids fail closed');
+    assert.equal(content.cards.find((card) => card.task === 'beta').backlogTitle, undefined);
+    assert.equal(backlogTitles(ledger).has('twin'), false);
     assert.equal(await readFile(path.join(home, 'data/backlog.md'), 'utf8'), ledger);
   } finally { await rm(home, { recursive: true, force: true }); }
 });

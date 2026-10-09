@@ -86,7 +86,8 @@ An **About** row carries repository, owner, and contribution kind when present.
 Free text remains path-redacted and is never shortened by Quarterdeck: the server serves all of it, and the card shows every character it received (see Long text).
 A decision retains a safe HTTPS link from a contribution with the exact same task, while still suppressing that duplicate merge card.
 All displayed links come from snapshot contribution rows; no URL is guessed.
-Chat asks keep the double left border, and their title is the ask text.
+Chat asks keep a double left border at the same 2px width as other cards, so the mark does not narrow the card. Their title is the ask text.
+**Also asked in chat** is its own stacked row, so that label does not widen the context column or indent the card.
 
 Unlike `fm-bearings-board.v1`, the current snapshot does not provide structured `title`, `about`, `decide`, `options[{value,label,hint}]`, `recommend_value` or merge `risk`. Quarterdeck therefore does not compose decision options or mark a recommendation, infer checks-green from contribution kind, or rate risk. Merge cards explicitly say risk is not provided. The full source ask or reason, shown as the card title, is the fallback (including guarded main-home reason supplementation for legacy snapshots). The About row is source metadata, not an invented work description.
 
@@ -98,12 +99,20 @@ The card title is the full decision ask or merge reason.
 There is no line clamp and no **More details** control.
 Titles, options, links and task ids wrap, on desktop and on a phone, so an ellipsis never hides text that cannot be read.
 The task id is always visible (`Task` and the id).
-When Firstmate's snapshot itself shortened the text, it ends in `…` (decision summaries are cut at about 90 characters upstream).
-The card then says so beside the task id and names that id to ask about in chat.
+When Firstmate's snapshot itself shortened the text, it ends in `…` or `...` (decision summaries are cut at about 90 characters upstream).
 Quarterdeck shows everything it received.
-It never reconstructs the summary from backlog prose.
-An existing main-home hold's reason may be supplemented from its versioned field as described above.
-The full text of a source-shortened ask needs an upstream snapshot field; see "Upstream data gap".
+It never invents the missing words and never reconstructs an ask from backlog prose.
+For a `(main)` decision, the selected home's unchecked backlog title and versioned captain-hold reason are read-only supplements.
+The title is the item text before colon metadata (`repo`, `hold`, `hold-kind`, and the other work-view fields) and before a space-separated `(since YYYY-MM-DD)`, `(done YYYY-MM-DD)`, `(reported YYYY-MM-DD)`, or `(merged YYYY-MM-DD)` date.
+A longer recorded string replaces the shortened headline only when, after whitespace is collapsed, it starts with that headline minus the trailing ellipsis.
+The longest such continuation wins.
+The snapshot `summary` stays the card's identity field.
+An existing main-home hold's reason still fills a missing `reason`, and a source `reason` wins when the snapshot already has one.
+`backlogTitle` and `backlogReason` are kept either way so a shortened snapshot field can be compared with them.
+If the headline is still shortened, it is a button (`[data-call-text-toggle]`) that opens the other recorded strings for that card: backlog title, hold reason, recorded title, recorded reason, and recorded ask.
+When none of those differ, the panel says this is the full text Quarterdeck received.
+That open or closed choice is memory for the tab only.
+The card still says, beside the task id, that the snapshot shortened the text and names that id.
 `public/bearings-overflow.js` stays loaded and does nothing while no `[data-call-more]` control is present.
 
 ## Answers
@@ -192,6 +201,30 @@ Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N
 
 `answered-calls.js` classifies open cards from the existing inbox's pending/handled `quarterdeck-call:` notes and their validated `fm-bearings-answer.v1` envelopes (schema, channel, type and exact question/intake key). The selected home's receipts are read at most once per 15 seconds while the call source refreshes; a failed read retains previous evidence. The sending tab also uses its accepted answer state immediately, including across reload. A presentation revision change does not confirm the call or make a sent answer unsent. Reply or receipt intake status is **not confirmation**: Firstmate confirms by removing the call from bearings. Gone calls disappear from both groups; the existing unsent-text stub protection still applies. Chat-only cards retain their existing accepted-answer resolution behavior.
 
+## Procrastinated calls
+
+**Procrastinate** on each live card opens a menu of 3 hours, 6 hours, 1 day and 3 days.
+Choosing one hides that card from the active list until that time, then the card returns on its own while the page is open, and on the next load after the time has passed.
+This is a Quarterdeck viewing status in `quarterdeck-call-procrastination.json`, beside `FM_QUARTERDECK_STATE_PATH`.
+It is never written under `FM_HOME`, never an answer, and never an inbox note.
+**Procrastinated (N)** sits next to **Show answered calls**.
+It lists those cards with the local time each returns, **Bring back now**, and the same menu.
+Extending adds the chosen length to a return time that is still in the future; otherwise it starts from now.
+An answered card stays in the answered group, and its Procrastinate control is hidden.
+A call Firstmate drops disappears even when its time has not passed.
+The list defaults closed, keeps the card nodes, and works on desktop and on a phone.
+
+**`GET /api/bearings/procrastinate`** and **`POST /api/bearings/procrastinate`** are host only (404 through a preview path).
+GET returns `{schema:"fm-quarterdeck-call-procrastination.v1", until:{<card key>: <ISO time>}}` after dropping expired times.
+Once the call model is `ready` or `stale`, it also drops keys that are no longer open.
+POST is same-origin JSON with no query and a body of at most 1 KiB.
+The body is exactly `{key, duration}` with duration `3h`, `6h`, `1d` or `3d`, or exactly `{key, clear:true}`.
+Anything else is 400.
+The served revision must still match (409 `revision`).
+An unknown or closed key is 409 `gone`.
+A successful post returns the same `{schema, until}` map.
+Saving a busy or invalid file is 503.
+
 ## Card threads
 
 The one text box opens a thread scoped to one card when no option is selected.
@@ -208,15 +241,19 @@ There is no model call: Quarterdeck relays the captain's note and joins existing
   An unconfirmed send (network or `5xx`) shows **Retry send**, which reuses the same request id.
   A `4xx` shows the server's reason and unlocks the box.
   Editing and re-queueing after an attempted send keep that request id.
-  History sits under the box in `[data-call-thread-history]`.
-  Its heading reads `Thread · N`, and `Thread · N · K new reply` (or `replies`) while later replies are unread.
+  History stays collapsed.
+  The expand control (`[data-call-thread-expand]`) is shown only when the card has two or more entries, because one entry repeats the card.
+  Its label reads `Thread · N`, and `Thread · N · K new reply` (or `replies`) while later replies are unread.
+  Opening it shows `[data-call-thread-history]` for that card.
+  The open choice is remembered for the tab only and is not stored.
+  The send notice stays outside the history, so it remains visible when the log is hidden.
   Every present card reads its history on arrival and keeps reading every 15 s while the page is visible and the card is present.
-  That exchange is the newest message, plus the one before it when the two sides differ.
+  While open, the exchange is the newest message, plus the one before it when the two sides differ.
   Earlier messages are counted on the card, and **Show N earlier messages** expands the same log to everything loaded; **Show latest only** returns to the exchange.
   That control does not open a composer.
   There is no second composer, no `data-call-draft="thread"`, and no separate Ask control.
   The first read marks replies already loaded as seen, so only later replies count as new.
-  Clicking the history or its expand control marks the loaded replies read.
+  Opening the thread, or clicking the history, marks the loaded replies read.
   A polite status announces the new replies.
   Reply counts are tab-local, not a Firstmate acknowledgement.
   Thread history state is memory for the tab.

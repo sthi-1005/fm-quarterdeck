@@ -64,6 +64,10 @@ test("a card shows the latest exchange under the box, with a count, and keeps wa
   assert.equal(t.node().querySelector("[data-call-thread-text]"), null);
   assert.equal(t.fetches.length, 1, "the card reads its history without a separate composer");
   assert.equal(t.fetches[0].url, `/api/bearings/thread?key=${encodeURIComponent(KEY)}`);
+  assert.equal(t.part("expand").hidden, false);
+  assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, true, "history stays collapsed until expanded");
+  assert.equal(t.part("log").children.length, 0);
+  t.part("expand").click();
   assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, false);
   assert.deepEqual([...t.part("log").children].map((entry) => entry.querySelector("strong").textContent), ["You asked", "Firstmate replied"]);
   assert.match(t.part("earlier").textContent, /1 earlier message/);
@@ -80,6 +84,7 @@ test("a card shows the latest exchange under the box, with a count, and keeps wa
   // The thread survives Firstmate's next snapshot refilling the card.
   t.patcher.update(model([decision("a2")]));
   assert.equal(t.part("count").textContent, "Thread · 3");
+  assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, false, "expanded state survives a refill in this tab");
   assert.equal(t.part("log").children.length, 2);
 
   t.timers.advance(15000);
@@ -95,11 +100,14 @@ test("a confirmed thread note reloads history and shows the receipt notice", asy
   t.patcher.update(model([decision()]));
   await flush();
   assert.equal(t.fetches.length, 1, "history loads before any note is sent");
+  assert.equal(t.part("expand").hidden, true);
   t.threads.noteSent(KEY);
   await flush();
-  assert.match(t.part("status").textContent, /Question sent to Firstmate/);
-  assert.equal(t.part("log").children.length, 1, "the history reloads after a confirmed send");
-  assert.match(t.part("log").textContent, /waiting for Firstmate/);
+  assert.match(t.part("notice").textContent, /Question sent to Firstmate/);
+  assert.equal(t.part("notice").hidden, false, "the send notice stays visible");
+  assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, true, "one entry does not duplicate the card");
+  assert.equal(t.part("expand").hidden, true);
+  assert.equal(t.part("log").children.length, 0);
 });
 
 test("a call that left forgets its thread", async () => {
@@ -119,6 +127,7 @@ test("a later reply is counted until the history is acknowledged", async () => {
   await flush();
   t.timers.advance(15000);
   await flush();
+  assert.equal(t.part("expand").hidden, true, "one entry does not offer a thread");
   assert.match(t.part("count").textContent, /Thread · 1 · 1 new reply/);
   assert.equal(t.part("replies").getAttribute("role"), "status");
   assert.match(t.part("replies").textContent, /1 new reply from Firstmate/);
@@ -133,10 +142,14 @@ test("a later reply is counted until the history is acknowledged", async () => {
 
 test("long entries stay fully readable and copy fails visibly", async () => {
   const text = "Synthetic context ".repeat(300);
-  const t = setup({ responses: [history([{ kind: "chat", from: "firstmate", at: "2026-01-02T11:00:00Z", text }])] });
+  const t = setup({ responses: [history([
+    { kind: "ask", from: "captain", at: "2026-01-02T10:00:00Z", text: "Earlier question" },
+    { kind: "chat", from: "firstmate", at: "2026-01-02T11:00:00Z", text },
+  ])] });
   t.patcher.update(model([decision()]));
   await flush();
-  const entry = t.part("log").children[0];
+  t.part("expand").click();
+  const entry = [...t.part("log").children].find((item) => item.querySelector(".call-thread-text").textContent === text);
   assert.equal(entry.querySelector(".call-thread-text").textContent, text);
   assert.equal(entry.querySelectorAll("button").length, 1);
   assert.match(entry.querySelector("time").textContent, /ago/);

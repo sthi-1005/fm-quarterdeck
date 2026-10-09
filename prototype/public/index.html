@@ -165,6 +165,7 @@
               <section id="captain-call" aria-labelledby="call-heading">
                 <h2 id="call-heading" class="section-heading">Captain's Call <span class="call-read-only">Live · answers need your confirmation</span></h2>
                 <button type="button" id="call-answered-toggle" aria-expanded="false" aria-controls="call-cards" hidden>Show answered calls (0)</button>
+                <button type="button" id="call-procrastinated-toggle" aria-expanded="false" aria-controls="call-cards" hidden>Procrastinated (0)</button>
                 <label class="call-sort">Sort calls <select id="call-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
                 <div id="call-status" class="call-status" role="status" hidden></div>
                 <div id="call-cards" class="call-cards"><p class="call-empty" data-call-empty>Checking for Captain's Calls…</p></div>
@@ -314,6 +315,7 @@
     <script src="/bearings-overflow.js"></script>
     <script src="/bearings-dismiss.js"></script>
     <script src="/bearings-thread-panel.js"></script>
+    <script src="/bearings-procrastinate.js"></script>
     <script src="/bearings-live.js"></script>
     <script type="module" src="/app.js"></script>
     <script src="/review-target.js"></script>

@@ -54,6 +54,18 @@ test('long text stays in the title; Firstmate shortening is disclosed beside the
   assert.doesNotMatch(whole, /data-call-truncated|snapshot shortened/);
   assert.match(whole, /class="call-id">Task <code>alpha-call<\/code>/);
   assert.notEqual(view.idFor('decision:a.b'), view.idFor('decision:a-b'), 'ids stay distinct when keys sanitize alike');
+  assert.match(html, /data-call-text-toggle[\s\S]*This is the full text Quarterdeck received/);
+  assert.match(html, /data-call-procrastinate-for="3h"[\s\S]*data-call-procrastinate-for="6h"[\s\S]*data-call-procrastinate-for="1d"[\s\S]*data-call-procrastinate-for="3d"/);
+  assert.match(html, /Bring back now/);
+  assert.match(view.cardHtml({ type: 'decision', summary: 'Pick the window...' }), /data-call-truncated/);
+  const full = 'Pick the alpha rollout window: staged or immediate, with the rest of the recorded ask';
+  const continued = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick the alpha rollout window: staged…', backlogTitle: full });
+  assert.ok(continued.includes(`<h3 id="call-decide-${view.idFor('decision:alpha-call')}">${full}</h3>`));
+  assert.doesNotMatch(continued, /data-call-truncated|snapshot shortened|data-call-text-toggle/);
+  const other = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick the window…', reason: 'A different recorded reason' });
+  assert.match(other, /data-call-text-toggle[\s\S]*Pick the window…/);
+  assert.match(other, /Recorded reason[\s\S]*A different recorded reason/);
+  assert.doesNotMatch(other, /<h3[^>]*>A different recorded reason/);
 });
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
   const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
@@ -125,6 +137,7 @@ test('chat cards escape asks, marker evidence and up to three reply choices', ()
 });
 test('linked asks render within the hold and disclose escaped reply alternatives', () => {
   const html = view.cardHtml({ type: 'decision', summary: 'Choose', chatAsks: [{ summary: '<one>', replies: ['<yes>', 'no'] }, { summary: 'Second & ask', replies: [] }] });
+  assert.match(html, /call-context-row call-context-ask/);
   assert.match(html, /Also asked in chat/);
   assert.match(html, /&lt;one&gt; · reply “&lt;yes&gt;” or “no”<br>Second &amp; ask · reply No quoted reply/);
   assert.doesNotMatch(html, /<one>|<yes>|data-call-dismiss/);

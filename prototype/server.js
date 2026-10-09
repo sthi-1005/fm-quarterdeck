@@ -16,6 +16,7 @@ import { compactLanes } from "./lane-payload.js";
 import { readSupervisionOutcomes } from "./supervision.js";
 import { createQuotaReader } from "./quota.js";
 import { createBearingsHub } from "./bearings.js";
+import { createProcrastinationStore, procrastinationKey } from "./call-procrastination.js";
 import { chatAskKey, chatAsksPath, createCallSource, createChatAskScanner } from "./chat-asks.js";
 import { AnswerRefused, MAX_BODY_BYTES as MAX_ANSWER_BODY_BYTES, createAnswerRelay } from "./bearings-answer.js";
 import { MAX_THREAD_BODY_BYTES, ThreadRefused, createThreadRelay, createTranscriptTurns } from "./bearings-thread.js";
@@ -73,6 +74,7 @@ const STATIC_FILES = new Map([
   ["/bearings-overflow.js", ["bearings-overflow.js", "text/javascript; charset=utf-8"]],
   ["/bearings-dismiss.js", ["bearings-dismiss.js", "text/javascript; charset=utf-8"]],
   ["/bearings-thread-panel.js", ["bearings-thread-panel.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-procrastinate.js", ["bearings-procrastinate.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -953,7 +955,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createCallSource({ home: env.FM_HOME, hub: createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), chat: createChatAskScanner({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env), statePath: chatAsksPath(configuredStatePath(env)) }) }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), threadRelay = createThreadRelay({ home: env.FM_HOME, transcript: createTranscriptTurns({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env) }) }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createCallSource({ home: env.FM_HOME, hub: createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), chat: createChatAskScanner({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env), statePath: chatAsksPath(configuredStatePath(env)) }) }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), threadRelay = createThreadRelay({ home: env.FM_HOME, transcript: createTranscriptTurns({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env) }) }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options), procrastination = createProcrastinationStore(env) } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -997,7 +999,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     return (/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) && origin === `http://${host}`) ||
       Boolean(allowedReviewOrigin && host === allowedReviewOrigin.slice("https://".length) && origin === allowedReviewOrigin);
   };
-  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/bearings-thread-panel.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/bearings-thread-panel.js", "/bearings-procrastinate.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
   // Live Captain's Call streams (host only; previews poll /api/bearings?since).
   const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
   const streams = new Set();
@@ -1335,6 +1337,37 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         try { await bearingsSource.resolveChat(body.key, "dismissed"); }
         catch { await sendJson(request, response, 503, { error: "Quarterdeck could not record the dismissal; try again", code: "unrecorded" }); return; }
         await sendJson(request, response, 200, { state: "dismissed", key: body.key });
+        return;
+      }
+      // Procrastinate (BEARINGS.md "Procrastinated calls"): Quarterdeck viewing state only, never an answer.
+      if (url.pathname === "/api/bearings/procrastinate" && request.method === "GET") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        const current = bearingsSource.current?.() || {};
+        const openKeys = current.state === "ready" || current.state === "stale"
+          ? new Set((current.cards || []).map((card) => card.key)) : null;
+        try { await sendJson(request, response, 200, await procrastination.view(openKeys)); }
+        catch { await sendJson(request, response, 503, { error: "Procrastination state unavailable" }); }
+        return;
+      }
+      if (url.pathname === "/api/bearings/procrastinate" && request.method === "POST") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        if (!authorized(request)) { await sendJson(request, response, 403, { error: "Unauthorized origin", code: "origin" }); return; }
+        if (url.search || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 415, { error: "JSON required", code: "invalid" }); return; }
+        let text = "";
+        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > 1024) { await sendJson(request, response, 413, { error: "Request too large", code: "too-long" }); return; } }
+        let body = null;
+        try { body = JSON.parse(text); } catch {}
+        const fields = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).sort().join(",") : "";
+        const durationOk = fields === "duration,key" && procrastinationKey(body.key) && ["3h", "6h", "1d", "3d"].includes(body.duration);
+        const clearOk = fields === "clear,key" && body.clear === true && procrastinationKey(body.key);
+        if (!durationOk && !clearOk) { await sendJson(request, response, 400, { error: "Procrastinate must name a call and a duration or a clear", code: "invalid" }); return; }
+        if (await syncRevision(true) !== commit) { await sendJson(request, response, 409, { error: "Quarterdeck updated; reload to continue", code: "revision" }); return; }
+        const card = (bearingsSource.current()?.cards || []).find((entry) => entry.key === body.key);
+        if (!card) { await sendJson(request, response, 409, { error: "This call is no longer open", code: "gone" }); return; }
+        try {
+          const next = durationOk ? await procrastination.set(body.key, body.duration) : await procrastination.clear(body.key);
+          await sendJson(request, response, 200, next);
+        } catch { await sendJson(request, response, 503, { error: "Quarterdeck could not record procrastination; try again" }); }
         return;
       }
       // Card threads (BEARINGS.md "Card threads"): an explicit captain question about one card,

@@ -1,6 +1,6 @@
-// Card threads (BEARINGS.md "Card threads"). Each present card reads its history so the
-// latest exchange sits under the one box. A question is the answer controller's thread path;
-// this panel reloads that history and counts new replies. Typing stays on the one box.
+// Card threads (BEARINGS.md "Card threads"). History stays collapsed until the captain
+// expands a card with two or more entries. A lone entry is not shown. A question is the
+// answer controller's thread path; this panel reloads that history and counts new replies.
 window.bearingsThread = (() => {
   const STATE_PREFIX = "fm-quarterdeck-call-thread.v1:";
   const MAX_QUESTION_BYTES = 2000;
@@ -107,9 +107,16 @@ window.bearingsThread = (() => {
       }
       const entries = state.entries || [];
       const exchange = latestExchange(entries);
-      const shown = state.historyOpen ? entries : exchange;
+      const expandable = entries.length >= 2;
+      const open = expandable && state.threadOpen === true;
+      const shown = open ? (state.historyOpen ? entries : exchange) : [];
       const earlier = entries.length - exchange.length;
-      history.hidden = entries.length === 0;
+      history.hidden = !open;
+      const expand = part(node, "expand");
+      if (expand) {
+        expand.hidden = !expandable;
+        expand.setAttribute("aria-expanded", String(open));
+      }
       const log = part(node, "log");
       if (log) {
         const signature = JSON.stringify({ historyOpen: Boolean(state.historyOpen), entries: shown });
@@ -197,6 +204,14 @@ window.bearingsThread = (() => {
       const target = event.target;
       const key = keyOf(target?.closest?.("[data-call-key]"));
       if (!key) return;
+      if (target.closest("[data-call-thread-expand]")) {
+        event.preventDefault?.();
+        const state = stateOf(key);
+        state.threadOpen = !state.threadOpen;
+        if (state.threadOpen) markRead(state);
+        rerender(key);
+        return;
+      }
       if (target.closest("[data-call-thread-history-toggle]")) {
         event.preventDefault?.();
         const state = stateOf(key);

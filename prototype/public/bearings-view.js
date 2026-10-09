@@ -25,8 +25,37 @@ window.bearingsView = (() => {
     for (const char of String(key)) hash = ((hash * 33) ^ char.codePointAt(0)) >>> 0;
     return `${String(key).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 48)}-${hash.toString(36)}`;
   }
-  // Firstmate's snapshot shortens long text itself and marks the cut with "…".
-  const sourceShortened = (text) => typeof text === "string" && /…$/.test(text.trim());
+  // Firstmate's snapshot shortens long text itself and marks the cut with "…" or "...".
+  const sourceShortened = (text) => typeof text === "string" && /(?:…|\.{3,})\s*$/.test(text.trim());
+  const collapsed = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+  // A recorded string continues a shortened headline only when it starts with that cut.
+  const continues = (shortened, full) => {
+    if (!sourceShortened(shortened) || typeof full !== "string") return false;
+    const cut = collapsed(shortened).replace(/(?:…|\.{3,})\s*$/, "").trim();
+    const whole = collapsed(full);
+    return Boolean(cut) && whole.length > collapsed(shortened).length && whole.startsWith(cut);
+  };
+  const fullest = (primary, extras) => {
+    let best = primary;
+    if (!sourceShortened(primary)) return best;
+    for (const text of extras) if (continues(primary, text) && collapsed(text).length > collapsed(best).length) best = text;
+    return best;
+  };
+  const RECORDED = [["backlogTitle", "Backlog title"], ["backlogReason", "Hold reason"], ["title", "Recorded title"], ["reason", "Recorded reason"], ["summary", "Recorded ask"]];
+  function headlineHtml(id, text, card) {
+    const extras = RECORDED.map(([field]) => card[field]);
+    const shown = fullest(text, extras);
+    if (!sourceShortened(shown)) return `<h3 id="call-decide-${id}">${escape(shown)}</h3>`;
+    const others = RECORDED.filter(([field]) => typeof card[field] === "string" && collapsed(card[field]) && collapsed(card[field]) !== collapsed(shown));
+    const body = others.length
+      ? others.map(([field, label]) => `<p><span class="call-meta">${escape(label)}</span><br>${escape(card[field])}</p>`).join("")
+      : `<p>This is the full text Quarterdeck received.</p>`;
+    return `<h3 id="call-decide-${id}" data-call-truncated><button type="button" class="call-text-toggle" data-call-text-toggle aria-expanded="false" aria-controls="call-full-${id}">${escape(shown)}</button></h3><div class="call-full" id="call-full-${id}" data-call-full hidden>${body}</div>`;
+  }
+  function procrastinateHtml(id) {
+    const item = (duration) => `<button type="button" role="menuitem" data-call-procrastinate-for="${duration}">${duration}</button>`;
+    return `<div class="call-procrastinate" data-call-procrastinate><button type="button" data-call-procrastinate-toggle aria-expanded="false" aria-controls="call-procrastinate-${id}">Procrastinate</button><div class="call-procrastinate-menu" id="call-procrastinate-${id}" data-call-procrastinate-menu role="menu" hidden>${["3h", "6h", "1d", "3d"].map(item).join("")}</div><p class="call-meta" data-call-procrastinate-until hidden></p><button type="button" data-call-procrastinate-return hidden>Bring back now</button><p class="call-answer-error" data-call-procrastinate-error role="alert" hidden></p></div>`;
+  }
   // Suggested replies from chat asks linked to a filed call: offered as radios, relayed as
   // the captain's own words (never as a keyed option value), so intake is unchanged.
   function linkedReplies(card, options) {
@@ -75,15 +104,13 @@ window.bearingsView = (() => {
     const body = choices ? `<div class="call-opts">${optionHtml}</div>` : `<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above.</p>`;
     return answerForm(card, label, body);
   }
-  // History sits under the one box. The thread controller fills the log and the entry count.
-  const threadHistoryHtml = (id) => `<span class="call-meta sr-only" data-call-thread-replies role="status" aria-live="polite"></span><section class="call-thread-history" id="call-thread-history-${id}" data-call-thread-history hidden>
-      <h4 data-call-thread-count>Thread</h4>
+  // History stays collapsed. The notice stays outside so a lone entry can still say a question was sent.
+  const threadHistoryHtml = (id) => `<span class="call-meta sr-only" data-call-thread-replies role="status" aria-live="polite"></span><button type="button" class="call-thread-expand" data-call-thread-expand aria-expanded="false" aria-controls="call-thread-history-${id}" hidden><span data-call-thread-count>Thread</span></button><section class="call-thread-history" id="call-thread-history-${id}" data-call-thread-history hidden>
       <p class="call-meta" data-call-thread-status role="status"></p>
       <p class="call-meta" data-call-thread-earlier></p>
       <ol class="call-thread-log" id="call-thread-log-${id}" data-call-thread-log></ol>
-      <p class="call-meta" data-call-thread-notice role="status"></p>
       <button type="button" class="call-thread-history-toggle" data-call-thread-history-toggle aria-expanded="false" aria-controls="call-thread-log-${id}" hidden>Show earlier messages</button>
-    </section>`;
+    </section><p class="call-meta" data-call-thread-notice role="status"></p>`;
   const CHAT_LABELS = { approval: "Approval", action: "Action", decision: "Decision" };
   const repliesText = (replies) => (Array.isArray(replies) && replies.length ? replies.map((reply) => `“${reply}”`).join(" or ") : "No quoted reply");
   // A chat ask is one Firstmate made in conversation without filing a hold (BEARINGS.md "Chat asks").
@@ -93,7 +120,7 @@ window.bearingsView = (() => {
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
     const summary = card.summary || "Ask text not recorded";
     return `<div class="call-chrome"><header class="call-head"><span class="state-chip call-chat-chip">${label} · Chat ask</span><span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Asked")}">${escape(clockText(card.clock))}</span></header>
-      <h3 id="call-decide-${id}">${escape(summary)}</h3>
+      ${headlineHtml(id, summary, card)}
       <dl class="call-context">${row("About", "Firstmate asked in chat; no captain hold is filed")}${row("Reply", repliesText(card.replies))}</dl>
       <p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p>
       <p class="call-meta">Answering here, dismissing, or replying in chat with the quoted reply closes this card.</p>
@@ -101,10 +128,11 @@ window.bearingsView = (() => {
       <div class="call-dismiss-confirm" data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden><p>Hide this ask from Captain's Call? Nothing is sent to Firstmate. Unsent text stays in this tab.</p><div class="call-answer-actions"><button type="button" data-call-dismiss-send>Dismiss this ask</button><button type="button" data-call-dismiss-cancel>Cancel</button></div></div>
       <p class="call-answer-error" data-call-dismiss-error role="alert" hidden></p></div>
       ${answerHtml(card, summary)}
-      ${threadHistoryHtml(id)}`;
+      ${threadHistoryHtml(id)}
+      ${procrastinateHtml(id)}`;
   }
   const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length
-    ? `<div class="call-context-row"><dt>Also asked in chat</dt><dd>${card.chatAsks.map((ask) => `${escape(ask.summary)} · reply ${escape(repliesText(ask.replies))}`).join("<br>")}</dd></div>` : "";
+    ? `<div class="call-context-row call-context-ask"><dt>Also asked in chat</dt><dd>${card.chatAsks.map((ask) => `${escape(ask.summary)} · reply ${escape(repliesText(ask.replies))}`).join("<br>")}</dd></div>` : "";
   function cardHtml(card) {
     if (card.type === "chat") return chatCardHtml(card);
     const merge = card.type === "merge";
@@ -115,18 +143,48 @@ window.bearingsView = (() => {
     const label = merge ? "Merge" : credential ? "Credentials" : "Decision";
     const id = idFor(card.key || card.task || label);
     const decide = merge ? card.reason || "Merge requested; reason not recorded" : card.summary || "Decision requested; ask not recorded";
-    const shortened = sourceShortened(decide);
+    const shown = fullest(decide, RECORDED.map(([field]) => card[field]));
+    const shortened = sourceShortened(shown);
     const row = (name, text, extra = "") => `<div class="call-context-row"><dt>${name}</dt><dd${extra}>${escape(text)}</dd></div>`;
     const about = [card.repo || "Repository not recorded", card.owner || "Owner not recorded", merge && card.kind].filter(Boolean).join(" · ");
     return `<div class="call-chrome"><header class="call-head"><span class="state-chip">${label}</span>${card.repo ? `<span class="call-repo">${escape(card.repo)}</span>` : ""}<span class="call-age" data-call-clock="${escape(card.clock?.at || "")}" data-call-clock-label="${escape(card.clock?.label || "Created / updated")}">${escape(clockText(card.clock))}</span></header>
-      <h3 id="call-decide-${id}"${shortened ? " data-call-truncated" : ""}>${escape(decide)}</h3>
+      ${headlineHtml(id, decide, card)}
       <dl class="call-context">${row("About", about)}${linkedAsksHtml(card)}${merge ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
       <p class="call-id">Task <code>${escape(card.task || "unknown")}</code></p>
       ${shortened ? `<p class="call-shortened">Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.</p>` : ""}
       ${url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : merge ? '<p class="call-meta">Merge link unavailable</p>' : ""}
       ${card.answer ? "" : `<p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>`}</div>
       ${answerHtml(card, `${label} ${card.task || ""}`.trim())}
-      ${threadHistoryHtml(id)}`;
+      ${threadHistoryHtml(id)}
+      ${procrastinateHtml(id)}`;
+  }
+  // Open or closed full-text panels are memory for this tab only.
+  function createTextController({ list } = {}) {
+    const open = new Map();
+    const keyOf = (node) => node?.getAttribute?.("data-call-key") || null;
+    function render(node) {
+      const toggle = node?.querySelector?.("[data-call-text-toggle]");
+      const panel = node?.querySelector?.("[data-call-full]");
+      if (!toggle || !panel) return;
+      const shown = Boolean(open.get(keyOf(node)));
+      toggle.setAttribute("aria-expanded", String(shown));
+      panel.hidden = !shown;
+    }
+    const onClick = (event) => {
+      const toggle = event.target?.closest?.("[data-call-text-toggle]");
+      if (!toggle) return;
+      const key = keyOf(toggle.closest("[data-call-key]"));
+      if (!key) return;
+      open.set(key, !open.get(key));
+      const node = [...list.querySelectorAll("[data-call-key]")].find((item) => keyOf(item) === key);
+      if (node) render(node);
+    };
+    list.addEventListener("click", onClick);
+    return {
+      render,
+      prune(keys) { const keep = new Set(keys); for (const key of [...open.keys()]) if (!keep.has(key)) open.delete(key); },
+      destroy() { list.removeEventListener("click", onClick); },
+    };
   }
   function emptyHtml(model) {
     if (model.state === "loading") return "Checking for Captain's Calls…";
@@ -154,5 +212,5 @@ window.bearingsView = (() => {
   }
   const heldText = (change) => `Call ${change} — updates when you're done`;
   const stubHtml = () => '<div class="call-chrome"><h3>Resolved by Firstmate — your unsent text</h3><p class="call-meta">This text was not sent. Copy it before dismissing.</p></div><pre data-call-stub-text></pre><div class="call-stub-actions"><button type="button" data-call-stub-copy>Copy</button><button type="button" data-call-stub-dismiss>Dismiss</button></div>';
-  return { cardHtml, emptyHtml, coverageText, heldText, stubHtml, age, clockText, idFor, sourceShortened };
+  return { cardHtml, emptyHtml, coverageText, heldText, stubHtml, age, clockText, idFor, sourceShortened, createTextController };
 })();

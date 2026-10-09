@@ -15,14 +15,15 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Queue is accent-filled with an ink border; a merge Queue uses the amber mix.
 - Held cards keep their update notice at full strength, with no dimmed or outdated treatment.
 - Long titles, options, links and ids wrap so the full text stays readable on desktop and on a phone.
-- A card with thread entries shows the latest exchange, the count of earlier messages, and a control that expands the same history.
+- Thread history stays collapsed. A card with two or more entries shows an expand control with the entry count; one entry does not.
 - Each card has one text box, with Queue, Send and Edit beside it, and the hint "Pick an option to answer, or just type - Firstmate replies in the thread."
-- Thread history sits under that box when the card has entries, with the count on the history heading.
+- Opening a thread shows the latest exchange under that box, the count of earlier messages, and a control that expands the same history.
+- Each live card has Procrastinate, with 3h, 6h, 1d and 3d. Procrastinated (N) lists cards that are hidden until their return time.
 - Below the page header and the KPI summary, the Overview body is two equal columns with a 22px gap.
 - Captain's Call stays in the first column.
 - The second column is an empty reserved region (`#overview-secondary`) with no placeholder text.
 - On a phone the columns stack and the empty column takes no space.
-- Chat asks keep the double left border.
+- Chat asks keep a double left border at the same width as other cards, so the mark does not indent the card. Also asked in chat stacks on its own line and does not widen the context column.
 - Captain's Call answer forms separate source context from input with a quiet rule; option cards use native radios, a textual Recommended chip and visible keyboard focus. All call buttons and option targets are at least 44px high. Confirmation and receipt panels retain readable text (disabled fields use muted ink, not whole-form opacity), and phone actions wrap without overflow.
 - The content canvas is light, including under an OS dark preference; the app shell remains dark. Forced colors use system outlines and disabled text, not color-only selection.
 
