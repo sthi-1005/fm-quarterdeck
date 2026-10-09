@@ -7,7 +7,7 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Desktop shell disclosure/resizing uses one edge stripe. Lane and kind filters have independent panels; context/history use bounded scroll areas. Phone/tablet disclosures preserve native focus, Escape and close behavior.
 - Message prose has a readable width while structured content may use the pane. Feed paging is bounded independently of loaded source history.
 - Overview, Expenses, Quota, Preferences and closed history share heading, card, status and empty/unavailable conventions.
-- Captain's Call cards are poster cards on the light canvas: a 2px forest-ink border, a 3px hard shadow, and an uppercase enamel type chip.
+- Captain's Call cards are poster cards on the light canvas: a 2px forest-ink border, a 3px hard shadow, and an enamel type chip that keeps its written words.
 - Decision chips use the accent fill, merge chips an amber mix with dark ink, and chat-ask chips a dashed surface.
 - The title is the full ask or reason.
 - Context keys are small uppercase monospace.
