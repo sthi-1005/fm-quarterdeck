@@ -159,15 +159,20 @@
         <section id="overview-view" class="product-view feature-view active" aria-label="Fleet overview">
           <header class="feature-head compact-head"><div><h1>Fleet at a glance</h1></div><span id="fleet-source" class="source-badge" aria-label="Firstmate activity"></span></header>
           <div id="summary" class="summary-grid"></div>
-          <p id="overview-state" class="notice hidden" role="status"></p>
-          <section id="captain-call" aria-labelledby="call-heading">
-            <h2 id="call-heading" class="section-heading">Captain's Call <span class="call-read-only">Live · answers need your confirmation</span></h2>
-            <button type="button" id="call-answered-toggle" aria-expanded="false" aria-controls="call-cards" hidden>Show answered calls (0)</button>
-            <label class="call-sort">Sort calls <select id="call-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
-            <div id="call-status" class="call-status" role="status" hidden></div>
-            <div id="call-cards" class="call-cards"><p class="call-empty" data-call-empty>Checking for Captain's Calls…</p></div>
-            <p id="call-coverage" class="call-coverage"></p>
-          </section>
+          <div id="overview-columns" class="overview-columns">
+            <div id="overview-primary">
+              <p id="overview-state" class="notice hidden" role="status"></p>
+              <section id="captain-call" aria-labelledby="call-heading">
+                <h2 id="call-heading" class="section-heading">Captain's Call <span class="call-read-only">Live · answers need your confirmation</span></h2>
+                <button type="button" id="call-answered-toggle" aria-expanded="false" aria-controls="call-cards" hidden>Show answered calls (0)</button>
+                <label class="call-sort">Sort calls <select id="call-sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+                <div id="call-status" class="call-status" role="status" hidden></div>
+                <div id="call-cards" class="call-cards"><p class="call-empty" data-call-empty>Checking for Captain's Calls…</p></div>
+                <p id="call-coverage" class="call-coverage"></p>
+              </section>
+            </div>
+            <div id="overview-secondary"></div>
+          </div>
         </section>
 
         <section id="work-view" class="product-view feature-view" aria-label="Work split">

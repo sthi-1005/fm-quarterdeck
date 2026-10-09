@@ -50,7 +50,7 @@ function setup({ responses = [], storage = null } = {}) {
   return { document, timers, list, patcher, threads, fetches, node, part, ask };
 }
 
-test("a card shows the latest exchange without opening the composer, and Ask more info still loads and watches the thread", async () => {
+test("a card shows the latest exchange under the box, with a count, and keeps watching", async () => {
   const entries = [
     { kind: "chat", from: "firstmate", at: "2026-01-02T09:00:00.000Z", text: "Filed a hold for alpha-call." },
     { kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "replied" },
@@ -59,117 +59,70 @@ test("a card shows the latest exchange without opening the composer, and Ask mor
   const t = setup({ responses: [history(entries)] });
   t.patcher.update(model([decision()]));
   await flush();
-  assert.equal(t.part("toggle").textContent, "Ask more info · 3");
-  assert.equal(t.part("toggle").getAttribute("aria-expanded"), "false");
-  assert.equal(t.node().querySelector("[data-call-thread]").hidden, true);
-  assert.equal(t.fetches.length, 1, "the card reads its history while the composer stays closed");
+  assert.equal(t.part("count").textContent, "Thread · 3");
+  assert.equal(t.node().querySelector("[data-call-thread-toggle]"), null);
+  assert.equal(t.node().querySelector("[data-call-thread-text]"), null);
+  assert.equal(t.fetches.length, 1, "the card reads its history without a separate composer");
   assert.equal(t.fetches[0].url, `/api/bearings/thread?key=${encodeURIComponent(KEY)}`);
   assert.equal(t.node().querySelector("[data-call-thread-history]").hidden, false);
   assert.deepEqual([...t.part("log").children].map((entry) => entry.querySelector("strong").textContent), ["You asked", "Firstmate replied"]);
   assert.match(t.part("earlier").textContent, /1 earlier message/);
   assert.equal(t.part("history-toggle").hidden, false);
   t.part("history-toggle").click();
-  assert.equal(t.node().querySelector("[data-call-thread]").hidden, true, "showing earlier messages does not open the composer");
+  assert.equal(t.node().querySelector("[data-call-thread-text]"), null, "showing earlier messages does not open a composer");
   assert.deepEqual([...t.part("log").children].map((entry) => entry.querySelector("strong").textContent), ["Firstmate in chat", "You asked", "Firstmate replied"]);
   assert.match(t.part("log").children[1].textContent, /replied/);
   assert.equal(t.part("log").children[2].querySelector("time").getAttribute("datetime"), "2026-01-02T11:00:00.000Z");
   t.part("history-toggle").click();
   assert.equal(t.part("log").children.length, 2, "the card can return to the latest exchange");
-
-  t.part("toggle").click();
-  assert.equal(t.part("toggle").getAttribute("aria-expanded"), "true");
-  assert.equal(t.part("toggle").textContent, "Hide thread · 3");
-  assert.equal(t.node().querySelector("[data-call-thread]").hidden, false);
-  assert.equal(t.document.activeElement, t.part("text"), "the question box takes focus");
   assert.match(t.part("status").textContent, /^3 messages about this call/);
 
   // The thread survives Firstmate's next snapshot refilling the card.
   t.patcher.update(model([decision("a2")]));
-  assert.equal(t.part("toggle").getAttribute("aria-expanded"), "true");
+  assert.equal(t.part("count").textContent, "Thread · 3");
   assert.equal(t.part("log").children.length, 2);
 
   t.timers.advance(15000);
   await flush();
-  assert.equal(t.fetches.length, 2, "an open thread polls");
-  t.part("toggle").click();
-  t.timers.advance(60000);
+  assert.equal(t.fetches.length, 2, "a present card polls");
+  t.timers.advance(15000);
   await flush();
   assert.equal(t.fetches.length, 3, "a loaded card keeps watching for replies");
 });
 
-test("Ask Firstmate sends only on an explicit click, retries an unconfirmed send with the same id, and clears on 202", async () => {
-  const t = setup({ responses: [history(), new Error("offline"), { status: 202, body: { state: "accepted", noteId: "n1" } }, history([{ kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "waiting" }])] });
+test("a confirmed thread note reloads history and shows the receipt notice", async () => {
+  const t = setup({ responses: [history(), history([{ kind: "ask", from: "captain", at: "2026-01-02T10:00:00.000Z", text: "What is alpha?", state: "waiting" }])] });
   t.patcher.update(model([decision()]));
-  t.part("toggle").click();
   await flush();
-  t.ask();
-  assert.equal(t.part("error").textContent, "Write a question first.");
-  assert.equal(t.fetches.length, 1, "an empty question is never sent");
-
-  t.part("text").type("  What is alpha?  ");
-  assert.equal(t.patcher.drafts.get(KEY).thread, "  What is alpha?  ", "the question is a protected draft");
-  t.ask();
+  assert.equal(t.fetches.length, 1, "history loads before any note is sent");
+  t.threads.noteSent(KEY);
   await flush();
-  assert.equal(t.fetches[1].url, "/api/bearings/thread");
-  assert.deepEqual(t.fetches[1].body, { requestId: uuid(1), key: KEY, text: "What is alpha?" });
-  assert.equal(t.part("send").textContent, "Retry ask");
-  assert.match(t.part("error").textContent, /may already have reached Firstmate/);
-  assert.equal(t.document.activeElement, t.part("send"));
-
-  t.ask();
-  await flush();
-  assert.equal(t.fetches[2].body.requestId, uuid(1), "a retry keeps the request id");
-  assert.equal(t.part("text").value, "");
-  assert.equal(t.patcher.drafts.get(KEY)?.thread || "", "");
-  assert.equal(t.part("send").textContent, "Ask Firstmate");
-  assert.equal(t.part("error").hidden, true);
   assert.match(t.part("status").textContent, /Question sent to Firstmate/);
   assert.equal(t.part("log").children.length, 1, "the history reloads after a confirmed send");
+  assert.match(t.part("log").textContent, /waiting for Firstmate/);
 });
 
-test("a refused question is not retried, a new question gets a new id, and a reload keeps only open and pending", async () => {
+test("a call that left forgets its thread", async () => {
   const storage = tabStorage();
-  const t = setup({ storage, responses: [history(), { status: 409, body: { error: "This call is no longer open; ask in chat" } }, { status: 502, body: { error: "Firstmate did not confirm" } }] });
+  const t = setup({ storage, responses: [history()] });
   t.patcher.update(model([decision()]));
-  t.part("toggle").click();
   await flush();
-  t.part("text").type("First question");
-  t.ask();
-  await flush();
-  assert.equal(t.part("error").textContent, "This call is no longer open; ask in chat");
-  assert.equal(t.part("send").textContent, "Ask Firstmate");
-  t.part("text").type("Second question");
-  t.ask();
-  await flush();
-  assert.equal(t.fetches[2].body.requestId, uuid(2));
-
-  const again = setup({ storage, responses: [history()] });
-  again.patcher.update(model([decision()]));
-  assert.equal(again.part("toggle").getAttribute("aria-expanded"), "true", "an open thread reopens after reload");
-  assert.equal(again.part("send").textContent, "Retry ask", "an unconfirmed question only resends by Retry");
-  assert.equal(again.threads.state(KEY).pending.requestId, uuid(2));
-
-  again.patcher.update(model([]));
-  assert.equal(again.threads.state(KEY), null, "a call that left forgets its thread");
-  assert.ok(![...Array(storage.length).keys()].some((index) => storage.key(index).startsWith("fm-quarterdeck-call-thread.v1:")), "its saved state is removed");
+  t.patcher.update(model([]));
+  assert.equal(t.threads.state(KEY), null, "a call that left forgets its thread");
+  assert.ok(![...Array(storage.length).keys()].some((index) => storage.key(index)?.startsWith("fm-quarterdeck-call-thread.v1:")), "its saved state is removed");
 });
 
-
-test("closed visited thread marks new replies politely and opening acknowledges them", async () => {
+test("a later reply is counted until the history is acknowledged", async () => {
   const reply = { kind: "reply", from: "firstmate", noteId: "n1", at: "2026-01-02T11:00:00Z", text: "The rollout window." };
   const t = setup({ responses: [history(), history([reply]), history([reply])] });
   t.patcher.update(model([decision()]));
-  t.part("toggle").click();
   await flush();
-  t.part("toggle").click();
   t.timers.advance(15000);
   await flush();
-  assert.match(t.part("toggle").textContent, /1 new reply/);
+  assert.match(t.part("count").textContent, /Thread · 1 · 1 new reply/);
   assert.equal(t.part("replies").getAttribute("role"), "status");
   assert.match(t.part("replies").textContent, /1 new reply from Firstmate/);
-  assert.equal(t.node().querySelector("[data-call-thread]").hidden, true);
-  t.part("toggle").click();
-  await flush();
+  t.node().querySelector("[data-call-thread-history]").click();
   assert.equal(t.part("replies").textContent, "");
   t.document.visibilityState = "hidden";
   const count = t.fetches.length;

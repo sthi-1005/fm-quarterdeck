@@ -14,7 +14,7 @@ const merge = (rev = "b1") => ({ key: "merge:beta-merge", type: "merge", task: "
   answer: { question: "merge.beta-merge", options: [{ value: "merge", label: "Merge now", hint: "Firstmate re-checks" }], recommend: null, close: null, freeform: true } });
 const model = (cards) => ({ schema: "fm-quarterdeck-call.v1", rev: cards.map((card) => `${card.key}@${card.rev}`).join("|") || "empty", state: "ready", cards, coverage: { known: 1, checked: 1, provenClear: false }, omitted: [] });
 
-function setup({ responses = [], storage = null, viewerStorage = null } = {}) {
+function setup({ responses = [], storage = null, viewerStorage = null, onAsked = () => {} } = {}) {
   const dom = callDom();
   const timers = fakeTimers();
   const { document } = dom;
@@ -40,7 +40,7 @@ function setup({ responses = [], storage = null, viewerStorage = null } = {}) {
   const patcher = win.bearingsPatch.createCallPatcher({ section, list, status, view: win.bearingsView, doc: document, win, storage, viewerStorage, timers,
     onRender: (node, card) => { answers?.render(node, card); overflow?.render(node, card); },
     onApply: (next) => { answers?.prune(next.cards.map((card) => card.key)); overflow?.prune(next.cards.map((card) => card.key)); } });
-  answers = win.bearingsAnswerForm.createAnswerController({ list, drafts: patcher.drafts, doc: document, win, storage, fetchImpl, timers, uuid: () => uuid(++n) });
+  answers = win.bearingsAnswerForm.createAnswerController({ list, drafts: patcher.drafts, doc: document, win, storage, fetchImpl, timers, uuid: () => uuid(++n), onAsked });
   overflow = win.bearingsOverflow.createOverflowController({ list, win });
   const node = (key) => list.children.find((entry) => entry.getAttribute("data-call-key") === key);
   const part = (key, name) => node(key).querySelector(`[data-call-answer-${name}]`);
@@ -118,16 +118,21 @@ function tabStorage() {
 
 test("nothing is sent until Queue and then an explicit Send; the sent answer clears its draft and shows receipts", async () => {
   const t = setup({ responses: [{ status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } }, { status: 200, body: { answers: { [uuid(1)]: { state: "received" } } } }, { status: 200, body: { answers: { [uuid(1)]: { state: "replied", reply: "Holding until Tuesday" } } } }] });
-  t.patcher.update(model([decision()]));
+  const card = decision();
+  card.answer = { ...card.answer, options: [{ value: "staged", label: "Staged", hint: "Fewer users" }], recommend: "staged" };
+  t.patcher.update(model([card]));
   const key = "decision:alpha-call";
   assert.equal(t.part(key, "confirm").hidden, true);
   assert.equal(t.part(key, "compose").textContent, "Queue");
   assert.equal(t.part(key, "send").hidden, true, "Send appears only for a queued answer");
+  const radio = t.node(key).querySelector('input[value="staged"]');
+  radio.checked = true;
+  radio.dispatchEvent({ type: "change" });
   t.part(key, "text").type("  Use the Tuesday window  ");
   t.submit(key);
   assert.equal(t.fetches.length, 0, "queueing never sends");
   assert.equal(t.answers.state(key).phase, "confirm");
-  assert.equal(t.part(key, "preview").textContent, "Use the Tuesday window");
+  assert.equal(t.part(key, "preview").textContent, "Staged - Use the Tuesday window");
   assert.equal(t.part(key, "confirm").hidden, false);
   assert.equal(t.part(key, "text").readOnly, true, "the queued text cannot change while queued");
   assert.equal(t.part(key, "fields").hasAttribute("data-locked"), true);
@@ -135,18 +140,18 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   assert.equal(t.part(key, "edit").hidden, false);
   assert.equal(t.document.activeElement, t.part(key, "send"));
   // Updates arriving meanwhile never send either.
-  t.patcher.update(model([decision(), merge()]));
+  t.patcher.update(model([{ ...card }, merge()]));
   assert.equal(t.fetches.length, 0);
 
   t.part(key, "send").click();
   await flush();
   assert.equal(t.fetches.length, 1);
   assert.equal(t.fetches[0].url, "/api/bearings/answer");
-  assert.deepEqual(t.fetches[0].body, { requestId: uuid(1), key, cardRev: "a1", selection: "", note: "Use the Tuesday window" });
+  assert.deepEqual(t.fetches[0].body, { requestId: uuid(1), key, cardRev: "a1", selection: "staged", note: "Use the Tuesday window" });
   assert.equal(t.answers.state(key).phase, "sent");
   assert.equal(t.patcher.drafts.text(key), "", "sent words are not 'unsent text'");
   assert.equal(t.part(key, "receipt").hidden, false);
-  assert.match(t.part(key, "receipt-text").textContent, /^Sent to Firstmate: Use the Tuesday window · waiting/);
+  assert.match(t.part(key, "receipt-text").textContent, /^Sent to Firstmate: Staged - Use the Tuesday window · waiting/);
 
   t.timers.advance(15000);
   await flush();
@@ -222,6 +227,22 @@ test("an empty or oversized answer is refused locally and nothing is sent", asyn
   const key = "decision:alpha-call";
   t.submit(key);
   assert.match(t.part(key, "error").textContent, /Choose an option or write an answer/);
+  t.part(key, "text").type("é".repeat(1100));
+  t.submit(key);
+  assert.match(t.part(key, "error").textContent, /longer than 2000 bytes/);
+  assert.equal(t.answers.state(key).path, undefined);
+  assert.equal(t.fetches.length, 0);
+  t.part(key, "text").type("é".repeat(300));
+  t.submit(key);
+  assert.equal(t.answers.state(key).path, "thread", "text alone is a thread note, under the question cap");
+  t.part(key, "edit").click();
+  t.leave();
+  const opted = decision("a2");
+  opted.answer = { ...opted.answer, options: [{ value: "staged", label: "Staged", hint: null }] };
+  t.patcher.update(model([opted]));
+  const radio = t.node(key).querySelector('input[value="staged"]');
+  radio.checked = true;
+  radio.dispatchEvent({ type: "change" });
   t.part(key, "text").type("é".repeat(300));
   t.submit(key);
   assert.match(t.part(key, "error").textContent, /longer than 512 bytes/);
@@ -261,14 +282,19 @@ test("option drafts restore after a refill; Edit preserves drafts and Answer aga
 test("tab storage restores confirmation and receipts; prune forgets a re-held task", async () => {
   const storage = tabStorage();
   const key = "decision:alpha-call";
+  const card = decision();
+  card.answer = { ...card.answer, options: [{ value: "staged", label: "Staged", hint: null }], recommend: "staged" };
   const t = setup({ storage });
-  t.patcher.update(model([decision()]));
+  t.patcher.update(model([card]));
+  const radio = t.node(key).querySelector('input[value="staged"]');
+  radio.checked = true;
+  radio.dispatchEvent({ type: "change" });
   t.part(key, "text").type("Tuesday");
   t.submit(key);
   const reloaded = setup({ storage });
-  reloaded.patcher.update(model([decision()]));
+  reloaded.patcher.update(model([card]));
   assert.equal(reloaded.answers.state(key).phase, "confirm");
-  assert.equal(reloaded.part(key, "preview").textContent, "Tuesday");
+  assert.equal(reloaded.part(key, "preview").textContent, "Staged - Tuesday");
   assert.equal(reloaded.fetches.length, 0);
   reloaded.part(key, "send").click();
   await flush();
@@ -370,11 +396,11 @@ test("queued answers list for the review queue, send together with their own ids
     { key: second, label: "Merge beta-merge", text: "ship it", phase: "confirm" },
   ]);
   assert.equal(await t.answers.sendQueued(), false, "one unconfirmed answer reports the batch incomplete");
-  assert.deepEqual(t.fetches.map((entry) => [entry.body.key, entry.body.requestId, entry.body.selection, entry.body.note]), [
-    [first, uuid(1), "", "Tuesday"],
-    [second, uuid(2), "", "ship it"],
-  ], "a suggested chat reply is relayed as the captain's words, never a keyed option");
-  assert.equal(t.answers.state(first).phase, "sent");
+  assert.deepEqual(t.fetches.map((entry) => [entry.url, entry.body.key, entry.body.requestId, entry.body.text ?? null, entry.body.selection ?? null, entry.body.note ?? null]), [
+    ["/api/bearings/thread", first, uuid(1), "Tuesday", null, null],
+    ["/api/bearings/answer", second, uuid(2), null, "", "ship it"],
+  ], "text alone is a thread note; a suggested chat reply stays an answer in the captain's words");
+  assert.equal(t.answers.state(first), null, "a thread note does not become a sent answer");
   assert.deepEqual(plain(t.answers.queued()).map((entry) => [entry.key, entry.phase]), [[second, "failed"]]);
   t.answers.unqueue(second);
   assert.equal(t.answers.state(second).phase, "compose");

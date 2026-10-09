@@ -105,7 +105,10 @@ test("Overview retains KPIs, replaces only the project tree with accessible live
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const overview = html.slice(html.indexOf('<section id="overview-view"'), html.indexOf('<section id="work-view"'));
   assert.match(overview, /id="summary"/);
-  assert.match(overview, /id="captain-call" aria-labelledby="call-heading"/);
+  assert.match(overview, /id="overview-columns"/);
+  assert.match(overview, /id="overview-primary"[\s\S]*id="captain-call" aria-labelledby="call-heading"/);
+  assert.match(overview, /id="overview-secondary"><\/div>/);
+  assert.doesNotMatch(overview.slice(overview.indexOf('id="overview-secondary"')), /placeholder|coming soon|Charted/i);
   assert.match(overview, /id="call-status"[^>]*role="status"/);
   assert.doesNotMatch(overview, /id="projects"|overview-status|Repositories →/);
   const app = ui();
@@ -2589,6 +2592,8 @@ test("Visible status button filters: replace dropdown reliance with accessible b
 test("Overview and Work Split wide-screen viewport utilization: scoped width expansion without indiscriminate sprawl", () => {
   // Scoped width expansion rules
   assert.match(css, /#overview-view > \*,\s*#work-view > \* \{[\s\S]*?max-width:\s*100%;/);
+  assert.match(css, /\.overview-columns \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\); gap: 22px; align-items: start; \}/);
+  assert.match(css, /@media \(max-width: 720\.005px\) \{[\s\S]*?#overview-secondary \{ display: none; \}/);
   assert.match(css, /#work-view section \{[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;/);
   assert.match(css, /#work-view section > p\.muted \{[\s\S]*?max-width:\s*80ch;/);
 

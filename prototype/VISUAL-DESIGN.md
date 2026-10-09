@@ -16,9 +16,12 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Held cards keep their update notice at full strength, with no dimmed or outdated treatment.
 - Long titles, options, links and ids wrap so the full text stays readable on desktop and on a phone.
 - A card with thread entries shows the latest exchange, the count of earlier messages, and a control that expands the same history.
-- Ask more info is a compact action-row control, and its label includes the loaded entry count.
-- Ask Firstmate stays collapsed until that control is used, then the question is a single line that grows, with Ask Firstmate beside it.
-- Answer options, the note, and Queue, Send and Edit share one tight block on desktop and on a phone: options are compact choices, and the buttons sit beside the note.
+- Each card has one text box, with Queue, Send and Edit beside it, and the hint "Pick an option to answer, or just type - Firstmate replies in the thread."
+- Thread history sits under that box when the card has entries, with the count on the history heading.
+- Below the page header and the KPI summary, the Overview body is two equal columns with a 22px gap.
+- Captain's Call stays in the first column.
+- The second column is an empty reserved region (`#overview-secondary`) with no placeholder text.
+- On a phone the columns stack and the empty column takes no space.
 - Chat asks keep the double left border.
 - Captain's Call answer forms separate source context from input with a quiet rule; option cards use native radios, a textual Recommended chip and visible keyboard focus. All call buttons and option targets are at least 44px high. Confirmation and receipt panels retain readable text (disabled fields use muted ink, not whole-form opacity), and phone actions wrap without overflow.
 - The content canvas is light, including under an OS dark preference; the app shell remains dark. Forced colors use system outlines and disabled text, not color-only selection.

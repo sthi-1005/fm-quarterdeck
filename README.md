@@ -8,7 +8,7 @@ Firstmate Quarterdeck is a web dashboard for [kunchenguid/firstmate](https://git
 
 | Surface | Status | Note |
 |---|---|---|
-| Captain's Call (live) | Experimental | Calls update in place; engaged cards hold updates and preserve typed text; long titles, asks, options and links stay fully readable; answers are radio choices with a note and can be queued to send together; each card's Ask more info thread relays a question and shows that card's history on the card; confirmed answers relay to Firstmate; asks Firstmate makes only in chat appear as cards ([chat asks](docs/CHAT-ASKS.md)). |
+| Captain's Call (live) | Experimental | Calls update in place; engaged cards hold updates and preserve typed text; long titles, asks, options and links stay fully readable; each card has one text box, a picked option answers and text alone is a thread note, and both can be queued to send together; thread history sits under the box; confirmed answers relay to Firstmate; asks Firstmate makes only in chat appear as cards ([chat asks](docs/CHAT-ASKS.md)). |
 | Work Split | Experimental | Early-stage experience; still taking shape. |
 | Preferences | Experimental | Early-stage experience; still taking shape. |
 | Fleet Chats | Mature | Core experience is established; polish is ongoing. |

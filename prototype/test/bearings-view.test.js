@@ -5,8 +5,7 @@ import vm from 'node:vm';
 const window = {};
 vm.runInNewContext(await readFile(new URL('../public/bearings-view.js', import.meta.url), 'utf8'), { window, URL });
 const view = window.bearingsView;
-// The card thread ("Ask more info") is the one form every card carries; strip it to test the rest.
-const withoutThread = (html) => html.replace(/<section class="call-thread"[\s\S]*?<\/section>/, '');
+const HINT = "Pick an option to answer, or just type - Firstmate replies in the thread.";
 
 test('decision, credential and merge rendering is escaped and read-only', () => {
   for (const type of ['decision', 'merge']) {
@@ -15,10 +14,10 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.match(html, /&lt;/);
     assert.match(html, /Answer in chat or on the \/bearings lavish board/);
     assert.match(html, /data-call-draft="note"/);
-    assert.doesNotMatch(withoutThread(html), /data-call-key|data-call-rev|type="submit"|Merge now/);
-    assert.match(html, /data-call-thread-toggle aria-expanded="false"[^>]*>Ask more info</);
-    assert.match(html, /data-call-thread-text rows="1"/);
-    assert.match(html, /Ask Firstmate about this call <span>\(sent to Firstmate's inbox · not an answer\)<\/span>/);
+    assert.doesNotMatch(html, /data-call-key|data-call-rev|Merge now|data-call-thread-toggle|data-call-draft="thread"/);
+    assert.match(html, /data-call-answer-text rows="1"/);
+    assert.match(html, new RegExp(HINT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(html, /data-call-box-hint[\s\S]*data-call-thread-history/);
     if (type === 'decision') assert.match(html, />Credentials</);
     else { assert.match(html, /https:\/\/example.invalid\/pull\/1\?a=1&amp;b=2/); assert.match(html, /rel="noopener noreferrer"/); }
   }
@@ -35,7 +34,8 @@ test('rich context expands source choices without inventing controls, risk or a 
   assert.match(html, /<dt>About<\/dt><dd>example-app · acme-mate/);
   assert.doesNotMatch(html, /call-clamp|data-call-more|More details/);
   assert.match(html, /href="https:\/\/example.invalid\/acme\/example-app\/pull\/42"/);
-  assert.doesNotMatch(withoutThread(html), /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
+  assert.doesNotMatch(html, /type="radio"|<select|<details|checks green|call-opt|recommend_value/);
+  assert.match(html, /data-call-box-hint/);
   const merge = view.cardHtml({ type: 'merge', reason: summary, kind: 'pr', repo: 'example-app' });
   assert.ok(merge.includes(`<h3 id="call-decide-${view.idFor('Merge')}">${summary}</h3>`));
   assert.match(merge, /<dt>Risk<\/dt><dd>Not provided by the snapshot/);
@@ -60,7 +60,9 @@ test('answerable cards render a form: freeform only without options, options wit
   assert.match(freeform, /<form class="call-answer" data-call-answer data-call-answer-label="Decision alpha-call" novalidate/);
   assert.match(freeform, /No structured options for this call yet; any recorded choices are in the full ask above/);
   assert.doesNotMatch(freeform, /\$\{/);
-  assert.match(freeform, /data-call-draft="answer" data-call-answer-text/);
+  assert.match(freeform, /data-call-draft="answer" data-call-answer-text rows="1"/);
+  assert.match(freeform, /data-call-box-hint[\s\S]*data-call-thread-history/);
+  assert.doesNotMatch(freeform, /data-call-thread-toggle|Ask more info|data-call-draft="thread"/);
   assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
   for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);
   assert.match(freeform, /data-call-answer-confirm role="group" aria-label="Queued answer" hidden/);
@@ -74,7 +76,7 @@ test('answerable cards render a form: freeform only without options, options wit
   assert.match(options, /value="staged"[^>]*aria-describedby="call-rec-[^"]+"/, 'the recommendation is announced with its option');
   assert.equal((options.match(/call-opt-rec/g) || []).length, 1, 'only the recommended option is marked');
   assert.match(options, /value="staged"[^>]*data-call-option-label="&lt;b&gt;Staged&lt;\/b&gt;"[\s\S]*?Fewer users[\s\S]*?Recommended/);
-  assert.match(options, /Add a note/);
+  assert.match(options, /Pick an option to answer, or just type - Firstmate replies in the thread\./);
   assert.doesNotMatch(options, /<b>Staged/);
   const merge = view.cardHtml({ key: 'merge:beta-merge', task: 'beta-merge', type: 'merge', reason: 'checks green', answer: { question: 'merge.beta-merge', options: [{ value: 'merge', label: 'Merge now', hint: 'Firstmate re-checks' }], recommend: null, close: null, freeform: true } });
   assert.match(merge, /value="merge"[\s\S]*Merge now/);
@@ -119,7 +121,7 @@ test('chat cards escape asks, marker evidence and up to three reply choices', ()
   const noReply = view.cardHtml({ type: 'chat', kind: 'action', summary: 'Synthetic ask', replies: [], answer: { options: [] } });
   assert.match(noReply, /No quoted reply/);
   assert.doesNotMatch(noReply, /type="radio"/);
-  assert.match(noReply, /Your answer/);
+  assert.match(noReply, /Pick an option to answer, or just type - Firstmate replies in the thread\./);
 });
 test('linked asks render within the hold and disclose escaped reply alternatives', () => {
   const html = view.cardHtml({ type: 'decision', summary: 'Choose', chatAsks: [{ summary: '<one>', replies: ['<yes>', 'no'] }, { summary: 'Second & ask', replies: [] }] });

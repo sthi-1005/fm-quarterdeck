@@ -114,22 +114,55 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
 
 - `question` is the board's intake key: the task id for a decision, `merge.<task>` for a merge ask. A key that fails the intake's slug shape (`[A-Za-z0-9._-]{1,128}`) gives `answer: null`, and the card keeps "Answer in chat" plus a private note-to-self.
 - Decision `options`, `recommend` and `close` come only from optional Firstmate row fields `options[{value,label,hint}]`, `recommend_value` and `close` (`done`|`release`). Today's snapshot provides none, so decisions are **freeform only**. One invalid option (bad slug, duplicate, missing label, `reconcile`, more than 8) voids them all; `recommend` must name an option.
-- A merge ask offers the board's single **Merge now** option (`merge`), never a recommendation. Only an exact, note-free `merge` is a merge order. A selected Merge now with a typed note is relayed with empty `selection` and `note:"merge - <typed note>"`, so keyed intake reads instruction text; a note-only answer is instruction text too.
+- A merge ask offers the board's single **Merge now** option (`merge`), never a recommendation.
+  Only an exact, note-free `merge` is a merge order.
+  A selected Merge now with a typed note is relayed with empty `selection` and `note:"merge - <typed note>"`, so keyed intake reads instruction text.
+  The answer endpoint still treats a note-only body as instruction text.
+  The card does not send that body: text with no option selected is a thread note.
 
 **Captain flow** (`public/bearings-answer-form.js`; state per card key in memory and `sessionStorage` under `fm-quarterdeck-call-answer.v1:<key>`):
 
-1. *compose*: pick an option and/or write text (`data-call-draft="answer"`). Options are real radio buttons (`data-call-draft="selection"`), one group per card (`name="call-selection-<card id>"`), so arrow keys move within a card and screen readers announce the group; the recommended option carries a visible **Recommended** chip that its radio names through `aria-describedby`. Options, the note, and Queue, Send and Edit stay in one tight block on desktop and on a phone: the options are compact radio rows, and Queue, Send and Edit sit beside the note. A filed card with linked chat asks also offers their suggested replies as radios (`data-call-reply`), relayed as the captain's own words (`selection:""`, `note:"<reply>[ - <note>]"`), never as a keyed option value. Both fields are drafts, restored on every refill.
-2. **Queue** checks locally (non-empty; `selection - note` at most 512 UTF-8 bytes, the board's cap) and moves to *confirm*: the radios disable and the text box turns read-only (still focusable and selectable), and the exact text to be sent is shown as "Queued for Firstmate". Nothing has been sent. The queued answer also joins the review panel's queue (see "Queue integration" below), so several answers can go together.
-3. **Send** (this card) or **Send batch** (the review queue, every queued answer) moves to *sending*, then:
-   - `202` → *sent*: answer drafts are cleared (so a resolved card shows no "unsent text" stub) and a receipt line follows Firstmate's inbox receipts: waiting → received → replied (polled every 15 s while visible and not yet replied).
-   - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note. Reloading during *sending* also restores this uncertain retry state; it never resends automatically.
-   - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock. Once a send was attempted, editing and re-queueing preserve its request id, even after a changed-card refusal or reload. A different answer under a recorded id is refused rather than creating a second note.
-4. **Edit** returns from *confirm*/*failed* to *compose* (and takes the answer out of the queue). An unconfirmed send warns that it may already have reached Firstmate; retry uses the original identity, and editing cannot replace a recorded answer. **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
+1. *compose*: one text box (`data-call-draft="answer"`, one line that grows) with Queue, Send and Edit beside it.
+   The hint under the box is exactly "Pick an option to answer, or just type - Firstmate replies in the thread."
+   Options stay real radio buttons (`data-call-draft="selection"`), one group per card (`name="call-selection-<card id>"`), so arrow keys move within a card and screen readers announce the group.
+   The recommended option carries a visible **Recommended** chip that its radio names through `aria-describedby`.
+   Options are compact radio rows on desktop and on a phone.
+   A checked option, with or without text, is an answer through the existing relay: the option value plus the typed text as the note.
+   A filed card with linked chat asks also offers their suggested replies as radios (`data-call-reply`).
+   A checked reply is an answer relayed as the captain's own words (`selection:""`, `note:"<reply>[ - <note>]"`), never as a keyed option value.
+   Text with no option selected, including a freeform card, is a card thread note (`fm-quarterdeck-thread`), and Firstmate replies in the thread.
+   A card with `answer: null` keeps the private note-to-self and uses the same box for a thread note only.
+   The box and the selected option are drafts, restored on every refill.
+2. **Queue** checks locally that the box or an option is non-empty.
+   An answer's `selection - note` is at most 512 UTF-8 bytes, the board's cap.
+   A thread note is at most 2000 UTF-8 bytes.
+   Queue moves to *confirm*: the radios disable and the text box turns read-only (still focusable and selectable), and the exact text to be sent is shown as "Queued for Firstmate".
+   Nothing has been sent.
+   The confirm copy names an answer or a thread note to match the path.
+   The queued item also joins the review panel's queue (see "Queue integration" below), so several can go together.
+3. **Send** (this card) or **Send batch** (the review queue) moves to *sending*, then:
+   - A thread note uses `POST /api/bearings/thread` with exactly `{requestId, key, text}`.
+     `202` clears the draft and returns to *compose*.
+     It does not use *sent*, the card stays active, and the receipt is the history entry reloaded immediately.
+   - An answer uses `POST /api/bearings/answer` with `{requestId, key, cardRev, selection, note}`.
+     `202` → *sent*: answer drafts are cleared (so a resolved card shows no "unsent text" stub) and a receipt line follows Firstmate's inbox receipts: waiting → received → replied (polled every 15 s while visible and not yet replied).
+   - unconfirmed (network error or `5xx`) → *failed*: **Retry send** is another explicit click and reuses the same request id, so Firstmate records one note.
+     Reloading during *sending* also restores this uncertain retry state; it never resends automatically.
+   - refused (`4xx`) → *refused*: the server's reason is shown and the fields unlock.
+     Once a send was attempted, editing and re-queueing preserve its request id, even after a changed-card refusal or reload.
+     A different payload under a recorded id is refused rather than creating a second note.
+4. **Edit** returns from *confirm*/*failed* to *compose* (and takes the item out of the queue).
+   An unconfirmed send warns that it may already have reached Firstmate; retry uses the original identity, and editing cannot replace a recorded note.
+   **Answer again** leaves *sent* for a correction (Firstmate's intake rejects a drifted answer to a closed call).
 
-Queue, Send and Edit sit beside the answer note on desktop and on a phone, in the same row as that note.
+Queue, Send and Edit sit beside the one text box on desktop and on a phone, in the same row as that box.
 Only the buttons for the current phase are shown (Queue in *compose*; Send and Edit in *confirm*/*failed*).
 
-**Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`. The review panel (`review-client.js`) lists queued answers above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the answer to its card for editing (keeping its request id once a send was attempted). **Send batch** and Ctrl+Enter send queued answers first, each still as its own `fm-bearings-answer.v1` note with its own request id through `POST /api/bearings/answer`, then the review notes through review delivery. Batching changes no intake, and review delivery being unavailable does not block the answers. A queued answer survives reload in its *confirm* state; only an explicit click sends it.
+**Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`.
+The review panel (`review-client.js`) lists queued items above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the item to its card for editing (keeping its request id once a send was attempted).
+**Send batch** and Ctrl+Enter send queued items first, each with its own request id: an answer through `POST /api/bearings/answer` and a thread note through `POST /api/bearings/thread`, then the review notes through review delivery.
+Batching changes no intake, and review delivery being unavailable does not block the items.
+A queued item survives reload in its *confirm* state; only an explicit click sends it.
 
 Typing protection is unchanged: the form lives inside its held card, so focus, typing, a selection or a press holds that card's updates. If the card's `rev` changes while its answer is in *confirm* or *failed*, the next render moves it to *refused* ("changed while you were reviewing") and the captain queues it again; the server refuses a stale `cardRev` too. Answer state for calls that leave the model is forgotten on the next applied update, so a re-held task starts fresh.
 
@@ -155,28 +188,40 @@ Firstmate's lavish adapter rule maps it to one keyed line: `<question>\t<selecti
 
 ## Answered calls on Overview
 
-Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N)** reveals a separate **Answered, awaiting Firstmate** group; the same button hides it again. It defaults closed on page load, works on desktop and phone, and preserves card nodes, threads and correction controls. Queue, failed/uncertain sends and received thread questions do not count as answers. A successful send moves focus to the toggle if hiding would strand focus.
+Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N)** reveals a separate **Answered, awaiting Firstmate** group; the same button hides it again. It defaults closed on page load, works on desktop and phone, and preserves card nodes, threads and correction controls. Queue, failed/uncertain sends and received thread questions do not count as answers. A thread note does not use phase *sent* and does not count as an answer. A successful answer send moves focus to the toggle if hiding would strand focus.
 
 `answered-calls.js` classifies open cards from the existing inbox's pending/handled `quarterdeck-call:` notes and their validated `fm-bearings-answer.v1` envelopes (schema, channel, type and exact question/intake key). The selected home's receipts are read at most once per 15 seconds while the call source refreshes; a failed read retains previous evidence. The sending tab also uses its accepted answer state immediately, including across reload. A presentation revision change does not confirm the call or make a sent answer unsent. Reply or receipt intake status is **not confirmation**: Firstmate confirms by removing the call from bearings. Gone calls disappear from both groups; the existing unsent-text stub protection still applies. Chat-only cards retain their existing accepted-answer resolution behavior.
 
 ## Card threads
 
-"Ask more info" opens a thread scoped to one card, for when a call no longer explains itself. Its stable id is the card key (`decision:<task>`, `merge:<task>`, `chat:<16 hex>`). There is no model call: Quarterdeck relays the captain's question and joins existing records; Firstmate answers.
+The one text box opens a thread scoped to one card when no option is selected.
+Its stable id is the card key (`decision:<task>`, `merge:<task>`, `chat:<16 hex>`).
+There is no model call: Quarterdeck relays the captain's note and joins existing records; Firstmate answers.
 
-- **Asking** (`public/bearings-thread-panel.js`): every card has a compact **Ask more info** control in its action row (`aria-expanded`, `aria-controls`) whose label includes the loaded entry count.
-  It stays collapsed until used, then reveals a one-line question box that grows with the question (`data-call-draft="thread"`, a protected draft like any other, so typing holds updates), with **Ask Firstmate** beside the box.
-  Only that explicit click sends.
-  An unconfirmed send (network or `5xx`) shows **Retry ask**, which reuses the same request id; a `4xx` shows the server's reason.
-  A confirmed send clears the box and reloads the history.
-  Open/closed and an unconfirmed question persist per key in `sessionStorage` (`fm-quarterdeck-call-thread.v1:<key>`); reload never resends.
-  Threads of cards that leave are forgotten.
-  Every present card reads its history on arrival, so the latest exchange is visible in `[data-call-thread-history]` without opening the composer, and keeps reading every 15 s while the page is visible and the card is present.
+- **Asking** (`public/bearings-answer-form.js` sends; `public/bearings-thread-panel.js` shows the history): text with no option selected is the thread note.
+  Queue, Send and Edit are the same controls as an answer, and typing in the box holds updates.
+  A thread note is at most 2000 UTF-8 bytes.
+  **Send** posts `POST /api/bearings/thread` with exactly `{requestId, key, text}`.
+  `202` clears the draft and returns the card to *compose*.
+  It does not use *sent*, so the card stays in the active calls.
+  The receipt is the history entry, reloaded immediately, with the notice "Question sent to Firstmate; the reply appears here".
+  An unconfirmed send (network or `5xx`) shows **Retry send**, which reuses the same request id.
+  A `4xx` shows the server's reason and unlocks the box.
+  Editing and re-queueing after an attempted send keep that request id.
+  History sits under the box in `[data-call-thread-history]`.
+  Its heading reads `Thread · N`, and `Thread · N · K new reply` (or `replies`) while later replies are unread.
+  Every present card reads its history on arrival and keeps reading every 15 s while the page is visible and the card is present.
   That exchange is the newest message, plus the one before it when the two sides differ.
   Earlier messages are counted on the card, and **Show N earlier messages** expands the same log to everything loaded; **Show latest only** returns to the exchange.
-  That control does not open the composer.
-  Closed threads show a new-reply count on the toggle and a polite status announcement, never auto-open; opening marks the currently loaded replies read.
-  The first read of a card that has not been opened marks existing replies seen, so only later replies count as new.
+  That control does not open a composer.
+  There is no second composer, no `data-call-draft="thread"`, and no separate Ask control.
+  The first read marks replies already loaded as seen, so only later replies count as new.
+  Clicking the history or its expand control marks the loaded replies read.
+  A polite status announces the new replies.
   Reply counts are tab-local, not a Firstmate acknowledgement.
+  Thread history state is memory for the tab.
+  The box's draft and an unconfirmed send persist with the answer state (`fm-quarterdeck-call-answer.v1:<key>`, including `path:"thread"`), and reload never resends.
+  Threads of cards that leave are forgotten.
 - **`POST /api/bearings/thread`** (host only; 404 through a preview path): same-origin JSON with no query, at most 4 KiB, served revision unchanged (409 `revision`). Body exactly `{requestId, key, text}`: a lowercase UUID, a card key, and at most 2000 UTF-8 bytes without control characters other than line breaks. The key must be an open card (409 `gone`); answerable or not does not matter. The process remembers 200 request ids, so a retry resends the identical note even after the card left, and reusing an id for different words is 409. Delivery is `fm-inbox.sh note --request-id quarterdeck-thread:<key>:<requestId>` (the same guarded, idempotent path answers and review notes use; a key that would overflow the 128-character id grammar is replaced by `h-<16 hex>` of it). `202 {state:"accepted", requestId, key, noteId, replay, sentAt}`; unconfirmed is `502 unconfirmed`.
 - **Note body:** "Captain asks about <Decision|Merge> <task> | Chat ask <hash> from Quarterdeck: <question>", then the reply route ("Answer with `bin/fm-inbox.sh reply <this note id>` … or in the main chat naming the task id. This is a question, not an answer; nothing was decided."), then a ```` ```json fm-quarterdeck-thread ```` fence `{schema:"fm-quarterdeck-card-thread.v1", key, type, task?, ask?, question, requestId}` (backticks escaped). It never carries an `fm-bearings-answer` block, so it cannot reach keyed intake or the merge rule.
 - **`GET /api/bearings/thread?key=<card key>`** (host only): `{schema, key, task, entries[], omitted, transcript:{state, windowed}, checkedAt}`, oldest first, at most 80 entries (`omitted` counts older ones). Entries are `{kind, from, at, text, noteId?, state?}`, joined mechanically:
@@ -224,3 +269,5 @@ FM_BROWSER_FORCED_COLORS=1 SCREENSHOT_DIR=/absolute/private/forced-proof node sc
 ```
 
 Fixtures under `test/fixtures/bearings/` are synthetic `fm-bearings.v1` output; tests that run a snapshot use a temporary home with a fake `bin/fm-bearings-snapshot.sh`. Chat-ask tests write synthetic Claude and Pi transcripts into a temporary home.
+The browser pass sends a picked option through `POST /api/bearings/answer` and text with no option through `POST /api/bearings/thread`.
+It also checks that the Overview body is two columns on a desktop width and that the empty second column takes no space on a phone.

@@ -1,11 +1,13 @@
-// Captain's Call answer flow (BEARINGS.md "Answers"). Nothing is sent without an explicit
-// captain click: Queue locks the answer and shows exactly what will go to Firstmate, and
-// only Send (this card) or Send batch (the review queue, every queued answer) relays it. A retry after an unconfirmed send is another explicit click and reuses the
-// same request id, so Firstmate records one answer. A card leaves only when Firstmate's
-// next snapshot drops it; this controller never removes or closes a card.
+// Captain's Call one-box flow (BEARINGS.md "Answers"). Nothing is sent without an explicit
+// captain click: Queue locks the note and shows exactly what will go to Firstmate, and
+// only Send (this card) or Send batch (the review queue) relays it. A checked option is an
+// answer. Text with no option is a card thread note, and that path never uses the sent phase.
+// A retry after an unconfirmed send is another explicit click and reuses the same request id.
+// A card leaves only when Firstmate's next snapshot drops it; this controller never removes a card.
 window.bearingsAnswerForm = (() => {
   const STATE_PREFIX = "fm-quarterdeck-call-answer.v1:";
   const MAX_ANSWER_BYTES = 512;
+  const MAX_QUESTION_BYTES = 2000;
   const FINAL = new Set(["replied"]);
   const bytes = (text) => new TextEncoder().encode(text).length;
   const display = (selection, note) => selection ? (note ? `${selection} - ${note}` : selection) : note;
@@ -47,7 +49,7 @@ window.bearingsAnswerForm = (() => {
   }
 
   function createAnswerController({ list, drafts, doc = window.document, win = window, storage = (() => { try { return win.sessionStorage; } catch { return null; } })(),
-    fetchImpl = (...args) => win.fetch(...args), timers = win, pollMs = 15000, uuid = () => win.crypto.randomUUID(), onChange = () => {} } = {}) {
+    fetchImpl = (...args) => win.fetch(...args), timers = win, pollMs = 15000, uuid = () => win.crypto.randomUUID(), onChange = () => {}, onAsked = () => {} } = {}) {
     const states = createStateStore(storage);
     let pollTimer = null;
     let destroyed = false;
@@ -56,12 +58,27 @@ window.bearingsAnswerForm = (() => {
 
     function read(form) {
       const checked = [...form.querySelectorAll('input[type="radio"][data-call-draft="selection"]')].find((input) => input.checked);
-      let note = (part(form, "text")?.value || "").replace(/\r\n?/g, "\n").trim();
+      const note = (part(form, "text")?.value || "").replace(/\r\n?/g, "\n").trim();
       // A suggested chat reply is the captain's own words, never a keyed option value.
+      // A checked reply is still an option, so it stays on the answer relay.
       const reply = checked?.getAttribute("data-call-reply");
-      if (reply) return { selection: "", selectionLabel: "", note: display(reply, note) };
-      const selection = checked?.getAttribute("value") || "";
-      return { selection, selectionLabel: checked?.getAttribute("data-call-option-label") || selection, note };
+      if (checked && reply) return { path: "answer", selection: "", selectionLabel: "", note: display(reply, note) };
+      if (checked) {
+        const selection = checked.getAttribute("value") || "";
+        return { path: "answer", selection, selectionLabel: checked.getAttribute("data-call-option-label") || selection, note };
+      }
+      if (note) return { path: "thread", selection: "", selectionLabel: "", note };
+      return { path: "", selection: "", selectionLabel: "", note: "" };
+    }
+
+    // The one box starts as a line and grows with the draft. Tests without layout skip this.
+    function grow(field) {
+      if (!field?.style || typeof field.scrollHeight !== "number") return;
+      const previous = field.style.height;
+      field.style.height = "auto";
+      const height = field.scrollHeight;
+      if (!height) { field.style.height = previous; return; }
+      field.style.height = `${Math.min(Math.max(height, 44), 152)}px`;
     }
 
     // Applies the stored phase to a card's (possibly fresh) markup. Called by the patcher
@@ -88,7 +105,14 @@ window.bearingsAnswerForm = (() => {
         if (locked) fields.setAttribute("data-locked", ""); else fields.removeAttribute("data-locked");
         for (const input of fields.querySelectorAll('input[type="radio"]')) input.disabled = locked;
         const text = part(form, "text");
-        if (text) { text.readOnly = locked; text.setAttribute("aria-readonly", String(locked)); }
+        if (text) { text.readOnly = locked; text.setAttribute("aria-readonly", String(locked)); if (!locked) grow(text); }
+      }
+      const confirmNote = part(form, "confirm-note");
+      if (confirmNote) {
+        const text = state?.path === "thread"
+          ? "Send sends this note to the card thread now; Send batch in the review queue sends every queued note together. Edit takes it out of the queue."
+          : "Send sends this answer now; Send batch in the review queue sends every queued answer together. Edit takes it out of the queue.";
+        if (confirmNote.textContent !== text) confirmNote.textContent = text;
       }
       const compose = part(form, "compose");
       if (compose) compose.hidden = phase !== "compose" && phase !== "refused";
@@ -135,45 +159,63 @@ window.bearingsAnswerForm = (() => {
     function review(form, key) {
       const previous = states.get(key) || {};
       const answer = read(form);
-      if (!answer.selection && !answer.note) { update(key, { ...previous, phase: "refused", error: "Choose an option or write an answer first." }, "text"); return; }
-      if (bytes(display(answer.selection, answer.note)) > MAX_ANSWER_BYTES) { update(key, { ...previous, phase: "refused", error: `The answer is longer than ${MAX_ANSWER_BYTES} bytes; shorten it.` }, "text"); return; }
+      if (!answer.path) { update(key, { ...previous, phase: "refused", error: "Choose an option or write an answer first." }, "text"); return; }
+      const thread = answer.path === "thread";
+      const cap = thread ? MAX_QUESTION_BYTES : MAX_ANSWER_BYTES;
+      const measured = thread ? answer.note : display(answer.selection, answer.note);
+      if (bytes(measured) > cap) { update(key, { ...previous, phase: "refused", error: `The ${thread ? "note" : "answer"} is longer than ${cap} bytes; shorten it.` }, "text"); return; }
       update(key, { phase: "confirm", ...answer, label: form.getAttribute("data-call-answer-label") || key, cardRev: cardNode(key)?.getAttribute("data-call-rev") || null, requestId: previous.requestId || uuid(), attempted: previous.attempted === true }, "send");
+    }
+
+    function clearDraft(key) {
+      drafts?.set?.(key, "selection", "");
+      drafts?.set?.(key, "answer", "");
+      const form = cardNode(key)?.querySelector("[data-call-answer]");
+      if (!form) return;
+      const text = part(form, "text");
+      if (text) text.value = "";
+      for (const input of form.querySelectorAll('input[type="radio"]')) input.checked = false;
     }
 
     async function send(key, { focus = true } = {}) {
       const state = states.get(key);
       if (!state || !["confirm", "failed"].includes(state.phase)) return false;
-      update(key, { ...state, phase: "sending", attempted: true, error: null });
+      // A stored send from before the one box has no path; it was an answer.
+      const path = state.path || "answer";
+      const thread = path === "thread";
+      update(key, { ...state, path, phase: "sending", attempted: true, error: null });
       let response = null, body = null;
       try {
-        response = await fetchImpl("/api/bearings/answer", { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ requestId: state.requestId, key, cardRev: state.cardRev, selection: state.selection, note: state.note }) });
+        response = await fetchImpl(thread ? "/api/bearings/thread" : "/api/bearings/answer", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify(thread ? { requestId: state.requestId, key, text: state.note }
+            : { requestId: state.requestId, key, cardRev: state.cardRev, selection: state.selection, note: state.note }) });
         body = await response.json().catch(() => null);
       } catch {}
       if (destroyed) return;
       if (response && response.status === 202) {
         // The words now live in Firstmate's inbox; an unsent-text stub would be wrong.
-        drafts?.set?.(key, "selection", "");
-        drafts?.set?.(key, "answer", "");
-        const form = cardNode(key)?.querySelector("[data-call-answer]");
-        if (form) {
-          part(form, "text").value = "";
-          for (const input of form.querySelectorAll('input[type="radio"]')) input.checked = false;
+        clearDraft(key);
+        if (thread) {
+          // Phase sent would hide the card as an answered call. The receipt is the thread entry.
+          update(key, null, focus ? "text" : null);
+          onAsked(key);
+          return true;
         }
-        update(key, { phase: "sent", requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, label: state.label, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, focus ? "receipt" : null);
+        update(key, { phase: "sent", path, requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, label: state.label, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, focus ? "receipt" : null);
         return true;
       }
+      const noun = thread ? "note" : "answer";
       // Unconfirmed (network, 5xx): the same request id may be retried by an explicit click.
       if (!response || response.status >= 500) {
-        update(key, { ...state, attempted: true, phase: "failed", error: `${body?.error || "Firstmate did not confirm the answer."} The earlier send may already have reached Firstmate. Retry uses the same request id; editing cannot replace an already recorded answer.` }, focus ? "send" : null);
+        update(key, { ...state, path, attempted: true, phase: "failed", error: `${body?.error || `Firstmate did not confirm the ${noun}.`} The earlier send may already have reached Firstmate. Retry uses the same request id; editing cannot replace an already recorded ${noun}.` }, focus ? "send" : null);
         return false;
       }
       // Refused (stale call, invalid answer, wrong origin, preview host): edit and queue again.
-      update(key, { ...state, attempted: true, phase: "refused", error: body?.error || "The answer was not accepted." }, focus ? "text" : null);
+      update(key, { ...state, path, attempted: true, phase: "refused", error: body?.error || `The ${noun} was not accepted.` }, focus ? "text" : null);
       return false;
     }
-    // Queued answers, for the review queue's list and its Send batch. Each answer is still
-    // its own fm-bearings-answer note with its own request id: batching changes no intake.
+    // Queued cards, for the review queue's list and its Send batch. Each item keeps its own
+    // request id and its own path, an answer note or a thread note. Batching changes no intake.
     const queuedPhases = new Set(["confirm", "sending", "failed"]);
     function queued() {
       const openKeys = new Set([...list.querySelectorAll("[data-call-key]")].map(keyOf));
@@ -238,8 +280,10 @@ window.bearingsAnswerForm = (() => {
       } }
       else if (target.closest("[data-call-answer-again]")) { event.preventDefault?.(); update(key, null, "text"); }
     };
+    const onInput = (event) => { const field = event.target?.closest?.("[data-call-answer-text]"); if (field) grow(field); };
     list.addEventListener("submit", onSubmit);
     list.addEventListener("click", onClick);
+    list.addEventListener("input", onInput);
     schedulePoll();
 
     return {
@@ -259,9 +303,10 @@ window.bearingsAnswerForm = (() => {
         timers.clearTimeout(pollTimer);
         list.removeEventListener("submit", onSubmit);
         list.removeEventListener("click", onClick);
+        list.removeEventListener("input", onInput);
       },
     };
   }
 
-  return { createAnswerController, createStateStore, STATE_PREFIX, MAX_ANSWER_BYTES };
+  return { createAnswerController, createStateStore, STATE_PREFIX, MAX_ANSWER_BYTES, MAX_QUESTION_BYTES };
 })();

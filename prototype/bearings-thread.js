@@ -5,10 +5,11 @@ import { discoverPrimarySources, mentionsTask, recordTurns } from "./chat-asks.j
 import { createHistoryReader } from "./history-reader.js";
 import { inboxReceipts, noteWithRequestId } from "./inbox.js";
 
-// Card threads (BEARINGS.md "Card threads"). "Ask more info" on a Captain's Call card sends
-// the captain's question to Firstmate through the same guarded, idempotent inbox note the
-// answers and review notes use, under a request id that names the card key. Firstmate
-// answers with `fm-inbox.sh reply <note id>`, or in the main chat. The thread view is a
+// Card threads (BEARINGS.md "Card threads"). Text in a Captain's Call card's one box, with
+// no option selected, sends the captain's note to Firstmate through the same guarded,
+// idempotent inbox note the answers and review notes use, under a request id that names
+// the card key. Firstmate answers with `fm-inbox.sh reply <note id>`, or in the main chat.
+// The thread view is a
 // read-only, mechanical join of the card's inbox notes, their replies, and Firstmate's own
 // primary-transcript messages that mention the card's task id. No model, no writes under
 // FM_HOME beyond the inbox note itself.
