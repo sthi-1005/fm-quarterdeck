@@ -316,8 +316,8 @@ window.bearingsPatch = (() => {
       applied = model;
       appliedSort = sortOrder;
       clearHeld();
-      restoreAnchor(anchor);
       onApply(model);
+      restoreAnchor(anchor);
     }
 
     function update(model) {
