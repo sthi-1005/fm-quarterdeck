@@ -160,7 +160,7 @@ window.bearingsAnswerForm = (() => {
           part(form, "text").value = "";
           for (const input of form.querySelectorAll('input[type="radio"]')) input.checked = false;
         }
-        update(key, { phase: "sent", cardRev: state.cardRev, requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, label: state.label, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, focus ? "receipt" : null);
+        update(key, { phase: "sent", requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, label: state.label, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, focus ? "receipt" : null);
         return true;
       }
       // Unconfirmed (network, 5xx): the same request id may be retried by an explicit click.

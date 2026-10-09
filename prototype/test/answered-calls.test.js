@@ -12,9 +12,10 @@ test("only a durable sent answer hides an open call; intake and reply do not clo
   }
   assert.equal(classifyAnsweredCalls([card], null)[0].answered, undefined);
 });
-test("other cards, stale revisions, non-Quarterdeck notes and malformed records stay active", () => {
-  for (const entry of [note({ question: "other" }), note({ type: "merge" }), note({ cardRev: "old" }), note({ channel: "board" }), note({ schema: "unknown" }), { ...note(), request_id: "quarterdeck-thread:sample" }, { ...note(), body: "bad" }]) {
+test("other cards, non-Quarterdeck notes and malformed records stay active", () => {
+  for (const entry of [note({ question: "other" }), note({ type: "merge" }), note({ channel: "board" }), note({ schema: "unknown" }), { ...note(), request_id: "quarterdeck-thread:sample" }, { ...note(), body: "bad" }]) {
     assert.equal(classifyAnsweredCalls([card], { pending: [entry] })[0].answered, undefined);
   }
+  assert.equal(classifyAnsweredCalls([card], { pending: [note({ cardRev: "old" })] })[0].answered, true, "a presentation change is not confirmation");
   assert.equal(card.answered, undefined, "classification never mutates source");
 });

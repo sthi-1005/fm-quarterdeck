@@ -1712,7 +1712,7 @@ const freshness = Object.fromEntries(["dashboard", "quota", "lanes", "bearings"]
 const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", bearings: "Captain's Call" };
 let callCount = 0;
 function renderCallBadge(model) {
-  const count = model.cards.filter((card) => !card.answered && !(callAnswers?.state(card.key)?.phase === "sent" && callAnswers.state(card.key).cardRev === card.rev)).length;
+  const count = model.cards.filter((card) => !card.answered && !(callAnswers?.state(card.key)?.phase === "sent")).length;
   for (const id of ["#call-badge", "#call-mobile-badge"]) {
     const badge = $(id);
     if (!badge) continue;
@@ -1752,7 +1752,7 @@ function renderAnsweredCalls() {
     const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.dataset.callKey === card.key);
     if (!node) continue;
     const state = callAnswers?.state(card.key);
-    const answered = card.answered || (state?.phase === "sent" && state.cardRev === card.rev);
+    const answered = card.answered || state?.phase === "sent";
     node.hidden = Boolean(answered && !showAnsweredCalls);
     node.toggleAttribute("data-call-answered", Boolean(answered));
     if (answered) {
