@@ -12,6 +12,18 @@ A skill in source is not activated in a Firstmate home. These integrations are o
 | Tier-aware delivery | Future Firstmate integration must independently implement/validate the [branch contract](branching-and-preview-model.md) | Not implied by UI labels |
 | Durable session/source authority | Future integration needs durable primary/worker/relayed/read-only evidence | Never inferred from display names or lane tags |
 
+## Operating rules and private preferences
+
+The reusable [Quarterdeck operating rules](../FIRSTMATE.md) are the policy entry
+point for a paired supervising Firstmate. After reviewing an approved stable
+checkout, the operator may replace duplicated Quarterdeck prose in private
+preferences with `Quarterdeck operating rules: read <approved Quarterdeck checkout>/FIRSTMATE.md`.
+Keep private installation details, active posture and exact standing approvals in
+a private local override. The reference is an instruction to read, not an
+installer, recursive Preferences UI include or permission to change Firstmate.
+Existing onboarding-owned blocks still require their guarded versioned workflow;
+this documentation does not migrate them or activate any integration.
+
 ## Manual activation and rollback
 
 Pin a clean stable approved source revision, never a disposable task worktree. Independently review each skill, discovery policy and target. Before replacing any existing installation, retain a verified private rollback copy, inspect type/bytes/target and compare at the moment of the authorized change. Unexpected entries, changed bytes or symlinks refuse blind replacement.
