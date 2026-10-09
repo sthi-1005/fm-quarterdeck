@@ -55,7 +55,9 @@ test('long text stays in the title; Firstmate shortening is disclosed beside the
   assert.match(whole, /class="call-id">Task <code>alpha-call<\/code>/);
   assert.notEqual(view.idFor('decision:a.b'), view.idFor('decision:a-b'), 'ids stay distinct when keys sanitize alike');
   assert.match(html, /data-call-text-toggle[\s\S]*This is the full text Quarterdeck received/);
-  assert.match(html, /data-call-procrastinate-for="3h"[\s\S]*data-call-procrastinate-for="6h"[\s\S]*data-call-procrastinate-for="1d"[\s\S]*data-call-procrastinate-for="3d"/);
+  const header = html.slice(html.indexOf('<header class="call-head">'), html.indexOf('</header>'));
+  assert.match(header, /data-call-procrastinate-for="3h"[\s\S]*data-call-procrastinate-for="6h"[\s\S]*data-call-procrastinate-for="1d"[\s\S]*data-call-procrastinate-for="3d"/);
+  assert.doesNotMatch(html.slice(html.indexOf('</header>')), /data-call-procrastinate/);
   assert.match(html, /Bring back now/);
   assert.match(view.cardHtml({ type: 'decision', summary: 'Pick the window...' }), /data-call-truncated/);
   const full = 'Pick the alpha rollout window: staged or immediate, with the rest of the recorded ask';
@@ -128,6 +130,8 @@ test('chat cards escape asks, marker evidence and up to three reply choices', ()
   for (const text of ['&lt;script&gt;approve?', '&lt;img onerror=x&gt;', '&lt;b&gt;publish&lt;\/b&gt;', '&quot;wait&quot; &amp; see', 'don&#039;t publish']) assert.ok(html.includes(text), text);
   assert.equal((html.match(/type="radio"/g) || []).length, 3);
   assert.match(html, /Approval · Chat ask/);
+  const chatHead = html.slice(html.indexOf('<header class="call-head">'), html.indexOf('</header>'));
+  assert.match(chatHead, /data-call-dismiss>Review dismissal<\/button>[\s\S]*data-call-procrastinate-toggle[^>]*>Procrastinate/);
   assert.match(html, /data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden/);
   assert.match(html, /Nothing is sent to Firstmate/);
   const noReply = view.cardHtml({ type: 'chat', kind: 'action', summary: 'Synthetic ask', replies: [], answer: { options: [] } });

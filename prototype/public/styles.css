@@ -1777,12 +1777,15 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-card { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 16px; border: 2px solid var(--text); border-radius: 12px; background: var(--surface); box-shadow: 3px 3px 0 var(--text); }
 .call-card button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .call-chrome { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.call-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+.call-head { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+.call-head-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
+.call-card .call-head-pill { display: inline-flex; align-items: center; justify-content: center; width: auto; max-width: 100%; min-height: 0; margin: 0; padding: 5px 9px 4px; border: 1.5px solid var(--text); border-radius: 6px; box-shadow: 2px 2px 0 var(--text); background: var(--surface); color: var(--text); font-size: 11px; font-weight: 800; line-height: 1.2; letter-spacing: 0.04em; white-space: nowrap; }
+.call-card .call-head-dismiss { border-style: dashed; }
 .call-card .state-chip { display: inline-flex; align-items: center; max-width: 100%; padding: 5px 9px 4px; border: 1.5px solid var(--text); border-radius: 6px; box-shadow: 2px 2px 0 var(--text); background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; line-height: 1.2; letter-spacing: 0.04em; white-space: normal; overflow-wrap: anywhere; }
 .call-card[data-call-type="merge"] .state-chip { background: color-mix(in srgb, var(--amber) 72%, white); color: var(--text); }
 .call-chat-chip, .call-card[data-call-type="chat"] .state-chip { background: var(--surface); color: var(--text); border-style: dashed; }
 .call-card[data-call-type="chat"] { border-left-width: 2px; border-left-style: double; background-color: var(--surface); background-image: linear-gradient(var(--text), var(--text)), linear-gradient(var(--text), var(--text)); background-size: 1px 100%, 1px 100%; background-position: 4px 0, 7px 0; background-repeat: no-repeat; }
-.call-repo { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); text-align: right; overflow-wrap: anywhere; white-space: normal; }
+.call-repo { flex: 0 1 auto; min-width: 0; max-width: 100%; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; color: var(--muted); text-align: right; overflow-wrap: anywhere; white-space: normal; }
 .call-dismiss-confirm { margin-top: 12px; padding: 12px; border: 1px dashed var(--control-line); border-radius: 6px; background: var(--surface-soft); font-size: var(--text-small); line-height: 1.6; }
 .call-dismiss-confirm p { margin: 0 0 12px; overflow-wrap: anywhere; }
 .call-dismiss-confirm[hidden], [data-call-dismiss][hidden], [data-call-dismiss-error][hidden] { display: none; }
@@ -1847,10 +1850,12 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-thread-expand[hidden] { display: none; }
 .call-thread-history { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 10px 12px; border: 1.5px solid var(--line-strong); border-radius: 9px; background: var(--surface-soft); }
 .call-thread-history[hidden] { display: none; }
-.call-procrastinate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.call-procrastinate { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
 .call-procrastinate[hidden] { display: none; }
-.call-procrastinate-menu { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+.call-procrastinate-menu { position: absolute; z-index: 3; top: calc(100% + 4px); right: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; width: max-content; max-width: 240px; margin: 0; padding: 6px; border: 1.5px solid var(--text); border-radius: 8px; background: var(--surface); box-shadow: 3px 3px 0 var(--text); }
 .call-procrastinate-menu[hidden] { display: none; }
+.call-procrastinate-menu button { min-height: 44px; white-space: nowrap; }
+.call-procrastinate [data-call-procrastinate-until], .call-procrastinate [data-call-procrastinate-return], .call-procrastinate [data-call-procrastinate-error] { flex: 1 1 100%; margin: 0; text-align: right; }
 [data-call-procrastinate-return][hidden], [data-call-procrastinate-until][hidden], [data-call-procrastinate-error][hidden] { display: none; }
 .call-thread-history h4, .call-thread h4 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.07em; line-height: 1.2; text-transform: uppercase; color: var(--muted); }
 .call-thread-history-toggle { align-self: flex-start; max-width: 100%; min-height: 44px; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
@@ -1884,14 +1889,14 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 @keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent), 3px 3px 0 var(--text); } to { box-shadow: 3px 3px 0 var(--text); } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
 @media (forced-colors: active) {
-  .call-card, .call-card .state-chip, .call-opt-rec, .call-answer-actions .call-answer-queue { border-color: CanvasText; box-shadow: none; background: Canvas; color: CanvasText; }
+  .call-card, .call-card .state-chip, .call-card .call-head-pill, .call-opt-rec, .call-answer-actions .call-answer-queue { border-color: CanvasText; box-shadow: none; background: Canvas; color: CanvasText; }
   .call-opt:has(input:checked), .call-answer-confirm, .call-answer-receipt, .call-status { border-color: Highlight; }
   .call-opt:has(input:focus-visible), .call-answer-receipt:focus { outline-color: Highlight; }
   .call-answer-fields[data-locked] .call-opt, .call-answer-fields[data-locked] textarea, .call-answer-fields[data-locked] .call-opt-rec { color: GrayText; border-color: GrayText; }
   .call-thread, .call-thread-captain { border-color: Highlight; }
   .call-opt-rec { color: CanvasText; border-color: CanvasText; }
 }
-@media (max-width: 720.005px) { .call-card { padding: 14px 12px 12px; } .call-thread-history { padding: 10px; } .call-opt-body { flex-basis: calc(100% - 28px); } .call-opt-rec { margin-left: 28px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } .call-repo { flex-basis: 100%; text-align: left; } .overview-columns { grid-template-columns: 1fr; } #overview-secondary { display: none; } }
+@media (max-width: 720.005px) { .call-card { padding: 14px 12px 12px; } .call-thread-history { padding: 10px; } .call-opt-body { flex-basis: calc(100% - 28px); } .call-opt-rec { margin-left: 28px; } .call-status { top: 0; } .call-read-only { display: block; margin-left: 0; } .overview-columns { grid-template-columns: 1fr; } #overview-secondary { display: none; } }
 
 /* Taxonomy is presentation-only; compact native disclosures keep all slices usable.
    Cohesive 3-tier visual hierarchy: Repository (Deck) -> Lane (Workstream) -> Theme (Grouping) */

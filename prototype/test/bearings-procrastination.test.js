@@ -117,6 +117,7 @@ test("the menu, return time, and full-text toggle are tab memory and never an an
   });
   await flush();
   assert.equal(controller.parked(KEY), false);
+  assert.equal(card.querySelector("header.call-head").contains(card.querySelector("[data-call-procrastinate]")), true);
   card.querySelector("[data-call-procrastinate-toggle]").click();
   assert.equal(card.querySelector("[data-call-procrastinate-menu]").hidden, false);
   dom.document.body.click();

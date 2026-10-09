@@ -18,7 +18,7 @@ Quarterdeck uses a quiet reading workspace: warm white canvas, light content sur
 - Thread history stays collapsed. A card with two or more entries shows an expand control with the entry count; one entry does not.
 - Each card has one text box, with Queue, Send and Edit beside it, and the hint "Pick an option to answer, or just type - Firstmate replies in the thread."
 - Opening a thread shows the latest exchange under that box, the count of earlier messages, and a control that expands the same history.
-- Each live card has Procrastinate, with 3h, 6h, 1d and 3d. Procrastinated (N) lists cards that are hidden until their return time.
+- Procrastinate is a header pill at the card's top-right, beside the repository name and beside Review dismissal on a chat ask. It matches the type badge's height, radius and weight, and opens 3h, 6h, 1d and 3d. Procrastinated (N) lists cards that are hidden until their return time.
 - Below the page header and the KPI summary, the Overview body is two equal columns with a 22px gap.
 - Captain's Call stays in the first column.
 - The second column is an empty reserved region (`#overview-secondary`) with no placeholder text.

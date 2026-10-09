@@ -203,7 +203,8 @@ Active calls hide cards with a sent Quarterdeck answer. **Show answered calls (N
 
 ## Procrastinated calls
 
-**Procrastinate** on each live card opens a menu of 3 hours, 6 hours, 1 day and 3 days.
+**Procrastinate** sits in the card header's top-right, beside the repository name, and beside **Review dismissal** on a chat ask so the two read as a pair.
+It is a compact pill with the type badge's height, radius and weight, and it opens a menu of 3 hours, 6 hours, 1 day and 3 days.
 Choosing one hides that card from the active list until that time, then the card returns on its own while the page is open, and on the next load after the time has passed.
 This is a Quarterdeck viewing status in `quarterdeck-call-procrastination.json`, beside `FM_QUARTERDECK_STATE_PATH`.
 It is never written under `FM_HOME`, never an answer, and never an inbox note.
