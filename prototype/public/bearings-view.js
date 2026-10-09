@@ -27,28 +27,59 @@ window.bearingsView = (() => {
   }
   // Firstmate's snapshot shortens long text itself and marks the cut with "…".
   const sourceShortened = (text) => typeof text === "string" && /…$/.test(text.trim());
+  // Suggested replies from chat asks linked to a filed call: offered as radios, relayed as
+  // the captain's own words (never as a keyed option value), so intake is unchanged.
+  function linkedReplies(card, options) {
+    if (card.type === "chat" || !Array.isArray(card.chatAsks)) return [];
+    const taken = new Set(options.map((option) => String(option.label).toLowerCase()));
+    const replies = [];
+    for (const ask of card.chatAsks) for (const reply of Array.isArray(ask.replies) ? ask.replies : []) {
+      if (typeof reply === "string" && reply.trim() && !taken.has(reply.toLowerCase()) && replies.length < 8) { taken.add(reply.toLowerCase()); replies.push(reply); }
+    }
+    return replies;
+  }
   function answerHtml(card, label) {
     const answer = card.answer;
     if (!answer) return `<p class="call-answer-hint">Answer in chat or on the /bearings lavish board.</p>
       <label class="call-note">Note to self <span>(saved in this tab · not sent)</span><textarea data-call-draft="note" rows="2" placeholder="Private reminder…"></textarea></label>`;
+    const id = idFor(card.key || label);
     const options = Array.isArray(answer.options) ? answer.options : [];
-    const optionHtml = options.map((option) => `<label class="call-opt"><input type="radio" name="selection" value="${escape(option.value)}" data-call-draft="selection" data-call-option-label="${escape(option.label)}"><span class="call-opt-body"><span class="call-opt-label">${escape(option.label)}</span>${option.hint ? `<span class="call-opt-hint">${escape(option.hint)}</span>` : ""}</span>${answer.recommend === option.value ? '<span class="call-opt-rec">Recommended</span>' : ""}</label>`).join("");
-    const textLabel = options.length ? "Add a note <span>(optional · sent with your answer)</span>" : "Your answer <span>(sent to Firstmate)</span>";
-    return `<form class="call-answer" data-call-answer novalidate aria-label="Answer: ${escape(label)}">
-      <fieldset class="call-answer-fields" data-call-answer-fields>
+    const replies = linkedReplies(card, options);
+    const radio = (value, text, hint, extra = "", recommended = false) => `<label class="call-opt"><input type="radio" name="call-selection-${id}" value="${escape(value)}" data-call-draft="selection" data-call-option-label="${escape(text)}"${extra}${recommended ? ` aria-describedby="call-rec-${id}"` : ""}><span class="call-opt-body"><span class="call-opt-label">${escape(text)}</span>${hint ? `<span class="call-opt-hint">${escape(hint)}</span>` : ""}</span>${recommended ? `<span class="call-opt-rec" id="call-rec-${id}">Recommended</span>` : ""}</label>`;
+    const optionHtml = options.map((option) => radio(option.value, option.label, option.hint, "", answer.recommend === option.value)).join("")
+      + replies.map((reply, index) => radio(`chat-reply-${index + 1}`, reply, "Suggested reply from chat · sent as your words", ` data-call-reply="${escape(reply)}"`)).join("");
+    const choices = options.length + replies.length;
+    const textLabel = choices ? "Add a note <span>(optional · sent with your answer)</span>" : "Your answer <span>(sent to Firstmate)</span>";
+    return `<form class="call-answer" data-call-answer data-call-answer-label="${escape(label)}" novalidate aria-label="Answer: ${escape(label)}">
+      <fieldset class="call-answer-fields${choices ? " call-answer-fields-split" : ""}" data-call-answer-fields>
         <legend class="call-answer-legend">Answer</legend>
-        ${options.length ? `<div class="call-opts">${optionHtml}</div>` : `<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above. Answer in your own words.</p>`}
-        <label class="call-answer-note">${textLabel}<textarea data-call-draft="answer" data-call-answer-text rows="2" placeholder="${options.length ? "Optional note…" : "Your answer…"}"></textarea></label>
+        ${choices ? `<div class="call-opts">${optionHtml}</div>` : `<p class="call-answer-gap">No structured options for this call yet; any recorded choices are in the full ${card.type === "merge" ? "reason" : "ask"} above. Answer in your own words.</p>`}
+        <div class="call-answer-compose">
+          <label class="call-answer-note">${textLabel}<textarea data-call-draft="answer" data-call-answer-text rows="2" placeholder="${choices ? "Optional note…" : "Your answer…"}"></textarea></label>
+          <div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-queue" data-call-answer-compose>Queue</button><button type="button" class="call-answer-send" data-call-answer-send hidden>Send</button><button type="button" data-call-answer-edit hidden>Edit</button></div>
+        </div>
       </fieldset>
       <p class="call-answer-error" data-call-answer-error role="alert" hidden></p>
-      <div class="call-answer-actions" data-call-answer-compose><button type="submit" class="call-answer-review">Review answer</button></div>
-      <div class="call-answer-confirm" data-call-answer-confirm role="group" aria-label="Confirm answer" hidden>
-        <p>Send to Firstmate: <strong data-call-answer-preview></strong></p>
-        <div class="call-answer-actions"><button type="button" class="call-answer-send" data-call-answer-send>Send to Firstmate</button><button type="button" data-call-answer-edit>Edit</button></div>
+      <div class="call-answer-confirm" data-call-answer-confirm role="group" aria-label="Queued answer" hidden>
+        <p>Queued for Firstmate: <strong data-call-answer-preview></strong></p>
+        <p class="call-meta">Send sends this answer now; Send batch in the review queue sends every queued answer together. Edit takes it out of the queue.</p>
       </div>
       <div class="call-answer-receipt" data-call-answer-receipt tabindex="-1" hidden><p role="status" data-call-answer-receipt-text></p><button type="button" data-call-answer-again>Answer again</button></div>
     </form>`;
   }
+  // "Ask more info": a card-scoped thread with Firstmate (BEARINGS.md "Card threads").
+  // The thread controller fills the log; the textarea is a protected draft like any other.
+  const threadToggleHtml = (id) => `<button type="button" class="call-thread-toggle" data-call-thread-toggle aria-expanded="false" aria-controls="call-thread-${id}">Ask more info</button>`;
+  const threadHtml = (id, label) => `<section class="call-thread" id="call-thread-${id}" data-call-thread aria-label="Thread with Firstmate: ${escape(label)}" hidden>
+      <h4>Thread with Firstmate</h4>
+      <p class="call-meta" data-call-thread-status role="status"></p>
+      <ol class="call-thread-log" data-call-thread-log></ol>
+      <form class="call-thread-form" data-call-thread-form novalidate>
+        <label class="call-answer-note">Ask Firstmate about this call <span>(sent to Firstmate's inbox · not an answer)</span><textarea data-call-draft="thread" data-call-thread-text rows="2" placeholder="What is this about?"></textarea></label>
+        <div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-send" data-call-thread-send>Ask Firstmate</button></div>
+      </form>
+      <p class="call-answer-error" data-call-thread-error role="alert" hidden></p>
+    </section>`;
   const CHAT_LABELS = { approval: "Approval", action: "Action", decision: "Decision" };
   const repliesText = (replies) => (Array.isArray(replies) && replies.length ? replies.map((reply) => `“${reply}”`).join(" or ") : "No quoted reply");
   // A chat ask is one Firstmate made in conversation without filing a hold (BEARINGS.md "Chat asks").
@@ -62,9 +93,10 @@ window.bearingsView = (() => {
       <div class="call-more-detail" id="call-more-${id}" data-call-more-detail hidden><p class="call-meta">Found by its <code>${escape(card.marker || "")}</code> line in the Firstmate transcript.</p></div>
       <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
       <p class="call-meta">Answering here, dismissing, or replying in chat with the quoted reply closes this card.</p>
-      <div class="call-answer-actions"><button type="button" data-call-dismiss>Review dismissal</button></div>
+      <div class="call-answer-actions"><button type="button" data-call-dismiss>Review dismissal</button>${threadToggleHtml(id)}</div>
       <div class="call-dismiss-confirm" data-call-dismiss-confirm role="group" aria-label="Confirm dismissal" hidden><p>Hide this ask from Captain's Call? Nothing is sent to Firstmate. Unsent text stays in this tab.</p><div class="call-answer-actions"><button type="button" data-call-dismiss-send>Dismiss this ask</button><button type="button" data-call-dismiss-cancel>Cancel</button></div></div>
-      <p class="call-answer-error" data-call-dismiss-error role="alert" hidden></p></div>
+      <p class="call-answer-error" data-call-dismiss-error role="alert" hidden></p>
+      ${threadHtml(id, `${label} asked in chat`)}</div>
       ${answerHtml(card, `${label} asked in chat`)}`;
   }
   const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length
@@ -91,7 +123,9 @@ window.bearingsView = (() => {
       </div>
       <button type="button" class="call-more" data-call-more aria-expanded="false" aria-controls="call-decide-${id} call-more-${id}" hidden>More details</button>
       ${url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : merge ? '<p class="call-meta">Merge link unavailable</p>' : ""}
-      ${card.answer ? "" : `<p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>`}</div>
+      ${card.answer ? "" : `<p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>`}
+      <div class="call-answer-actions">${threadToggleHtml(id)}</div>
+      ${threadHtml(id, `${label} ${card.task || ""}`.trim())}</div>
       ${answerHtml(card, `${label} ${card.task || ""}`.trim())}`;
   }
   function emptyHtml(model) {

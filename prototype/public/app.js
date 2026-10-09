@@ -1739,14 +1739,17 @@ function observeBearings(data) {
   renderFreshness();
 }
 // Answer and overflow controllers re-apply their per-card state after every patcher fill.
-let callAnswers = null, callOverflow = null, callDismiss = null;
+let callAnswers = null, callOverflow = null, callDismiss = null, callThreads = null;
 const callPatcher = window.bearingsPatch?.createCallPatcher({
   section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
   view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
-  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); },
-  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); },
+  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); callThreads?.render(node); },
+  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); window.quarterdeckReviewQueue?.refresh(); },
 });
-callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts });
+// Queued answers join the review panel's queue; its Send batch sends them with the notes.
+callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => window.quarterdeckReviewQueue?.refresh() });
+if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key) };
+callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
 // Focus leaves the held section only after a confirmed dismissal; drafts remain protected.
 callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({

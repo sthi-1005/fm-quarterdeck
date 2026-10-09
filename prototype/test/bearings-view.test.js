@@ -5,6 +5,8 @@ import vm from 'node:vm';
 const window = {};
 vm.runInNewContext(await readFile(new URL('../public/bearings-view.js', import.meta.url), 'utf8'), { window, URL });
 const view = window.bearingsView;
+// The card thread ("Ask more info") is the one form every card carries; strip it to test the rest.
+const withoutThread = (html) => html.replace(/<section class="call-thread"[\s\S]*?<\/section>/, '');
 
 test('decision, credential and merge rendering is escaped and read-only', () => {
   for (const type of ['decision', 'merge']) {
@@ -13,7 +15,8 @@ test('decision, credential and merge rendering is escaped and read-only', () => 
     assert.match(html, /&lt;/);
     assert.match(html, /Answer in chat or on the \/bearings lavish board/);
     assert.match(html, /data-call-draft="note"/);
-    assert.doesNotMatch(html, /data-call-key|data-call-rev|type="submit"|Merge now/);
+    assert.doesNotMatch(withoutThread(html), /data-call-key|data-call-rev|type="submit"|Merge now/);
+    assert.match(html, /data-call-thread-toggle aria-expanded="false"[^>]*>Ask more info</);
     if (type === 'decision') assert.match(html, />Credentials</);
     else { assert.match(html, /https:\/\/example.invalid\/pull\/1\?a=1&amp;b=2/); assert.match(html, /rel="noopener noreferrer"/); }
   }
@@ -28,7 +31,7 @@ test('rich context expands source choices without inventing controls, risk or a 
   assert.match(html, /<dt>About<\/dt><dd>example-app · acme-mate/);
   assert.ok(html.includes(`data-call-clamp id="call-decide-${view.idFor('Decision')}">${summary}</dd>`));
   assert.match(html, /href="https:\/\/example.invalid\/acme\/example-app\/pull\/42"/);
-  assert.doesNotMatch(html, /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
+  assert.doesNotMatch(withoutThread(html), /<form|type="radio"|<select|<details|checks green|call-opt|recommend_value/);
   const merge = view.cardHtml({ type: 'merge', reason: summary, kind: 'pr', repo: 'example-app' });
   assert.ok(merge.includes(summary));
   assert.match(merge, /<dt>Risk<\/dt><dd>Not provided by the snapshot/);
@@ -49,15 +52,20 @@ test('long text is clamped with a More details control; Firstmate shortening is 
 });
 test('answerable cards render a form: freeform only without options, options with a recommended marker, Merge now for merges', () => {
   const freeform = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick a window', answer: { question: 'alpha-call', options: [], recommend: null, close: null, freeform: true } });
-  assert.match(freeform, /<form class="call-answer" data-call-answer novalidate/);
+  assert.match(freeform, /<form class="call-answer" data-call-answer data-call-answer-label="Decision alpha-call" novalidate/);
   assert.match(freeform, /No structured options for this call yet; any recorded choices are in the full ask above/);
   assert.doesNotMatch(freeform, /\$\{/);
   assert.match(freeform, /data-call-draft="answer" data-call-answer-text/);
   assert.doesNotMatch(freeform, /type="radio"|Recommended|Note to self|Answer in chat/);
   for (const hook of ['fields', 'compose', 'confirm', 'preview', 'send', 'edit', 'receipt', 'again', 'error']) assert.ok(freeform.includes(`data-call-answer-${hook}`), hook);
-  assert.match(freeform, /data-call-answer-confirm role="group" aria-label="Confirm answer" hidden/);
+  assert.match(freeform, /data-call-answer-confirm role="group" aria-label="Queued answer" hidden/);
+  // Queue, then Send and Edit, sit in one bar directly under the answer text box.
+  assert.match(freeform, /data-call-answer-text[^>]*><\/textarea><\/label>\s*<div class="call-answer-actions call-answer-bar"><button type="submit" class="call-answer-queue" data-call-answer-compose>Queue<\/button><button type="button" class="call-answer-send" data-call-answer-send hidden>Send<\/button><button type="button" data-call-answer-edit hidden>Edit<\/button><\/div>/);
+  assert.doesNotMatch(freeform, /Review answer/);
   const options = view.cardHtml({ key: 'decision:alpha-call', task: 'alpha-call', type: 'decision', summary: 'Pick', answer: { question: 'alpha-call', options: [{ value: 'staged', label: '<b>Staged</b>', hint: 'Fewer users' }, { value: 'now', label: 'Now', hint: null }], recommend: 'staged', close: null, freeform: true } });
-  assert.equal((options.match(/type="radio" name="selection"/g) || []).length, 2);
+  assert.equal((options.match(new RegExp(`type="radio" name="call-selection-${view.idFor('decision:alpha-call')}"`, 'g')) || []).length, 2);
+  assert.match(options, /call-answer-fields call-answer-fields-split/, 'options sit beside the note');
+  assert.match(options, /value="staged"[^>]*aria-describedby="call-rec-[^"]+"/, 'the recommendation is announced with its option');
   assert.equal((options.match(/call-opt-rec/g) || []).length, 1, 'only the recommended option is marked');
   assert.match(options, /value="staged"[^>]*data-call-option-label="&lt;b&gt;Staged&lt;\/b&gt;"[\s\S]*?Fewer users[\s\S]*?Recommended/);
   assert.match(options, /Add a note/);
@@ -65,6 +73,12 @@ test('answerable cards render a form: freeform only without options, options wit
   const merge = view.cardHtml({ key: 'merge:beta-merge', task: 'beta-merge', type: 'merge', reason: 'checks green', answer: { question: 'merge.beta-merge', options: [{ value: 'merge', label: 'Merge now', hint: 'Firstmate re-checks' }], recommend: null, close: null, freeform: true } });
   assert.match(merge, /value="merge"[\s\S]*Merge now/);
   assert.doesNotMatch(merge, /Recommended/);
+  // Suggested replies from linked chat asks become radios relayed as the captain's words.
+  const linked = view.cardHtml({ key: 'merge:beta-merge', task: 'beta-merge', type: 'merge', reason: 'checks green', chatAsks: [{ summary: 'Merge?', replies: ['ship it', 'Merge now', '<hold>'] }],
+    answer: { question: 'merge.beta-merge', options: [{ value: 'merge', label: 'Merge now', hint: null }], recommend: null, close: null, freeform: true } });
+  assert.equal((linked.match(/data-call-reply=/g) || []).length, 2, 'a reply equal to an option label is not repeated');
+  assert.match(linked, /value="chat-reply-1"[^>]*data-call-option-label="ship it" data-call-reply="ship it"/);
+  assert.match(linked, /data-call-reply="&lt;hold&gt;"/);
 });
 
 test('a captain-hold asking for a credential is labelled Credentials', () => {

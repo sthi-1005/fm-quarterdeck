@@ -449,6 +449,42 @@ test("queued local batch enables both Send actions while an empty queue stays di
   assert.equal(element("review-end").disabled, true);
 });
 
+test("queued Captain's Call answers count in the review queue and Send batch sends them through their own route first", async () => {
+  const elements = new Map();
+  function element(id) {
+    if (!elements.has(id)) elements.set(id, {
+      id, value: "", textContent: "", hidden: id === "review-annotation", disabled: false, style: {}, scrollHeight: 40, listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      setAttribute() {}, focus() {}, replaceChildren() {}, append() {},
+    });
+    return elements.get(id);
+  }
+  let calls = [{ key: "decision:alpha-call", label: "Decision alpha-call", text: "Tuesday", phase: "confirm" }];
+  const sends = [];
+  const posts = [];
+  const context = {
+    document: { body: { append() {} }, getElementById: element, querySelector: () => ({ textContent: "" }), addEventListener() {}, createElement: () => ({ textContent: "", style: {}, append() {}, setAttribute() {}, addEventListener() {} }) },
+    window: { addEventListener() {}, quarterdeckCallQueue: { list: () => calls, send: async () => { sends.push(calls.length); calls = []; return true; }, remove() {} } },
+    location: { hash: "#overview" }, crypto: { randomUUID: () => "batch-1" },
+    fetch: async (url, options) => { if (options?.method === "POST") posts.push(url); return options?.method === "POST"
+      ? { ok: true, json: async () => ({ receiptId: "local:batch-1", delivery: "local" }) }
+      : { ok: true, json: async () => ({ ready: true, delivery: "local", sessionId: "", version: reviewVersion }) }; },
+  };
+  vm.createContext(context);
+  vm.runInContext(reviewClientScript, context);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof context.window.quarterdeckReviewQueue.refresh, "function");
+  assert.equal(element("review-count").textContent, "· 1 queued", "a queued answer counts with the notes");
+  assert.equal(element("review-send").disabled, false, "a queued answer alone enables Send batch");
+  element("review-send").listeners.click();
+  for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sends, [1]);
+  assert.deepEqual(posts, [], "answers never travel as review annotations");
+  assert.match(element("review-state").textContent, /^Sent 1 Captain's Call answer;/);
+  assert.equal(element("review-count").textContent, "");
+  assert.equal(element("review-send").disabled, true);
+});
+
 test("native review stays available with panel hidden and click precedence toggle", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const script = reviewClientScript;

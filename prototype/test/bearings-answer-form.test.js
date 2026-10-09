@@ -116,18 +116,23 @@ function tabStorage() {
     key: (index) => [...entries.keys()][index], get length() { return entries.size; } };
 }
 
-test("nothing is sent until Review answer and then an explicit Send; the sent answer clears its draft and shows receipts", async () => {
+test("nothing is sent until Queue and then an explicit Send; the sent answer clears its draft and shows receipts", async () => {
   const t = setup({ responses: [{ status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } }, { status: 200, body: { answers: { [uuid(1)]: { state: "received" } } } }, { status: 200, body: { answers: { [uuid(1)]: { state: "replied", reply: "Holding until Tuesday" } } } }] });
   t.patcher.update(model([decision()]));
   const key = "decision:alpha-call";
   assert.equal(t.part(key, "confirm").hidden, true);
+  assert.equal(t.part(key, "compose").textContent, "Queue");
+  assert.equal(t.part(key, "send").hidden, true, "Send appears only for a queued answer");
   t.part(key, "text").type("  Use the Tuesday window  ");
   t.submit(key);
-  assert.equal(t.fetches.length, 0, "review never sends");
+  assert.equal(t.fetches.length, 0, "queueing never sends");
   assert.equal(t.answers.state(key).phase, "confirm");
   assert.equal(t.part(key, "preview").textContent, "Use the Tuesday window");
   assert.equal(t.part(key, "confirm").hidden, false);
-  assert.equal(t.part(key, "fields").disabled, true, "the reviewed text cannot change under the confirmation");
+  assert.equal(t.part(key, "text").readOnly, true, "the queued text cannot change while queued");
+  assert.equal(t.part(key, "fields").hasAttribute("data-locked"), true);
+  assert.equal(t.part(key, "compose").hidden, true, "Queue gives way to Send and Edit");
+  assert.equal(t.part(key, "edit").hidden, false);
   assert.equal(t.document.activeElement, t.part(key, "send"));
   // Updates arriving meanwhile never send either.
   t.patcher.update(model([decision(), merge()]));
@@ -205,7 +210,7 @@ test("unconfirmed sends retry only by click with the same request id; refusals r
   assert.equal(t.answers.state(key).phase, "refused");
   assert.equal(t.part(key, "error").textContent, "This call is no longer open");
   assert.equal(t.part(key, "compose").hidden, false);
-  assert.equal(t.part(key, "fields").disabled, false);
+  assert.equal(t.part(key, "text").readOnly, false);
   // A refusal after an uncertain attempt cannot mint a second note identity.
   t.submit(key);
   assert.equal(t.answers.state(key).requestId, uuid(1));
@@ -238,7 +243,7 @@ test("option drafts restore after a refill; Edit preserves drafts and Answer aga
   t.submit(key);
   t.part(key, "edit").click();
   assert.equal(t.answers.state(key), null);
-  assert.equal(t.part(key, "fields").disabled, false);
+  assert.equal(t.part(key, "text").readOnly, false);
   assert.equal(radio().checked, true);
   assert.equal(t.part(key, "text").value, "After the demo");
   t.submit(key);
@@ -349,4 +354,37 @@ test("More details appears only when text is cut, expands in place, and survives
   assert.equal(more().hidden, true, "collapsed and nothing cut");
   t.patcher.update(model([decision("a3", "Pick the window: staged or immediate, with the…")]));
   assert.equal(more().hidden, false, "Firstmate's own shortening shows the control without any overflow");
+});
+
+// Arrays built inside the vm context are not this realm's arrays.
+const plain = (value) => JSON.parse(JSON.stringify(value));
+test("queued answers list for the review queue, send together with their own ids, and Remove returns one to its card", async () => {
+  const t = setup({ responses: [{ status: 202, body: { state: "accepted" } }, { status: 503, body: { error: "Firstmate did not confirm" } }] });
+  const linked = { ...merge(), chatAsks: [{ summary: "Merge it?", replies: ["ship it"] }] };
+  t.patcher.update(model([decision(), linked]));
+  const [first, second] = ["decision:alpha-call", "merge:beta-merge"];
+  assert.deepEqual(plain(t.answers.queued()), []);
+  t.part(first, "text").type("Tuesday");
+  t.submit(first);
+  t.leave();
+  const reply = t.node(second).querySelector('input[data-call-reply="ship it"]');
+  reply.checked = true;
+  reply.dispatchEvent({ type: "change" });
+  t.submit(second);
+  assert.equal(t.fetches.length, 0, "queueing never sends");
+  assert.deepEqual(plain(t.answers.queued()), [
+    { key: first, label: "Decision alpha-call", text: "Tuesday", phase: "confirm" },
+    { key: second, label: "Merge beta-merge", text: "ship it", phase: "confirm" },
+  ]);
+  assert.equal(await t.answers.sendQueued(), false, "one unconfirmed answer reports the batch incomplete");
+  assert.deepEqual(t.fetches.map((entry) => [entry.body.key, entry.body.requestId, entry.body.selection, entry.body.note]), [
+    [first, uuid(1), "", "Tuesday"],
+    [second, uuid(2), "", "ship it"],
+  ], "a suggested chat reply is relayed as the captain's words, never a keyed option");
+  assert.equal(t.answers.state(first).phase, "sent");
+  assert.deepEqual(plain(t.answers.queued()).map((entry) => [entry.key, entry.phase]), [[second, "failed"]]);
+  t.answers.unqueue(second);
+  assert.equal(t.answers.state(second).phase, "compose");
+  assert.equal(t.answers.state(second).requestId, uuid(2), "an attempted answer keeps its identity after Remove");
+  assert.deepEqual(plain(t.answers.queued()), []);
 });

@@ -18,6 +18,7 @@ import { createQuotaReader } from "./quota.js";
 import { createBearingsHub } from "./bearings.js";
 import { chatAskKey, chatAsksPath, createCallSource, createChatAskScanner } from "./chat-asks.js";
 import { AnswerRefused, MAX_BODY_BYTES as MAX_ANSWER_BODY_BYTES, createAnswerRelay } from "./bearings-answer.js";
+import { MAX_THREAD_BODY_BYTES, ThreadRefused, createThreadRelay, createTranscriptTurns } from "./bearings-thread.js";
 import { createConfiguredCostReader } from "./costs.js";
 import { readExpenseOverlay } from "./private-runtime.js";
 import { readPreferences } from "./preferences.js";
@@ -71,6 +72,7 @@ const STATIC_FILES = new Map([
   ["/bearings-answer-form.js", ["bearings-answer-form.js", "text/javascript; charset=utf-8"]],
   ["/bearings-overflow.js", ["bearings-overflow.js", "text/javascript; charset=utf-8"]],
   ["/bearings-dismiss.js", ["bearings-dismiss.js", "text/javascript; charset=utf-8"]],
+  ["/bearings-thread-panel.js", ["bearings-thread-panel.js", "text/javascript; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
 ]);
 
@@ -951,7 +953,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createCallSource({ hub: createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), chat: createChatAskScanner({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env), statePath: chatAsksPath(configuredStatePath(env)) }) }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource = createCallSource({ hub: createBearingsHub({ home: env.FM_HOME, minGapMs: env.FM_BEARINGS_MIN_GAP_MS, maxAgeMs: env.FM_BEARINGS_MAX_AGE_MS }), chat: createChatAskScanner({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env), statePath: chatAsksPath(configuredStatePath(env)) }) }), bearingsStream = {}, answerRelay = createAnswerRelay({ home: env.FM_HOME }), threadRelay = createThreadRelay({ home: env.FM_HOME, transcript: createTranscriptTurns({ home: env.FM_HOME, claudeConfigDir: claudeConfigDir(env) }) }), costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options) } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -995,7 +997,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     return (/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) && origin === `http://${host}`) ||
       Boolean(allowedReviewOrigin && host === allowedReviewOrigin.slice("https://".length) && origin === allowedReviewOrigin);
   };
-  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/bearings-thread-panel.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
   // Live Captain's Call streams (host only; previews poll /api/bearings?since).
   const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
   const streams = new Set();
@@ -1333,6 +1335,32 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
         try { await bearingsSource.resolveChat(body.key, "dismissed"); }
         catch { await sendJson(request, response, 503, { error: "Quarterdeck could not record the dismissal; try again", code: "unrecorded" }); return; }
         await sendJson(request, response, 200, { state: "dismissed", key: body.key });
+        return;
+      }
+      // Card threads (BEARINGS.md "Card threads"): an explicit captain question about one card,
+      // relayed as an inbox note; the history is a read-only join. Host only.
+      if (url.pathname === "/api/bearings/thread" && request.method === "POST") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        if (!authorized(request)) { await sendJson(request, response, 403, { error: "Unauthorized origin", code: "origin" }); return; }
+        if (url.search || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 415, { error: "JSON required", code: "invalid" }); return; }
+        let text = "";
+        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > MAX_THREAD_BODY_BYTES) { await sendJson(request, response, 413, { error: "Question too large", code: "too-long" }); return; } }
+        let body = null;
+        try { body = JSON.parse(text); } catch {}
+        if (await syncRevision(true) !== commit) { await sendJson(request, response, 409, { error: "Quarterdeck updated; reload to continue", code: "revision" }); return; }
+        try { await sendJson(request, response, 202, await threadRelay.submit(body, bearingsSource.current())); }
+        catch (error) {
+          if (!(error instanceof ThreadRefused)) throw error;
+          await sendJson(request, response, error.status, { error: error.message, code: error.code });
+        }
+        return;
+      }
+      if (url.pathname === "/api/bearings/thread" && request.method === "GET") {
+        if (preview) { await sendJson(request, response, 404, { error: "Preview route not allowed" }); return; }
+        try { await sendJson(request, response, 200, await threadRelay.history(String(url.searchParams.get("key") || ""), bearingsSource.current())); }
+        catch (error) {
+          await sendJson(request, response, error instanceof ThreadRefused ? error.status : 502, { error: error instanceof ThreadRefused ? error.message : "Firstmate receipts unavailable", code: error instanceof ThreadRefused ? error.code : "unavailable" });
+        }
         return;
       }
       if (url.pathname === "/api/bearings/answer/status" && request.method === "GET") {

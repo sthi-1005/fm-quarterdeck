@@ -1,6 +1,6 @@
 // Captain's Call answer flow (BEARINGS.md "Answers"). Nothing is sent without an explicit
-// captain click: Review answer shows exactly what will go to Firstmate, and only Send
-// relays it. A retry after an unconfirmed send is another explicit click and reuses the
+// captain click: Queue locks the answer and shows exactly what will go to Firstmate, and
+// only Send (this card) or Send batch (the review queue, every queued answer) relays it. A retry after an unconfirmed send is another explicit click and reuses the
 // same request id, so Firstmate records one answer. A card leaves only when Firstmate's
 // next snapshot drops it; this controller never removes or closes a card.
 window.bearingsAnswerForm = (() => {
@@ -11,7 +11,7 @@ window.bearingsAnswerForm = (() => {
   const display = (selection, note) => selection ? (note ? `${selection} - ${note}` : selection) : note;
   const keyOf = (node) => node?.getAttribute?.("data-call-key") || null;
 
-  // Phases: compose → confirm → sending → sent; failed (unconfirmed, retry allowed) and
+  // Phases: compose → confirm (queued) → sending → sent; failed (unconfirmed, retry allowed) and
   // refused (the server said no; edit and review again) return to the captain.
   function createStateStore(storage) {
     const memory = new Map();
@@ -56,7 +56,10 @@ window.bearingsAnswerForm = (() => {
 
     function read(form) {
       const checked = [...form.querySelectorAll('input[type="radio"][data-call-draft="selection"]')].find((input) => input.checked);
-      const note = (part(form, "text")?.value || "").replace(/\r\n?/g, "\n").trim();
+      let note = (part(form, "text")?.value || "").replace(/\r\n?/g, "\n").trim();
+      // A suggested chat reply is the captain's own words, never a keyed option value.
+      const reply = checked?.getAttribute("data-call-reply");
+      if (reply) return { selection: "", selectionLabel: "", note: display(reply, note) };
       const selection = checked?.getAttribute("value") || "";
       return { selection, selectionLabel: checked?.getAttribute("data-call-option-label") || selection, note };
     }
@@ -78,7 +81,15 @@ window.bearingsAnswerForm = (() => {
       form.setAttribute("data-call-answer-phase", phase);
       const fields = part(form, "fields");
       const locked = ["confirm", "sending", "failed"].includes(phase);
-      if (fields) { fields.disabled = locked; fields.hidden = phase === "sent"; }
+      // Lock fields one by one, not the fieldset: Send and Edit live beside the text box
+      // inside it. A read-only textarea stays focusable and selectable.
+      if (fields) {
+        fields.hidden = phase === "sent";
+        if (locked) fields.setAttribute("data-locked", ""); else fields.removeAttribute("data-locked");
+        for (const input of fields.querySelectorAll('input[type="radio"]')) input.disabled = locked;
+        const text = part(form, "text");
+        if (text) { text.readOnly = locked; text.setAttribute("aria-readonly", String(locked)); }
+      }
       const compose = part(form, "compose");
       if (compose) compose.hidden = phase !== "compose" && phase !== "refused";
       const confirm = part(form, "confirm");
@@ -87,12 +98,14 @@ window.bearingsAnswerForm = (() => {
       if (preview) preview.textContent = locked ? display(state.selectionLabel || state.selection, state.note) : "";
       const send = part(form, "send");
       if (send) {
+        send.hidden = !locked;
         // aria-disabled, not disabled: a disabled button would drop the captain's focus.
         send.setAttribute("aria-disabled", String(phase === "sending"));
         send.setAttribute("aria-busy", String(phase === "sending"));
-        send.textContent = phase === "sending" ? "Sending…" : phase === "failed" ? "Retry send" : "Send to Firstmate";
+        send.textContent = phase === "sending" ? "Sending…" : phase === "failed" ? "Retry send" : "Send";
       }
-      part(form, "edit")?.setAttribute("aria-disabled", String(phase === "sending"));
+      const edit = part(form, "edit");
+      if (edit) { edit.hidden = !locked; edit.setAttribute("aria-disabled", String(phase === "sending")); }
       const error = part(form, "error");
       if (error) {
         const text = ["refused", "failed"].includes(phase) ? state.error || "" : "";
@@ -124,12 +137,12 @@ window.bearingsAnswerForm = (() => {
       const answer = read(form);
       if (!answer.selection && !answer.note) { update(key, { ...previous, phase: "refused", error: "Choose an option or write an answer first." }, "text"); return; }
       if (bytes(display(answer.selection, answer.note)) > MAX_ANSWER_BYTES) { update(key, { ...previous, phase: "refused", error: `The answer is longer than ${MAX_ANSWER_BYTES} bytes; shorten it.` }, "text"); return; }
-      update(key, { phase: "confirm", ...answer, cardRev: cardNode(key)?.getAttribute("data-call-rev") || null, requestId: previous.requestId || uuid(), attempted: previous.attempted === true }, "send");
+      update(key, { phase: "confirm", ...answer, label: form.getAttribute("data-call-answer-label") || key, cardRev: cardNode(key)?.getAttribute("data-call-rev") || null, requestId: previous.requestId || uuid(), attempted: previous.attempted === true }, "send");
     }
 
-    async function send(key) {
+    async function send(key, { focus = true } = {}) {
       const state = states.get(key);
-      if (!state || !["confirm", "failed"].includes(state.phase)) return;
+      if (!state || !["confirm", "failed"].includes(state.phase)) return false;
       update(key, { ...state, phase: "sending", attempted: true, error: null });
       let response = null, body = null;
       try {
@@ -147,16 +160,35 @@ window.bearingsAnswerForm = (() => {
           part(form, "text").value = "";
           for (const input of form.querySelectorAll('input[type="radio"]')) input.checked = false;
         }
-        update(key, { phase: "sent", requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, "receipt");
-        return;
+        update(key, { phase: "sent", requestId: state.requestId, selection: state.selection, selectionLabel: state.selectionLabel, note: state.note, label: state.label, sentAt: body?.sentAt || new Date().toISOString(), receipt: { state: "accepted" } }, focus ? "receipt" : null);
+        return true;
       }
       // Unconfirmed (network, 5xx): the same request id may be retried by an explicit click.
       if (!response || response.status >= 500) {
-        update(key, { ...state, attempted: true, phase: "failed", error: `${body?.error || "Firstmate did not confirm the answer."} The earlier send may already have reached Firstmate. Retry uses the same request id; editing cannot replace an already recorded answer.` }, "send");
-        return;
+        update(key, { ...state, attempted: true, phase: "failed", error: `${body?.error || "Firstmate did not confirm the answer."} The earlier send may already have reached Firstmate. Retry uses the same request id; editing cannot replace an already recorded answer.` }, focus ? "send" : null);
+        return false;
       }
-      // Refused (stale call, invalid answer, wrong origin, preview host): edit and review again.
-      update(key, { ...state, attempted: true, phase: "refused", error: body?.error || "The answer was not accepted." }, "text");
+      // Refused (stale call, invalid answer, wrong origin, preview host): edit and queue again.
+      update(key, { ...state, attempted: true, phase: "refused", error: body?.error || "The answer was not accepted." }, focus ? "text" : null);
+      return false;
+    }
+    // Queued answers, for the review queue's list and its Send batch. Each answer is still
+    // its own fm-bearings-answer note with its own request id: batching changes no intake.
+    const queuedPhases = new Set(["confirm", "sending", "failed"]);
+    function queued() {
+      const openKeys = new Set([...list.querySelectorAll("[data-call-key]")].map(keyOf));
+      return states.keys().filter((key) => openKeys.has(key) && queuedPhases.has(states.get(key)?.phase))
+        .map((key) => { const state = states.get(key); return { key, label: state.label || key, text: display(state.selectionLabel || state.selection, state.note), phase: state.phase }; });
+    }
+    async function sendQueued() {
+      let ok = true;
+      for (const entry of queued()) if (entry.phase !== "sending") ok = await send(entry.key, { focus: false }) && ok;
+      return ok;
+    }
+    function unqueue(key) {
+      const state = states.get(key);
+      if (!state || !["confirm", "failed"].includes(state.phase)) return;
+      update(key, state.attempted || state.phase === "failed" ? { ...state, phase: "compose", attempted: true } : null);
     }
 
     async function poll() {
@@ -218,6 +250,9 @@ window.bearingsAnswerForm = (() => {
         for (const key of states.keys()) if (!open.has(key) && states.get(key)?.phase !== "sending") states.set(key, null);
       },
       state: (key) => states.get(key),
+      queued,
+      sendQueued,
+      unqueue,
       poll,
       destroy() {
         destroyed = true;

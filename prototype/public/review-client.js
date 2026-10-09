@@ -77,13 +77,17 @@ let inFlight = null; // Cutoff snapshot, separate from annotations queued during
 let inFlightIndex = null; // Original order among failed/uncertain batches on reload.
 let retryBatches = []; // Unconfirmed deliveries keep their own payloads and IDs.
 let batchId = null;
+// Captain's Call answers queued on their cards (app.js registers the provider). They are
+// listed and sent with this queue, but each is still relayed through its own answer route.
+const callQueue = () => { try { return window.quarterdeckCallQueue?.list?.() || []; } catch { return []; } };
 // One semantic control for both the desktop label and the compact phone icon.
 // Only receipt-backed entries without confirmed supervisor intake count; drafts remain local.
 function updateReviewControl() {
   const awaiting = awaitingReview === null ? "annotation count unavailable"
     : `${awaitingReview} ${awaitingReview === 1 ? "annotation" : "annotations"} awaiting Firstmate receipt`;
-  el("review-panel-toggle").setAttribute("aria-label", `${phoneReview?.matches ? "Chat" : "Review messages"}, ${awaiting}; ${queue.length} ${queue.length === 1 ? "note" : "notes"} queued locally`);
-  el("review-count").textContent = queue.length ? `· ${queue.length} queued` : "";
+  const queuedHere = queue.length + callQueue().length;
+  el("review-panel-toggle").setAttribute("aria-label", `${phoneReview?.matches ? "Chat" : "Review messages"}, ${awaiting}; ${queuedHere} ${queuedHere === 1 ? "note" : "notes"} queued locally`);
+  el("review-count").textContent = queuedHere ? `· ${queuedHere} queued` : "";
 }
 const DRAFT_KEY = "fm-agentos-review-draft-v1";
 function saveDraft() {
@@ -288,7 +292,8 @@ function update() {
   if (gestureCurrent) gestureCurrent.textContent = `The toggle is ${annotateByDefault ? "on" : "off"}.`;
   updateReviewControl();
   const acceptedCount = sent.reduce((count, batch) => count + batch.entries.length, 0);
-  const queuedCount = queue.length + retryBatches.reduce((count, batch) => count + batch.payload.entries.length, 0) + (inFlight?.payload.entries.length || 0);
+  const calls = callQueue();
+  const queuedCount = calls.length + queue.length + retryBatches.reduce((count, batch) => count + batch.payload.entries.length, 0) + (inFlight?.payload.entries.length || 0);
   const compactSummary = [queuedCount && `${queuedCount} queued`, acceptedCount && `${acceptedCount} sent`].filter(Boolean).join(" · ");
   el("review-inline-summary").textContent = compactSummary;
 
@@ -302,8 +307,9 @@ function update() {
   el("review-queue").textContent = "Queue";
   el("review-queue").setAttribute("aria-label", `${queueLabel} (Enter)`);
   el("review-context").textContent = `Version ${config.version.slice(0, 12)} · ${config.delivery === "lavish" ? `Lavish session ${config.sessionId}` : config.intakeReady ? "Firstmate inbox intake" : "Local receipt · Firstmate intake unavailable"}`;
-  const sendable = queue.length || retryBatches.length || (!reviewHistoryTab() && el("review-message").value.trim());
-  el("review-send").disabled = !sendable || pending || !config.ready;
+  const sendable = calls.length || queue.length || retryBatches.length || (!reviewHistoryTab() && el("review-message").value.trim());
+  // Queued call answers use their own route, so review delivery being down does not block them.
+  el("review-send").disabled = !sendable || pending || (!config.ready && !calls.some((entry) => entry.phase !== "sending"));
   el("review-end").disabled = pending || !config.ready || !sendable;
   el("review-queue").disabled = false;
   el("review-pick").hidden = !hovered || Boolean(desktopComposer?.matches);
@@ -463,13 +469,47 @@ function update() {
     details.addEventListener("toggle", () => { if (details.open) openBatches.add(captured.id); else openBatches.delete(captured.id); });
     return details;
   }
+  function renderCallAnswer(entry) {
+    const card = document.createElement("article");
+    card.className = "review-call-answer";
+    const header = document.createElement("div");
+    header.className = "review-note-header";
+    const heading = document.createElement("strong");
+    heading.textContent = `${entry.phase === "sending" ? "Sending" : entry.phase === "failed" ? "Retry needed" : "Queued"} Captain's Call answer · ${entry.label}`;
+    header.append(heading);
+    const text = document.createElement("p");
+    text.className = "review-note-text";
+    text.textContent = entry.text;
+    if (entry.phase !== "sending") {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.setAttribute("aria-label", `Remove queued answer for ${entry.label}; it returns to its card for editing`);
+      remove.addEventListener("click", () => { window.quarterdeckCallQueue?.remove?.(entry.key); update(); });
+      header.append(remove);
+    }
+    card.append(header, text);
+    return card;
+  }
+  function renderCallBatch() {
+    const details = document.createElement("details");
+    details.className = "review-batch";
+    details.open = openBatches.has("call-answers");
+    const summary = document.createElement("summary");
+    summary.textContent = `Queued Captain's Call answers · ${calls.length}`;
+    details.append(summary, ...calls.map(renderCallAnswer));
+    details.addEventListener("toggle", () => { if (details.open) openBatches.add("call-answers"); else openBatches.delete("call-answers"); });
+    return details;
+  }
   const capturedBatches = [[inFlight, "Sending"], ...retryBatches.map((batch) => [batch, "Retry needed"])].filter(([captured]) => captured);
   // Desktop: Sent list over an always-listed queue (count lives in the section heading).
   for (const batch of sent) sentList.append(renderSentBatch(batch));
+  for (const entry of calls) thread.append(renderCallAnswer(entry));
   for (const [index, entry] of queue.entries()) thread.append(renderNote(entry, `queued:${index}`, index));
   for (const [captured, title] of capturedBatches) thread.append(renderCaptured(captured, title));
   // Phone: the Review tab lists sent batches, the queued batch, then in-flight/retry batches.
   for (const batch of sent) phoneThread.append(renderSentBatch(batch));
+  if (calls.length) phoneThread.append(renderCallBatch());
   if (queue.length) phoneThread.append(renderQueuedBatch());
   for (const [captured, title] of capturedBatches) phoneThread.append(renderCaptured(captured, title));
 }
@@ -802,7 +842,21 @@ function enqueue() {
   return true;
 }
 el("review-form").addEventListener("submit", (event) => { event.preventDefault(); enqueue(); });
+let sendingCalls = false;
+async function sendCallAnswers() {
+  const ready = callQueue().filter((entry) => entry.phase !== "sending");
+  if (!ready.length || sendingCalls) return;
+  sendingCalls = true;
+  el("review-state").textContent = `Sending ${ready.length} Captain's Call ${ready.length === 1 ? "answer" : "answers"}…`;
+  let ok = false;
+  try { ok = await window.quarterdeckCallQueue.send(); } catch {}
+  finally { sendingCalls = false; }
+  el("review-state").textContent = ok ? `Sent ${ready.length} Captain's Call ${ready.length === 1 ? "answer" : "answers"}; receipts show on each card.` : "Some Captain's Call answers were not confirmed; their cards say why and keep them for retry.";
+  update();
+}
 async function send(end) {
+  // Await only when answers are queued, so an ordinary batch posts in the same tick.
+  if (callQueue().some((entry) => entry.phase !== "sending")) await sendCallAnswers();
   if (pending || !config.ready) return;
   if (!reviewHistoryTab() && el("review-message").value.trim() && (!queue.length || end) && !enqueue()) return;
   if (!queue.length && retryBatches.length && !end) { await submitBatch(retryBatches[0]); return; }
@@ -885,5 +939,6 @@ async function submitBatch(captured) {
   } finally { inFlight = null; inFlightIndex = null; pending = false; update(); }
 }
 el("review-send").addEventListener("click", () => send(false));
+window.quarterdeckReviewQueue = { refresh: () => update() };
 el("review-end").addEventListener("click", () => send(true));
 update();
