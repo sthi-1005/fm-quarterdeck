@@ -437,17 +437,18 @@ try {
   await until("document.querySelector('#call-cards').innerText.includes('Caught up from hidden')");
   await evaluate(`() => { document.querySelector('#call-lifecycle-filter [data-call-lifecycle="active"]').click(); return 'active list for the default overview'; }`);
   for (let i=0;i<12;i++) raw.decisions_open.push({ id:`scroll-${i}`, key:`scroll-${i}`, summary:`Synthetic scroll call ${i}`, owner:'(main)', verb:'captain-hold' });
-  await change(); await until("document.querySelectorAll('[data-call-key]').length===15");
+  // The ask that was linked to alpha-call becomes its own card once that hold leaves.
+  await change(); await until("document.querySelectorAll('[data-call-key]').length===16");
   await evaluate(`() => { document.getSelection().removeAllRanges(); document.activeElement?.blur(); const v=document.querySelector('#overview-view'); v.scrollTop=900; proof.anchor=[...document.querySelectorAll('[data-call-key]')].find(n=>n.getBoundingClientRect().bottom>v.getBoundingClientRect().top); proof.anchor.querySelector('[data-call-answer-text]').focus({preventScroll:true}); proof.anchorTop=proof.anchor.getBoundingClientRect().top; return {anchor:proof.anchor.dataset.callKey,top:proof.anchorTop}; }`);
   raw.decisions_open.unshift({ id:'insert-above',key:'insert-above',summary:'Inserted above scroll anchor',owner:'(main)',verb:'captain-hold' }); await change();
-  await until("document.querySelectorAll('[data-call-key]').length===16");
+  await until("document.querySelectorAll('[data-call-key]').length===17");
   await evaluate(`() => { const delta=proof.anchor.getBoundingClientRect().top-proof.anchorTop; if(Math.abs(delta)>2||!proof.anchor.contains(document.activeElement))throw Error('engaged scroll anchor moved/lost focus '+delta); return {scrollAnchorDelta:delta}; }`);
   raw.decisions_open = raw.decisions_open.filter(c=>c.id!=='insert-above'); await change();
   await until("!document.querySelector('[data-call-key=\"decision:insert-above\"]')");
   await evaluate(`() => { const delta=proof.anchor.getBoundingClientRect().top-proof.anchorTop; if(Math.abs(delta)>2||!proof.anchor.contains(document.activeElement))throw Error('removal moved engaged anchor '+delta); document.activeElement.blur(); return {removedAnchorDelta:delta}; }`);
   for (const width of [360,390]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { document.querySelector('#overview-view').scrollTop=0; const kpi=(${captureKpiGeometry.toString()})(); if(innerWidth!==${width}||document.querySelector('#call-mobile-badge').hidden||document.querySelector('#call-mobile-badge').textContent!=='14'||document.documentElement.scrollWidth>innerWidth||kpi.cards.length!==3||kpi.cards.some((c,i)=>c.width<=0||Math.abs(c.top-kpi.cards[0].top)>1||c.scrollWidth>c.clientWidth+1))throw Error('phone/KPI geometry'); return {width:innerWidth,kpi,calls:document.querySelectorAll('[data-call-key]').length}; }`);
+    await evaluate(`() => { document.querySelector('#overview-view').scrollTop=0; const kpi=(${captureKpiGeometry.toString()})(); if(innerWidth!==${width}||document.querySelector('#call-mobile-badge').hidden||document.querySelector('#call-mobile-badge').textContent!=='15'||document.documentElement.scrollWidth>innerWidth||kpi.cards.length!==3||kpi.cards.some((c,i)=>c.width<=0||Math.abs(c.top-kpi.cards[0].top)>1||c.scrollWidth>c.clientWidth+1))throw Error('phone/KPI geometry'); return {width:innerWidth,kpi,calls:document.querySelectorAll('[data-call-key]').length}; }`);
     await browser('screenshot', path.join(proof, `captain-call-${width}.png`));
   }
   // Firstmate confirmation is disappearance from bearings, not a receipt reply.
