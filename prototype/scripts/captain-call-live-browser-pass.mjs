@@ -40,6 +40,20 @@ await writeFile(path.join(home, 'data/projects.md'), '- synthetic-repository - O
 const script = path.join(home, 'bin/fm-bearings-snapshot.sh');
 await writeFile(script, '#!/bin/sh\ncat "$FM_HOME/snapshot.json"\n');
 await chmod(script, 0o755);
+await mkdir(path.join(home, '.lavish'), { recursive: true });
+const boardPayload = {
+  schema: 'fm-bearings-board.v1', home: 'synthetic-home', generated: new Date().toISOString(), prs_live: false,
+  captains_call: [
+    { key: 'alpha-call', type: 'decision', repo: 'example-app', title: 'Choose the example-app release window', recommend_value: 'staged', options: [
+      { value: 'staged', label: 'Staged rollout', hint: 'Limit exposure while checks continue' },
+      { value: 'now', label: 'Release now', hint: 'Use the full release window' },
+      { value: 'reconcile', label: 'Reconcile', hint: 'Re-check the latest state' },
+    ] },
+    { key: 'alpha-call', type: 'merge', repo: 'example-app', title: 'Ignore this merge card', risk: 'not used', options: [{ value: 'ship', label: 'Ship from the merge card' }] },
+  ],
+  underway: [], landed: [], charted: [],
+};
+await writeFile(path.join(home, '.lavish', 'bearings-board.html'), `<!doctype html><script id="bearings-data" type="application/json">\n${JSON.stringify(boardPayload).replaceAll('<', '\\u003c')}\n</script>\n`);
 // Synthetic guarded inbox: records the relayed answer note (thread questions separately); never a real Firstmate home.
 const inbox = path.join(home, 'bin/fm-inbox.sh');
 await writeFile(inbox, `#!/bin/sh
@@ -168,7 +182,7 @@ try {
   if (process.env.FM_BROWSER_FORCED_COLORS === '1') await evaluate(`() => { if(!matchMedia('(forced-colors: active)').matches)throw Error('forced colors not active'); return 'native Chromium forced colors active'; }`);
   for (const width of [1280,360,390]) {
     await browser('resize', String(width), '844');
-    await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||decision.querySelector('input[type=radio],select,details,.call-opt-rec')||!decision.querySelector('form[data-call-answer] textarea[data-call-draft=answer]')||merge.querySelectorAll('input[type=radio]').length!==1||merge.querySelector('input[type=radio]').value!=='merge'||merge.querySelector('.call-opt-rec'))throw Error('source information lost or answer options invented'); const gamma=document.querySelector('[data-call-key="decision:gamma-credential"]'); const ask=decision.querySelector('h3'); const link=decision.querySelector('a.call-link'); const clipped=(el)=>{ if(!el)return false; const clamp=getComputedStyle(el).webkitLineClamp; return el.scrollHeight>el.clientHeight+1 || getComputedStyle(el).textOverflow==='ellipsis' || (Boolean(clamp) && clamp!=='none'); }; if(clipped(ask)||clipped(link)||clipped(merge.querySelector('h3'))||decision.querySelector('[data-call-more]')||ask.textContent.length<80||!link.textContent.includes('https://example.invalid/acme/example-app/pull/42'))throw Error('long ask, link or id is clipped'); if(gamma.querySelector('[data-call-more]')||!gamma.querySelector('.call-id').textContent.includes('gamma-credential'))throw Error('task id must stay readable'); return {width:innerWidth,richCards:true}; }`);
+    await evaluate(`() => { const cards=[...document.querySelectorAll('[data-call-key]')]; if(document.documentElement.scrollWidth>innerWidth)throw Error('rich card page overflow'); for(const card of cards){ const box=card.getBoundingClientRect(); if(box.left<0||box.right>innerWidth||card.scrollWidth>card.clientWidth+1||!card.querySelector('.call-context'))throw Error('rich card overflow/context'); } const decision=cards[0],merge=cards.find(c=>c.dataset.callType==='merge'); if(!decision.innerText.includes('Recommended: staged — smaller blast radius. Immediate — faster delivery.')||!decision.querySelector('a[href="https://example.invalid/acme/example-app/pull/42"]')||!merge.innerText.includes('Risk: older clients may require a migration.')||!merge.innerText.includes('Not provided by the snapshot')||[...decision.querySelectorAll('input[type=radio]')].map(input=>input.value).join(',')!=='staged,now'||decision.querySelector('input[value=reconcile]')||decision.querySelectorAll('.call-opt-rec').length!==1||!decision.querySelector('.call-opt:has(input[value=staged]) .call-opt-rec')||!decision.querySelector('form[data-call-answer] textarea[data-call-draft=answer]')||merge.querySelectorAll('input[type=radio]').length!==1||merge.querySelector('input[type=radio]').value!=='merge'||merge.querySelector('.call-opt-rec'))throw Error('source information lost or board options missing'); const gamma=document.querySelector('[data-call-key="decision:gamma-credential"]'); const ask=decision.querySelector('h3'); const link=decision.querySelector('a.call-link'); const clipped=(el)=>{ if(!el)return false; const clamp=getComputedStyle(el).webkitLineClamp; return el.scrollHeight>el.clientHeight+1 || getComputedStyle(el).textOverflow==='ellipsis' || (Boolean(clamp) && clamp!=='none'); }; if(clipped(ask)||clipped(link)||clipped(merge.querySelector('h3'))||decision.querySelector('[data-call-more]')||ask.textContent.length<80||!link.textContent.includes('https://example.invalid/acme/example-app/pull/42'))throw Error('long ask, link or id is clipped'); if(gamma.querySelector('input[type=radio]')||gamma.querySelector('[data-call-more]')||!gamma.querySelector('.call-id').textContent.includes('gamma-credential'))throw Error('task id must stay readable'); return {width:innerWidth,richCards:true}; }`);
     await browser('screenshot', path.join(proof, `captain-call-rich-${width}.png`));
     if (width === 1280 || width === 390) {
       await evaluate(`() => { const active=document.querySelector('#call-lifecycle-filter [data-call-lifecycle="active"]'); const badges=[...document.querySelectorAll('[data-call-lifecycle-badge]')]; if(active.getAttribute('aria-pressed')!=='true'||!active.textContent.startsWith('Active')||!badges.length||badges.some(badge=>badge.getAttribute('aria-label')!=='Active'||badge.textContent!=='')||document.querySelector('#call-answered-toggle')||document.querySelector('#call-procrastinated-toggle'))throw Error('active lifecycle filter'); if(active.getBoundingClientRect().height<44||document.documentElement.scrollWidth>innerWidth)throw Error('lifecycle toggle geometry'); return 'active filter'; }`);
@@ -280,6 +294,40 @@ try {
     await browser('screenshot', path.join(proof, `captain-lifecycle-queued-${width}.png`));
     await evaluate(`() => { if(document.querySelector('#review-panel-toggle').getAttribute('aria-expanded')!=='true')document.querySelector('#review-panel-toggle').click(); if(innerWidth<721)document.querySelector('#review-history-tab').click(); const root=document.querySelector(innerWidth<721?'#review-phone-thread':'#review-thread'); if(root.querySelectorAll('.review-call-answer').length!==2||!document.querySelector('#review-count').textContent.includes('2'))throw Error('queue list/count missing'); const batch=root.querySelector('details'); if(batch){batch.open=true;if(!batch.querySelector('summary').textContent.includes("Queued Captain's Call answers · 2"))throw Error('phone batch missing');} return 'shared queue list'; }`);
     await browser('screenshot', path.join(proof, `captain-shared-queue-${width}.png`));
+    await evaluate(`() => {
+      const phone = innerWidth < 721;
+      const thread = document.querySelector('#review-phone-thread');
+      if (!phone) { thread.hidden = false; thread.style.display = 'block'; }
+      const summary = thread.querySelector('.review-batch > summary');
+      if (!summary) throw Error('batch header missing');
+      const label = summary.querySelector('.review-batch-label');
+      const full = summary.querySelector('.review-batch-full');
+      if (!label || label.textContent !== 'Call answers · 2') throw Error('short batch title');
+      if (!full || full.textContent !== "Queued Captain's Call answers · 2" || summary.title !== full.textContent) throw Error('full batch title missing');
+      const batch = summary.parentElement;
+      batch.open = false;
+      const box = summary.getBoundingClientRect();
+      const style = getComputedStyle(label);
+      const fullStyle = getComputedStyle(full);
+      if (style.whiteSpace !== 'nowrap' || style.fontSize !== '12px') throw Error('compact header style ' + style.fontSize + ' ' + style.whiteSpace);
+      if (fullStyle.position !== 'absolute') throw Error('closed header shows the long title');
+      if (box.width < 40 || box.height < 8 || box.height > 56) throw Error('header box ' + Math.round(box.width) + 'x' + Math.round(box.height));
+      if (label.scrollWidth > label.clientWidth + 1) throw Error('short title overflows');
+      return 'closed batch header ' + Math.round(box.height);
+    }`);
+    await browser('screenshot', path.join(proof, `review-batch-header-${width}.png`));
+    await evaluate(`() => {
+      const phone = innerWidth < 721;
+      const thread = document.querySelector('#review-phone-thread');
+      const summary = thread.querySelector('.review-batch > summary');
+      summary.parentElement.open = true;
+      const full = summary.querySelector('.review-batch-full');
+      const openStyle = getComputedStyle(full);
+      if (!summary.parentElement.open || openStyle.position === 'absolute' || full.getBoundingClientRect().height < 8 || !full.textContent.includes("Queued Captain's Call answers · 2")) throw Error('tap did not reveal the full batch title');
+      if (phone) summary.parentElement.open = true;
+      else { summary.parentElement.open = false; thread.hidden = true; thread.style.display = ''; }
+      return 'batch header revealed';
+    }`);
   }
   await evaluate(`() => { document.querySelector('#review-phone-thread .review-call-answer button').click(); if(window.quarterdeckCallQueue.list().length!==1||document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Remove did not return answer'); document.querySelector('#review-close').click(); document.querySelector('[data-call-key="decision:alpha-call"] .call-answer-queue').click(); document.querySelector('#review-panel-toggle').click(); document.querySelector('#review-send').click(); return 'send queued batch'; }`);
   await until(`window.quarterdeckCallQueue.list().length===0 && document.querySelector('[data-call-key="merge:beta-merge"]').dataset.callLifecycle==='sent' && document.querySelector('[data-call-key="decision:alpha-call"]').dataset.callLifecycle==='sent'`);

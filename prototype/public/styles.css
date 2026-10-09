@@ -122,8 +122,13 @@ input[type="search"]::-webkit-search-results-decoration {
 .review-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .review-panel header button { min-height: 44px; flex-shrink: 0; padding: 4px 12px; }
 .review-thread article { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
-.review-batch { margin: 8px 0; border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px; }
-.review-batch > summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.review-batch { margin: 4px 0; border: 1px solid var(--line-strong); border-radius: 8px; padding: 2px 8px; }
+.review-batch > summary { cursor: pointer; font-size: 12px; font-weight: 650; line-height: 1.25; letter-spacing: -0.011em; white-space: nowrap; overflow: hidden; }
+.review-batch-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.review-batch-full { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.review-batch[open] > summary { white-space: normal; overflow: visible; }
+.review-batch[open] > summary .review-batch-label { display: none; }
+.review-batch[open] > summary .review-batch-full { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; overflow-wrap: anywhere; }
 .review-batch > article:last-child { border-bottom: 0; }
 .review-thread p { margin: 4px 0; white-space: pre-wrap; }
 .review-thread small { display: block; color: var(--muted); }

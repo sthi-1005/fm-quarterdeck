@@ -263,6 +263,41 @@ const statusLabels = {
   replied: "Firstmate replied · see the recorded reply below",
   unavailable: "Status unavailable · receipt retained; retry status check",
 };
+const statusShort = {
+  accepted: "Accepted",
+  received: "Received",
+  handling: "Handling",
+  completed: "Completed",
+  failed: "Failed",
+  replied: "Replied",
+  unavailable: "Status unavailable",
+};
+const noteCount = (count) => `${count} ${count === 1 ? "note" : "notes"}`;
+function batchStatusFull(batch) {
+  if (config.delivery === "lavish") return "Delivery confirmed; downstream status unavailable";
+  if (batch.state === "accepted" && batch.intake === "accepted" && batch.announced) return "Accepted durably · queued for Firstmate; awaiting acknowledgement";
+  return statusLabels[batch.state] || statusLabels.accepted;
+}
+function batchStatusShort(batch) {
+  if (config.delivery === "lavish") return "Sent";
+  if (batch.state === "accepted" && batch.intake === "accepted" && batch.announced) return "Queued for Firstmate";
+  return statusShort[batch.state] || "Accepted";
+}
+// The closed summary shows one short line. The full sentence stays on the summary
+// tooltip and in the first span, which opens into view with the batch.
+function fillBatchSummary(summary, short, full) {
+  summary.className = "review-batch-summary";
+  summary.title = full;
+  summary.textContent = "";
+  const fullText = document.createElement("span");
+  fullText.className = "review-batch-full";
+  fullText.textContent = full;
+  const label = document.createElement("span");
+  label.className = "review-batch-label";
+  label.textContent = short;
+  label.setAttribute("aria-hidden", "true");
+  summary.append(fullText, label);
+}
 async function refreshStatuses() {
   if (config.delivery !== "local") return;
   for (const batch of sent.filter((item) => !["completed", "failed", "replied"].includes(item.state))) {
@@ -392,7 +427,8 @@ function update() {
     details.open = openBatches.has(batch.id);
     const summary = document.createElement("summary");
     // A delivery receipt proves sent, not that another device or a reviewer received it.
-    summary.textContent = `${config.delivery === "lavish" ? "Delivery confirmed; downstream status unavailable" : batch.state === "accepted" && batch.intake === "accepted" && batch.announced ? "Accepted durably · queued for Firstmate; awaiting acknowledgement" : statusLabels[batch.state] || statusLabels.accepted} · ${batch.entries.length} ${batch.entries.length === 1 ? "note" : "notes"} · receipt ${batch.receiptId}`;
+    const sentFull = `${batchStatusFull(batch)} · ${noteCount(batch.entries.length)} · receipt ${batch.receiptId}`;
+    fillBatchSummary(summary, `${batchStatusShort(batch)} · ${noteCount(batch.entries.length)}`, sentFull);
     details.append(summary);
     for (const [index, entry] of batch.entries.entries()) details.append(renderNote({ ...entry, delivered: true }, `${batch.id}:${index}`));
     if (batch.reply) {
@@ -422,7 +458,7 @@ function update() {
     details.className = "review-batch";
     details.open = openBatches.has(batchId || "draft");
     const summary = document.createElement("summary");
-    summary.textContent = `Queued batch · ${queue.length} ${queue.length === 1 ? "note" : "notes"}`;
+    fillBatchSummary(summary, `Queued · ${noteCount(queue.length)}`, `Queued batch · ${noteCount(queue.length)}`);
     details.append(summary);
     for (const [index, entry] of queue.entries()) details.append(renderNote(entry, `queued:${index}`, index));
     details.addEventListener("toggle", () => {
@@ -436,7 +472,8 @@ function update() {
     details.className = "review-batch";
     details.open = openBatches.has(captured.id);
     const summary = document.createElement("summary");
-    summary.textContent = `${title} batch · ${captured.payload.entries.length} ${captured.payload.entries.length === 1 ? "note" : "notes"}`;
+    const capturedCount = noteCount(captured.payload.entries.length);
+    fillBatchSummary(summary, `${title === "Retry needed" ? "Retry" : title} · ${capturedCount}`, `${title} batch · ${capturedCount}`);
     details.append(summary);
     captured.payload.entries.forEach((entry, index) => details.append(renderNote(entry, `${captured.id}:${index}`)));
     if (title === "Retry needed") {
@@ -496,7 +533,7 @@ function update() {
     details.className = "review-batch";
     details.open = openBatches.has("call-answers");
     const summary = document.createElement("summary");
-    summary.textContent = `Queued Captain's Call answers · ${calls.length}`;
+    fillBatchSummary(summary, `Call answers · ${calls.length}`, `Queued Captain's Call answers · ${calls.length}`);
     details.append(summary, ...calls.map(renderCallAnswer));
     details.addEventListener("toggle", () => { if (details.open) openBatches.add("call-answers"); else openBatches.delete("call-answers"); });
     return details;

@@ -322,6 +322,10 @@ test("review panel keeps desktop Sent/Queued sections and phone Message/Review t
   // The desktop header title still shrinks and wraps beside Close.
   assert.match(css, /\.review-panel header > strong \{[^}]*flex: 1 1 0;[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
   assert.match(css, /\.review-header-actions \{[^}]*flex: 0 0 auto/);
+  const batchCss = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
+  assert.match(batchCss, /\.review-batch > summary \{[^}]*font-size: 12px;[^}]*white-space: nowrap/);
+  assert.match(batchCss, /\.review-batch-label \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/);
+  assert.match(batchCss, /\.review-batch\[open\] > summary \.review-batch-full \{[^}]*white-space: normal/);
   assert.doesNotMatch(css.slice(0, phoneAt), /header:has\(\.review-tabs\)/);
 });
 

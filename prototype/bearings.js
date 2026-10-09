@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, watch as fsWatch } from "node:fs";
-import { access, open, readdir, stat } from "node:fs/promises";
+import { access, lstat, open, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 // Live Captain's Call. Contract: BEARINGS.md. Quarterdeck runs only Firstmate's own
 // bounded bearings projection to build calls. A bounded read of the selected home's
 // backlog adds durable clocks plus existing main-home titles, hold reasons and, when the
-// snapshot has no repository, the backlog repo name; it never creates calls or writes under FM_HOME.
+// snapshot has no repository, the backlog repo name. A bounded read of that home's
+// bearings board can supply decision options. Neither read creates calls or writes under FM_HOME.
 export const MODEL_SCHEMA = "fm-quarterdeck-call.v1";
 const SOURCE_SCHEMA = "fm-bearings.v1";
 const MIN_GAP_FLOOR_MS = 15000;
@@ -244,6 +245,103 @@ function mergeAnswer(task) {
   return { question, options: [{ value: "merge", label: "Merge now", hint: "Firstmate re-checks that the pull request is open and green before merging." }], recommend: null, close: null, freeform: true };
 }
 
+// The selected home's lavish board (BEARINGS.md "Answers"). Text only: the page is never
+// executed. The builder escapes every "<" so the JSON block cannot close early.
+export const BOARD_SCHEMA = "fm-bearings-board.v1";
+const BOARD_MAX_BYTES = 1024 * 1024;
+const BOARD_OPEN = '<script id="bearings-data" type="application/json">';
+const boardInstant = (value) => {
+  if (typeof value !== "string" || value.length > 40 || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|[+-]\d\d:\d\d)$/.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+};
+export function extractBoardPayload(html) {
+  if (typeof html !== "string") return null;
+  const open = html.indexOf(BOARD_OPEN);
+  if (open < 0) return null;
+  const start = open + BOARD_OPEN.length;
+  const end = html.indexOf("</script>", start);
+  if (end < 0) return null;
+  const raw = html.slice(start, end).trim();
+  if (!raw || raw.includes("<")) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+export function validBoardPayload(raw) {
+  if (!object(raw) || raw.schema !== BOARD_SCHEMA) return null;
+  if (typeof raw.home !== "string" || !raw.home.trim() || raw.home.length > 4096) return null;
+  if (boardInstant(raw.generated) === null) return null;
+  if (!Array.isArray(raw.captains_call)) return null;
+  return raw;
+}
+// Stale when the board was generated before the hold's latest durable update.
+// A date-only hold time is UTC midnight. No durable update is not stale.
+export function boardBeforeHold(generated, row) {
+  const boardMs = boardInstant(generated);
+  if (boardMs === null) return true;
+  const at = decisionClock(row).at;
+  if (!at) return false;
+  const holdMs = Date.parse(at);
+  return !Number.isFinite(holdMs) || boardMs < holdMs;
+}
+function boardCardForDecision(board, taskId) {
+  let credential = null;
+  for (const item of board.captains_call) {
+    if (!object(item) || item.key !== taskId || item.type === "merge") continue;
+    if (item.type === "decision") return item;
+    if (item.type === "credential" && !credential) credential = item;
+  }
+  return credential;
+}
+function optionsFromBoardCard(item) {
+  if (!Array.isArray(item.options)) return null;
+  const withoutReserved = item.options.filter((entry) => !(object(entry) && entry.value === "reconcile"));
+  if (!withoutReserved.length) return null;
+  const options = sourceOptions({ options: withoutReserved });
+  if (!options.length) return null;
+  const recommend = options.some((option) => option.value === item.recommend_value) ? item.recommend_value : null;
+  return { options, recommend };
+}
+// Fresh matching decision options replace the row's options and recommend_value.
+// close stays on the snapshot row. Absent, stale, merge-only and invalid sets leave the row unchanged.
+export function applyBoardDecisionOptions(raw, board) {
+  const payload = validBoardPayload(board);
+  if (!payload || !object(raw) || !Array.isArray(raw.decisions_open)) return raw;
+  for (const row of raw.decisions_open) {
+    if (!object(row) || typeof row.id !== "string") continue;
+    const item = boardCardForDecision(payload, row.id);
+    if (!item || boardBeforeHold(payload.generated, row)) continue;
+    const picked = optionsFromBoardCard(item);
+    if (!picked) continue;
+    row.options = picked.options;
+    row.recommend_value = picked.recommend;
+  }
+  return raw;
+}
+export async function readBearingsBoard(home, { lstatImpl = lstat, openImpl = open } = {}) {
+  if (typeof home !== "string" || !path.isAbsolute(home)) return null;
+  const filePath = path.join(home, ".lavish", "bearings-board.html");
+  let file;
+  try {
+    const info = await lstatImpl(filePath);
+    if (!info.isFile() || info.size < 1 || info.size > BOARD_MAX_BYTES) return null;
+    file = await openImpl(filePath, "r");
+    const buffer = Buffer.alloc(info.size + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead !== info.size || bytesRead > BOARD_MAX_BYTES) return null;
+    const html = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead));
+    return validBoardPayload(extractBoardPayload(html));
+  } catch { return null; } finally { await file?.close(); }
+}
+async function addBoardEvidence(output, home) {
+  try {
+    const board = await readBearingsBoard(home);
+    if (!board) return output;
+    const raw = JSON.parse(output);
+    applyBoardDecisionOptions(raw, board);
+    return JSON.stringify(raw);
+  } catch { return output; }
+}
+
 // Sections are pluggable so Underway, Landed and Charted Next can join later without
 // changing the transport. Phase 1 enables only the Captain's Call.
 function callSection(raw) {
@@ -338,7 +436,7 @@ export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = acc
       });
     });
   };
-  return () => (pending ||= once().then((output) => addBacklogEvidence(output, home)).finally(() => { pending = null; }));
+  return () => (pending ||= once().then((output) => addBacklogEvidence(output, home)).then((output) => addBoardEvidence(output, home)).finally(() => { pending = null; }));
 }
 
 // Reads mtimes and sizes only (never contents) of the two record kinds whose change
