@@ -361,6 +361,8 @@ SCREENSHOT_DIR=/absolute/private/proof node scripts/captain-call-live-browser-pa
 FM_BROWSER_FORCED_COLORS=1 SCREENSHOT_DIR=/absolute/private/forced-proof node scripts/captain-call-live-browser-pass.mjs
 ```
 
+The full `npm run test:browser` includes this pass. Source-preview CI installs pinned `chrome-devtools-axi@0.1.39` from npm on the runner and attaches its MCP backend to the pass's isolated headless Chrome; it does not skip this pass or change local checks. Local runs require the same installed CLI and its MCP backend (bootstrapped via npm on first use).
+
 Fixtures under `test/fixtures/bearings/` are synthetic `fm-bearings.v1` output; tests that run a snapshot use a temporary home with a fake `bin/fm-bearings-snapshot.sh`. Chat-ask tests write synthetic Claude and Pi transcripts into a temporary home.
 The browser pass sends a picked option through `POST /api/bearings/answer` and text with no option through `POST /api/bearings/thread`.
 It also checks that the Overview body is two columns on a desktop width and that the empty second column takes no space on a phone.
