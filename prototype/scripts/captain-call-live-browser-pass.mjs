@@ -335,6 +335,8 @@ try {
   }
   await evaluate(`() => { document.querySelector('#review-phone-thread .review-call-answer button').click(); if(window.quarterdeckCallQueue.list().length!==1||document.querySelector('[data-call-key="decision:alpha-call"] [data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Remove did not return answer'); document.querySelector('#review-close').click(); document.querySelector('[data-call-key="decision:alpha-call"] .call-answer-queue').click(); document.querySelector('#review-panel-toggle').click(); document.querySelector('#review-send').click(); return 'send queued batch'; }`);
   await until(`window.quarterdeckCallQueue.list().length===0 && document.querySelector('[data-call-key="merge:beta-merge"]').dataset.callLifecycle==='sent' && document.querySelector('[data-call-key="decision:alpha-call"]').dataset.callLifecycle==='sent'`);
+  // The phone review sheet is modal, so a note outside it cannot take focus until the sheet closes.
+  await evaluate(`() => { document.querySelector('#review-close').click(); return 'review closed before sent cards'; }`);
   for (const width of [1280, 390, 360]) {
     await browser('resize', String(width), '844');
     await evaluate(`() => {
@@ -350,7 +352,8 @@ try {
       if(!radios.length||radios.some((radio)=>!radio.disabled)||note.disabled||!note.readOnly||!label||label.hidden||label.textContent!=='Sent - waiting for Firstmate')throw Error('sent answer is not locked');
       if(!getComputedStyle(merge).backgroundImage.includes('linear-gradient'))throw Error('sent hatch missing');
       note.focus();
-      if(document.activeElement!==note)throw Error('sent note cannot be focused');
+      if(document.activeElement!==note)throw Error('sent note cannot be focused '+(document.activeElement&&(document.activeElement.id||document.activeElement.tagName))+' modal='+!!document.querySelector('dialog[open]'));
+      merge.scrollIntoView({block:'start'});
       const receipt=merge.querySelector('[data-call-answer-receipt-text]');
       const range=document.createRange();
       range.selectNodeContents(receipt);

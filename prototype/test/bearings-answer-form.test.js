@@ -162,6 +162,9 @@ test("nothing is sent until Queue and then an explicit Send; the sent answer cle
   assert.equal(t.part(key, "text").value, "Use the Tuesday window");
   assert.equal(t.part(key, "compose").hidden, true);
   assert.equal(t.node(key).querySelector(".call-answer-bar").hidden, true);
+  assert.equal(t.part(key, "confirm").hidden, true, "a sent answer is not still queued");
+  assert.equal(t.part(key, "send").hidden, true);
+  assert.equal(t.part(key, "edit").hidden, true);
 
   t.timers.advance(15000);
   await flush();

@@ -103,7 +103,8 @@ window.bearingsAnswerForm = (() => {
       // control in this fieldset stays usable. A read-only textarea can still be focused
       // and selected. Answer again clears the echo and returns to compose.
       const sentLock = phase === "sent";
-      const locked = sentLock || ["confirm", "sending", "failed"].includes(phase);
+      const queuedLock = ["confirm", "sending", "failed"].includes(phase);
+      const locked = sentLock || queuedLock;
       if (fields) {
         fields.hidden = false;
         if (locked) fields.setAttribute("data-locked", ""); else fields.removeAttribute("data-locked");
@@ -137,19 +138,19 @@ window.bearingsAnswerForm = (() => {
       const compose = part(form, "compose");
       if (compose) compose.hidden = phase !== "compose" && phase !== "refused";
       const confirm = part(form, "confirm");
-      if (confirm) confirm.hidden = !locked;
+      if (confirm) confirm.hidden = !queuedLock;
       const preview = part(form, "preview");
-      if (preview) preview.textContent = locked ? display(state.selectionLabel || state.selection, state.note) : "";
+      if (preview) preview.textContent = queuedLock ? display(state.selectionLabel || state.selection, state.note) : "";
       const send = part(form, "send");
       if (send) {
-        send.hidden = !locked;
+        send.hidden = !queuedLock;
         // aria-disabled, not disabled: a disabled button would drop the captain's focus.
         send.setAttribute("aria-disabled", String(phase === "sending"));
         send.setAttribute("aria-busy", String(phase === "sending"));
         send.textContent = phase === "sending" ? "Sending…" : phase === "failed" ? "Retry send" : "Send";
       }
       const edit = part(form, "edit");
-      if (edit) { edit.hidden = !locked; edit.setAttribute("aria-disabled", String(phase === "sending")); }
+      if (edit) { edit.hidden = !queuedLock; edit.setAttribute("aria-disabled", String(phase === "sending")); }
       const error = part(form, "error");
       if (error) {
         const text = ["refused", "failed"].includes(phase) ? state.error || "" : "";
