@@ -94,8 +94,9 @@ test('honest empty states and coverage disclose stale, missing and omitted evide
   const text = view.coverageText({ state: 'stale', stale: true, error: 'Snapshot failed', coverage: { checked: 2, known: 5, captainOmitted: 2, unmeasuredHomes: 1 }, omitted: [{ kind: 'deferred-holds', count: 3 }, { kind: 'decisions-bound', shown: 20, total: 30 }, { kind: 'invalid-rows', count: 1 }] });
   for (const phrase of ['Stale', 'checked 2 of 5', 'Snapshot failed', '+3 later-dated or blocked calls not shown', '20 of 30 decisions shown', '1 invalid calls withheld', '2 merge calls not shown', '1 homes unmeasured']) assert.ok(text.includes(phrase), phrase);
 });
-test('held notice names the diff; resolved stub leaves text to textContent', () => {
-  assert.equal(view.heldText({ added: 1, changed: 2, removed: 3 }), "Captain's Call changed — updates when you're done · 1 new · 2 changed · 3 resolved");
+test('held notice names the card change; resolved stub leaves text to textContent', () => {
+  assert.equal(view.heldText('updated'), "Call updated — updates when you're done");
+  assert.equal(view.heldText('resolved'), "Call resolved — updates when you're done");
   const stub = view.stubHtml('key', '<script>draft</script>');
   assert.doesNotMatch(stub, /<script>/);
   for (const hook of ['stub-text', 'stub-copy', 'stub-dismiss']) assert.ok(stub.includes(`data-call-${hook}`));

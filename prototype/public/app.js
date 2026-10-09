@@ -1748,7 +1748,7 @@ function renderAnsweredCalls() {
   let heading = list.querySelector("[data-call-answered-heading]");
   if (!heading) { heading = document.createElement("h3"); heading.setAttribute("data-call-answered-heading", ""); heading.textContent = "Answered, awaiting Firstmate"; }
   const waiting = [], active = [];
-  for (const card of window.bearingsPatch.sortCards(model.cards, callPatcher.sortOrder)) {
+  for (const card of model.cards) {
     const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.dataset.callKey === card.key);
     if (!node) continue;
     const state = callAnswers?.state(card.key);
@@ -1766,7 +1766,12 @@ function renderAnsweredCalls() {
   heading.hidden = !showAnsweredCalls || !waiting.length;
   const grouped = [...active, heading, ...waiting];
   const desired = [...grouped, ...[...list.children].filter((node) => !grouped.includes(node))];
-  desired.forEach((node, index) => { if (list.children[index] !== node) list.insertBefore(node, list.children[index] || null); });
+  const engaged = callPatcher.tracker.keys();
+  for (let index = desired.length - 1; index >= 0; index--) {
+    const node = desired[index], before = desired[index + 1] || null;
+    const current = [...list.children];
+    if (!engaged.has(node.getAttribute("data-call-key")) && ((current[current.indexOf(node) + 1] || null) !== before || !node.parentNode)) list.insertBefore(node, before);
+  }
   renderCallBadge(model);
 }
 $("#call-answered-toggle").addEventListener("click", () => { showAnsweredCalls = !showAnsweredCalls; renderAnsweredCalls(); });
@@ -1781,7 +1786,7 @@ callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({
 if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: () => callAnswers.sendQueued(), remove: (key) => callAnswers.unqueue(key) };
 callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts });
 callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
-// Focus leaves the held section only after a confirmed dismissal; drafts remain protected.
+// Focus leaves the card only after a confirmed dismissal; drafts remain protected.
 callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
   list: $("#call-cards"),
   focusTarget: () => [...document.querySelectorAll('.primary-tab[data-view="overview"], [data-mobile-view="overview"]')].find((node) => node.getClientRects().length),

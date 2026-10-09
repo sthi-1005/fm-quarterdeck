@@ -70,22 +70,23 @@ test('a card that changes after Cancel shows no stale-review error', async () =>
   s.controller.destroy(); s.patcher.destroy();
 });
 
-test('chat cards arrive live, stay held while another card is engaged, then fade on resolution without stealing moved focus', async () => {
+test('chat cards arrive and resolve immediately while another card is engaged, without stealing focus', async () => {
   let finish;
   const s = setup(() => new Promise(resolve => { finish = resolve; }));
   s.patcher.update(model([hold])); s.timers.advance(320);
   const held = s.node(hold.key);
   held.querySelector('textarea').type('Protected hold draft');
-  assert.equal(s.patcher.update(model([chat, hold])), 'held');
-  assert.equal(s.node(chat.key), undefined);
+  assert.equal(s.patcher.update(model([chat, hold])), 'applied');
+  assert.ok(s.node(chat.key));
   s.outside.focus(); s.timers.advance(600);
   assert.equal(s.node(hold.key), held);
   assert.match(s.node(chat.key).textContent, /Approval asked in chat/);
   s.button('').click(); s.button('send').click();
   held.querySelector('textarea').focus();
+  s.timers.advance(600); // Finish the dismissed chat's own focus-release grace.
   s.patcher.update(model([hold])); finish({ ok: true }); await flush();
   assert.equal(s.document.activeElement, held.querySelector('textarea'));
-  assert.equal(s.patcher.held, true);
+  assert.equal(s.patcher.held, false);
   const leaving = s.node(chat.key);
   s.outside.focus(); s.timers.advance(600);
   assert.equal(leaving.classList.contains('call-card-leaving'), true);

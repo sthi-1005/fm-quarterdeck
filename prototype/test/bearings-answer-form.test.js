@@ -352,6 +352,7 @@ test("More details appears only when text is cut, expands in place, and survives
   assert.equal(more().getAttribute("aria-expanded"), "true", "expansion survives a card refill");
   more().click();
   assert.equal(more().hidden, true, "collapsed and nothing cut");
+  t.timers.advance(600); // Finish the card's pointer-release grace.
   t.patcher.update(model([decision("a3", "Pick the window: staged or immediate, with the…")]));
   assert.equal(more().hidden, false, "Firstmate's own shortening shows the control without any overflow");
 });

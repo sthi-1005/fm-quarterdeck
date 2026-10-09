@@ -1791,10 +1791,11 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 .call-note span { color: var(--muted); }
 .call-note textarea { display: block; box-sizing: border-box; width: 100%; min-height: 64px; margin-top: 6px; padding: 10px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
 .call-empty { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); }
-.call-status { position: sticky; top: 0; z-index: 4; margin-bottom: 12px; padding: 12px; border: 1px solid var(--amber); border-radius: 6px; background: var(--surface); color: var(--text); font-size: var(--text-small); }
+.call-card-notice { margin-top: 12px; padding: 8px; border: 1px solid var(--amber); border-radius: 6px; color: var(--muted); font-size: var(--text-small); }
+[data-call-sort-pending][hidden] { display: none; }
 .call-status[hidden], .call-badge[hidden] { display: none; }
-.call-status button, .call-stub-actions button { min-height: 44px; margin: 4px 4px 0 0; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
-#captain-call[data-held="true"] .call-chrome { opacity: .65; filter: saturate(.5); }
+.call-card-notice button, [data-call-sort-pending] button, .call-stub-actions button { min-height: 44px; margin: 4px 4px 0 0; padding: 6px 12px; border: 1px solid var(--control-line); border-radius: 6px; background: var(--surface-soft); color: var(--text); cursor: pointer; }
+.call-card[data-held="true"] .call-chrome { opacity: .65; filter: saturate(.5); }
 /* Long text: clamp until More details; the control shows only when text is actually cut (BEARINGS.md "Long text"). */
 .call-card { --call-clamp-lines: 4; }
 .call-card:not([data-call-expanded]) .call-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--call-clamp-lines); line-clamp: var(--call-clamp-lines); overflow: hidden; }
@@ -1865,7 +1866,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 @keyframes call-arrival { from { box-shadow: 0 0 0 2px var(--accent); } to { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { .call-card-new { animation: none; } .call-card-leaving { transition: none; } }
 @media (forced-colors: active) {
-  #captain-call[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; }
+  .call-card[data-held="true"] .call-chrome { opacity: 1; filter: none; color: GrayText; }
   .call-opt:has(input:checked), .call-answer-confirm, .call-answer-receipt, .call-status { border-color: Highlight; }
   .call-opt:has(input:focus-visible), .call-answer-receipt:focus { outline-color: Highlight; }
   .call-answer-fields[data-locked] .call-opt, .call-answer-fields[data-locked] textarea, .call-answer-fields[data-locked] .call-opt-rec { color: GrayText; border-color: GrayText; }

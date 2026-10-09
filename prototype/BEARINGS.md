@@ -36,7 +36,7 @@ Sections are pluggable (`SECTIONS` in `bearings.js`); Phase 1 enables only `call
 
 Each card has `clock:{label,at}`. Decision clocks use the newest durable `updated_at`, `hold_set_at` or `created` source field. The selected-home ledger supplements `(since YYYY-MM-DD)` creation dates and a leading `Captain hold set:` stamp when the snapshot omits them. Merge clocks use contribution `checked_at`. Missing evidence shows **unknown**, never file mtimes, snapshot time or first-seen time. Date-only creation evidence retains its date and says **time unknown** rather than inventing midnight. Full timestamps display absolute local time and a ticking relative age; ticks change only clock text and pause during text selection.
 
-**Sort calls** offers Newest first (default) and Oldest first on desktop and phone. It sorts by this durable clock, with stable source-order ties and unknowns last in either direction. The viewer's choice persists in `localStorage` under `fm-quarterdeck-call-sort.v1` (memory fallback on storage failure). Reordering uses the same engagement hold and release grace as snapshot updates, including a sort-pending notice and Update now. Existing form nodes, drafts and confirmation phases survive sorting.
+**Sort calls** offers Newest first (default) and Oldest first on desktop and phone. It sorts by this durable clock, with stable source-order ties and unknowns last in either direction. The viewer's choice persists in `localStorage` under `fm-quarterdeck-call-sort.v1` (memory fallback on storage failure). Reordering uses the same engagement hold and release grace as snapshot updates, including a sort-pending notice and Update now beside the sort control (never a page notice). Existing form nodes, drafts and confirmation phases survive sorting.
 
 ## Cadence
 
@@ -56,20 +56,20 @@ Each card has `clock:{label,at}`. Decision clocks use the newest durable `update
 
 ## Engagement hold
 
-The captain is engaged with the Captain's Call section while any of these hold:
+The captain is engaged with a Captain's Call card while any of these hold:
 
-- focus is inside it (a window blur keeps focus there, so switching apps does not count as finishing);
-- a non-collapsed text selection intersects it;
-- a pointer is pressed inside it;
+- focus is inside that card (a window blur keeps focus there, so switching apps does not count as finishing);
+- a non-collapsed text selection intersects that card (a selection across cards holds each intersected card);
+- a pointer is pressed inside that card;
 - a card is selected: a click on a card body (not a control) sets `aria-current="true"` until Escape, a second click on it, or a click outside the section.
 
-While engaged, an update does not touch any card. The newest model waits as `pending`; later updates replace it. The section gets `data-held="true"` and `aria-busy="true"`, and the `role="status"` line shows the change against what is on screen ("Captain's Call changed — updates when you're done · 1 new · 1 resolved") with **Update now**. The section is never `inert`, disabled or `pointer-events:none`: text stays selectable and copyable and fields stay editable. Freshness (`observed`) may refresh the empty state and coverage line, which hold no input.
+While engaged, only that card's incoming update or removal waits. All other cards update, appear or disappear immediately. The newest model waits as `pending` only for held changes; later updates replace it. Each held card with a pending change gets `data-held="true"`, `aria-busy="true"` and a small `role="status"` notice inside it: "Call updated — updates when you're done" or "Call resolved — updates when you're done", with its own **Update now**. That button applies only that card's waiting change. There is no section- or page-wide card-change notice. Cards are never `inert`, disabled or `pointer-events:none`: text stays selectable and copyable and fields stay editable. Freshness (`observed`) may refresh the empty state and coverage line, which hold no input. The separate page-level "Quarterdeck updated" notice for a new served revision is unchanged.
 
-After every signal clears, a 600 ms grace period (so moving between two fields of one card never flickers) precedes one rebuild:
+After a card's signals clear, its own 600 ms grace period (so moving between two fields of one card never flickers) precedes one rebuild, even if another card remains engaged:
 
 - an unchanged card `rev` leaves the node untouched; a changed card replaces only its inner content; a new card is inserted with a one-time `call-card-new` highlight; order changes move existing nodes; a gone card fades out (`call-card-leaving`, removed after 320 ms or at once under reduced motion);
 - a gone card with typed text becomes a `call-card-resolved` stub ("Resolved by Firstmate — your unsent text") with **Copy** and **Dismiss**, so no typed text is lost;
-- once the list has scrolled, the first visible card stays at the same viewport position.
+- the engaged visible card keeps its viewport position when neighbours are inserted or removed; engaged nodes are never detached to reorder them. Sort-control changes wait during engagement. Otherwise, once the list has scrolled, the first visible card stays at the same viewport position.
 
 Drafts: every `input` on a `[data-call-draft="<field>"]` inside a card is kept per card key in memory and in `sessionStorage` under `fm-quarterdeck-call-draft.v1:<card key>`; every render restores it. Storage failures are ignored.
 
@@ -118,7 +118,7 @@ Queue, then Send and Edit, share one action bar joined flush to the bottom edge 
 
 **Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`. The review panel (`review-client.js`) lists queued answers above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the answer to its card for editing (keeping its request id once a send was attempted). **Send batch** and Ctrl+Enter send queued answers first, each still as its own `fm-bearings-answer.v1` note with its own request id through `POST /api/bearings/answer`, then the review notes through review delivery. Batching changes no intake, and review delivery being unavailable does not block the answers. A queued answer survives reload in its *confirm* state; only an explicit click sends it.
 
-Typing protection is unchanged: the form lives inside the held section, so focus, typing, a selection or a press holds updates. If the card's `rev` changes while its answer is in *confirm* or *failed*, the next render moves it to *refused* ("changed while you were reviewing") and the captain queues it again; the server refuses a stale `cardRev` too. Answer state for calls that leave the model is forgotten on the next applied update, so a re-held task starts fresh.
+Typing protection is unchanged: the form lives inside its held card, so focus, typing, a selection or a press holds that card's updates. If the card's `rev` changes while its answer is in *confirm* or *failed*, the next render moves it to *refused* ("changed while you were reviewing") and the captain queues it again; the server refuses a stale `cardRev` too. Answer state for calls that leave the model is forgotten on the next applied update, so a re-held task starts fresh.
 
 **`POST /api/bearings/answer`** (host only; 404 through a preview path):
 

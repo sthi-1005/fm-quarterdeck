@@ -1,8 +1,6 @@
-// Captain's Call keyed patcher and engagement hold (BEARINGS.md). While the captain is
-// engaged with the section - focus, a text selection, a pointer press or a selected
-// card - no update touches its cards: the newest model waits, the section is muted
-// and says so, and it rebuilds once after the captain disengages. Typed text is kept
-// per card key and survives every rebuild, including the card leaving.
+// Captain's Call keyed patcher and per-card engagement hold (BEARINGS.md).
+// Only engaged cards wait; unrelated cards reconcile immediately. Drafts survive
+// every rebuild, including a card leaving.
 window.bearingsPatch = (() => {
   const DRAFT_PREFIX = "fm-quarterdeck-call-draft.v1:";
   const SORT_KEY = "fm-quarterdeck-call-sort.v1";
@@ -23,7 +21,7 @@ window.bearingsPatch = (() => {
     cardHtml: (card) => `<p><strong>${escapeHtml(card.type === "merge" ? "Merge" : "Decision")}</strong> ${escapeHtml(card.summary || card.reason || card.task)}</p>`,
     emptyHtml: (model) => escapeHtml(model.state === "loading" ? "Checking for captain's calls…" : model.coverage?.provenClear ? "Nothing needs your action right now" : model.error && !model.coverage ? `Captain's Call unavailable: ${model.error}` : "No decision is recorded"),
     coverageText: (model) => model.coverage ? `checked ${model.coverage.checked} of ${model.coverage.known}` : "",
-    heldText: (diff) => ["Captain's Call changed — updates when you're done", diff.added && `${diff.added} new`, diff.changed && `${diff.changed} changed`, diff.removed && `${diff.removed} resolved`].filter(Boolean).join(" · "),
+    heldText: (change) => `Call ${change} — updates when you're done`,
     stubHtml: () => '<p>Resolved by Firstmate — your unsent text</p><pre data-call-stub-text></pre><button type="button" data-call-stub-copy>Copy</button> <button type="button" data-call-stub-dismiss>Dismiss</button>',
   };
 
@@ -60,12 +58,26 @@ window.bearingsPatch = (() => {
 
   function createEngagementTracker(section, { doc = window.document, timers = window, onChange = () => {} } = {}) {
     const state = { focus: false, selection: false, pointer: false, selected: null };
-    let last = false;
+    let pointerKey = null;
+    const keys = () => {
+      const result = new Set();
+      const focusKey = keyOf(doc.activeElement?.closest?.("[data-call-key]"));
+      if (state.focus && focusKey) result.add(focusKey);
+      if (pointerKey) result.add(pointerKey);
+      if (state.selected) result.add(state.selected);
+      const selection = doc.getSelection?.();
+      if (selection && !selection.isCollapsed) {
+        for (const card of section.querySelectorAll("[data-call-key]")) {
+          for (let i = 0; i < selection.rangeCount; i++) if (rangeTouches(selection.getRangeAt(i), card)) result.add(keyOf(card));
+        }
+      }
+      return result;
+    };
     const engaged = () => state.focus || state.selection || state.pointer || Boolean(state.selected);
-    const notify = () => { const now = engaged(); if (now !== last) { last = now; onChange(now); } };
+    const notify = () => onChange(engaged(), keys());
     const cardByKey = (key) => [...section.querySelectorAll("[data-call-key]")].find((node) => keyOf(node) === key) || null;
-    function deselect() {
-      if (!state.selected) return;
+    function deselect(key = null) {
+      if (!state.selected || (key && key !== state.selected)) return;
       cardByKey(state.selected)?.removeAttribute("aria-current");
       state.selected = null;
       notify();
@@ -86,9 +98,9 @@ window.bearingsPatch = (() => {
       // section, so switching apps does not count as finishing.
       [section, "focusout", () => { timers.setTimeout(() => { state.focus = section.contains(doc.activeElement); notify(); }, 0); }],
       [doc, "selectionchange", () => { state.selection = selectionInside(); notify(); }],
-      [section, "pointerdown", () => { state.pointer = true; notify(); }],
-      [doc, "pointerup", () => { if (state.pointer) { state.pointer = false; notify(); } }],
-      [doc, "pointercancel", () => { if (state.pointer) { state.pointer = false; notify(); } }],
+      [section, "pointerdown", (event) => { state.pointer = true; pointerKey = keyOf(event.target?.closest?.("[data-call-key]")); notify(); }],
+      [doc, "pointerup", () => { if (state.pointer) { state.pointer = false; pointerKey = null; notify(); } }],
+      [doc, "pointercancel", () => { if (state.pointer) { state.pointer = false; pointerKey = null; notify(); } }],
       [section, "click", (event) => {
         // Finishing a drag-selection is not a card click.
         if (selectionInside() || event.target?.closest?.(INTERACTIVE)) return;
@@ -102,6 +114,7 @@ window.bearingsPatch = (() => {
     for (const [target, type, listener] of listeners) target.addEventListener(type, listener);
     return {
       engaged,
+      keys,
       state: () => ({ ...state }),
       deselect,
       destroy() { for (const [target, type, listener] of listeners) target.removeEventListener(type, listener); },
@@ -129,49 +142,75 @@ window.bearingsPatch = (() => {
     let appliedRev = null;
     let applied = null;
     let pending = null;
-    let releaseTimer = null;
+    const releaseTimers = new Map();
+    let engagedKeys = new Set();
+    let sortReleaseTimer = null;
     let held = false;
     let sortOrder = "newest", appliedSort = null, clockTimer = null;
     try { if (viewerStorage?.getItem(SORT_KEY) === "oldest") sortOrder = "oldest"; } catch {}
     if (sortControl) sortControl.value = sortOrder;
     const reducedMotion = () => Boolean(win.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
-    const tracker = createEngagementTracker(section, { doc, timers, onChange: (engaged) => { if (engaged) cancelRelease(); else scheduleRelease(); } });
-
-    // The status line is built once; only its text changes, so focus on Update now survives.
-    let heldText = status.querySelector?.("[data-call-held-text]");
-    if (!heldText) {
-      status.innerHTML = '<span data-call-held-text></span> <button type="button" data-call-update-now>Update now</button>';
-      heldText = status.querySelector("[data-call-held-text]");
-    }
-    if (!status.getAttribute("role")) status.setAttribute("role", "status");
-    status.hidden = true;
-
-    function showHeld(diff) {
-      held = true;
-      section.setAttribute("data-held", "true");
-      section.setAttribute("aria-busy", "true");
-      const text = render.heldText(diff) + (appliedSort !== sortOrder ? " · sort pending" : "");
-      if (heldText.textContent !== text) heldText.textContent = text;
-      status.hidden = false;
-      onHeld(true, diff);
-    }
-    function clearHeld() {
-      if (!held) return;
-      held = false;
-      section.removeAttribute("data-held");
-      section.setAttribute("aria-busy", "false");
-      status.hidden = true;
-      onHeld(false, null);
-    }
-    function cancelRelease() { timers.clearTimeout(releaseTimer); releaseTimer = null; }
-    // A short grace period, so moving between two fields of one card never flickers.
-    function scheduleRelease() {
-      cancelRelease();
-      if (!pending) return;
-      releaseTimer = timers.setTimeout(() => {
-        releaseTimer = null;
-        if (!tracker.engaged() && pending) apply(pending);
+    const tracker = createEngagementTracker(section, { doc, timers, onChange: (engaged, keys) => {
+      for (const key of keys) { timers.clearTimeout(releaseTimers.get(key)); releaseTimers.delete(key); }
+      for (const key of engagedKeys) if (!keys.has(key) && !releaseTimers.has(key)) {
+        releaseTimers.set(key, timers.setTimeout(() => {
+          releaseTimers.delete(key);
+          if (pending) update(pending);
+        }, holdDelayMs));
+      }
+      engagedKeys = keys;
+      timers.clearTimeout(sortReleaseTimer);
+      sortReleaseTimer = null;
+      if (!engaged) sortReleaseTimer = timers.setTimeout(() => {
+        sortReleaseTimer = null;
+        if (pending) update(pending);
       }, holdDelayMs);
+    } });
+    // Card changes never use the old section status line.
+    status.hidden = true;
+    status.innerHTML = "";
+    const sortNotice = sortControl ? doc.createElement("span") : null;
+    if (sortNotice) {
+      sortNotice.setAttribute("data-call-sort-pending", "");
+      sortNotice.setAttribute("role", "status");
+      sortNotice.innerHTML = "Sort waits until you're done <button type=\"button\" data-call-sort-now>Update now</button>";
+      sortNotice.hidden = true;
+      sortControl.parentNode.append(sortNotice);
+    }
+    const heldKeys = () => new Set([...tracker.keys(), ...releaseTimers.keys()]);
+    function cancelRelease() {
+      for (const timer of releaseTimers.values()) timers.clearTimeout(timer);
+      releaseTimers.clear();
+      timers.clearTimeout(sortReleaseTimer);
+      sortReleaseTimer = null;
+    }
+    function showNotices(model) {
+      const next = new Map(model.cards.map((card) => [card.key, card]));
+      let count = 0;
+      for (const node of list.querySelectorAll("[data-call-key]")) {
+        const card = next.get(keyOf(node));
+        const change = !card ? "resolved" : card.rev !== node.getAttribute("data-call-rev") ? "updated" : null;
+        let notice = node.querySelector("[data-call-held]");
+        if (!change || node.classList.contains("call-card-leaving")) {
+          notice?.remove(); node.removeAttribute("data-held"); node.removeAttribute("aria-busy"); continue;
+        }
+        count++;
+        if (!notice) {
+          notice = doc.createElement("div");
+          notice.className = "call-card-notice";
+          notice.setAttribute("data-call-held", "");
+          notice.setAttribute("role", "status");
+          notice.innerHTML = '<span data-call-held-text></span> <button type="button" data-call-update-now>Update now</button>';
+          node.append(notice);
+        }
+        const text = render.heldText(change);
+        if (notice.querySelector("[data-call-held-text]").textContent !== text) notice.querySelector("[data-call-held-text]").textContent = text;
+        node.setAttribute("data-held", "true");
+        node.setAttribute("aria-busy", "true");
+      }
+      held = Boolean(count || appliedSort !== sortOrder);
+      if (sortNotice) sortNotice.hidden = appliedSort === sortOrder;
+      onHeld(held, diffCards(appliedRevs, model.cards));
     }
 
     function restoreDrafts(node, key) {
@@ -219,6 +258,11 @@ window.bearingsPatch = (() => {
     // list has scrolled; at the top a new call should push in visibly.
     function captureAnchor() {
       const top = viewportTop();
+      // Prefer an engaged visible card even before the list has scrolled.
+      for (const node of list.children) {
+        const rect = node.getBoundingClientRect();
+        if (heldKeys().has(keyOf(node)) && rect.bottom > top && !node.hidden) return { node, top: rect.top };
+      }
       if (list.getBoundingClientRect().top >= top) return null;
       for (const node of list.children) {
         const key = keyOf(node) || node.getAttribute("data-call-stub");
@@ -250,16 +294,13 @@ window.bearingsPatch = (() => {
     }
     function observe(freshness) {
       if (!applied || !freshness || freshness.rev !== appliedRev) return;
-      const { unchanged, ...fields } = freshness;
+      const { unchanged, cards, ...fields } = freshness;
       applied = { ...applied, ...fields };
       renderChrome(applied);
     }
 
-    function apply(model) {
-      cancelRelease();
-      pending = null;
-      const anchor = captureAnchor();
-      const cards = sortCards(Array.isArray(model.cards) ? model.cards : [], sortOrder);
+    function apply(model, protectedKeys = new Set(), order = sortOrder) {
+      const cards = model.cards;
       const existing = new Map();
       const stubs = new Map();
       const leaving = [];
@@ -308,39 +349,60 @@ window.bearingsPatch = (() => {
       } else empty?.remove();
       // Move nodes into place; never recreate them.
       const desired = [...ordered, ...stubs.values(), ...leaving];
-      desired.forEach((node, index) => { if (list.children[index] !== node) list.insertBefore(node, list.children[index] || null); });
+      // Do not detach an engaged node: moving it can drop focus/selection.
+      // Place neighbours around it instead.
+      for (let index = desired.length - 1; index >= 0; index--) {
+        const node = desired[index], before = desired[index + 1] || null;
+        const current = [...list.children];
+        if (!protectedKeys.has(keyOf(node)) && (current[current.indexOf(node) + 1] || null) !== before) list.insertBefore(node, before);
+        else if (!node.parentNode) list.insertBefore(node, before);
+      }
       renderChrome(model);
       appliedRevs.clear();
       for (const card of cards) appliedRevs.set(card.key, card.rev);
       appliedRev = model.rev;
       applied = model;
-      appliedSort = sortOrder;
-      clearHeld();
+      appliedSort = order;
       onApply(model);
-      restoreAnchor(anchor);
     }
 
     function update(model) {
       if (!model || !Array.isArray(model.cards)) return "ignored";
-      if (applied && model.rev === appliedRev && appliedSort === sortOrder) {
+      if (applied && model.rev === appliedRev && !diffCards(appliedRevs, model.cards).total && appliedSort === sortOrder) {
         // Back to what is on screen: nothing is waiting any more.
         pending = null;
         cancelRelease();
-        clearHeld();
+        showNotices(model);
         observe(model);
         return "unchanged";
       }
-      if (applied && (tracker.engaged() || releaseTimer)) {
-        pending = model;
-        showHeld(diffCards(appliedRevs, model.cards));
-        return "held";
-      }
-      apply(model);
-      return "applied";
+      return reconcile(model);
     }
-    function applyNow() {
-      tracker.deselect();
-      if (pending) apply(pending);
+    function reconcile(model, releaseKey = null, forceSort = false) {
+      const protectedKeys = heldKeys();
+      if (releaseKey) protectedKeys.delete(releaseKey);
+      const cards = [...model.cards];
+      for (const card of applied?.cards || []) if (protectedKeys.has(card.key)) {
+        const index = cards.findIndex((entry) => entry.key === card.key);
+        if (index >= 0) cards[index] = card;
+        else cards.splice(Math.min(applied.cards.indexOf(card), cards.length), 0, card);
+      }
+      const waitSort = !forceSort && applied && (tracker.engaged() || releaseTimers.size || sortReleaseTimer);
+      const order = waitSort ? appliedSort : sortOrder;
+      const ordered = sortCards(cards, order);
+      const anchor = captureAnchor();
+      // Explicit sort Update now may move selected nodes, but never releases
+      // their pending card changes. Normal background patches never detach them.
+      apply({ ...model, cards: ordered }, forceSort ? new Set() : protectedKeys, order);
+      pending = diffCards(appliedRevs, model.cards).total || appliedSort !== sortOrder ? model : null;
+      showNotices(model);
+      restoreAnchor(anchor);
+      return pending ? "held" : "applied";
+    }
+    function applyNow(key = null) {
+      tracker.deselect(key);
+      if (key) { timers.clearTimeout(releaseTimers.get(key)); releaseTimers.delete(key); }
+      if (pending) reconcile(pending, key, !key);
     }
 
     function setSort(order) {
@@ -373,7 +435,8 @@ window.bearingsPatch = (() => {
     };
     const onClick = (event) => {
       const target = event.target;
-      if (target?.closest?.("[data-call-update-now]")) { applyNow(); return; }
+      if (target?.closest?.("[data-call-update-now]")) { applyNow(keyOf(target.closest("[data-call-key]"))); return; }
+      if (target?.closest?.("[data-call-sort-now]")) { applyNow(); return; }
       const stub = target?.closest?.("[data-call-stub]");
       if (!stub) return;
       const key = stub.getAttribute("data-call-stub");
@@ -411,6 +474,7 @@ window.bearingsPatch = (() => {
         timers.clearTimeout(clockTimer);
         sortControl?.removeEventListener("change", onSort);
         tracker.destroy();
+        sortNotice?.remove();
         list.removeEventListener("input", onInput);
         list.removeEventListener("change", onInput);
         section.removeEventListener("click", onClick);
