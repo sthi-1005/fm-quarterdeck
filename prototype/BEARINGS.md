@@ -298,7 +298,10 @@ Saving a busy or invalid file is 503.
 
 Overview's second column shows the snapshot's `landed` rows as poster cards in the same visual language as Captain's Call.
 At the phone one-column breakpoint, the Overview body starts with two tabs, Captain's Call (N) and Just landed (N), and shows one section at a time.
-N counts every card in that section, including filtered and acknowledged cards.
+Captain's Call N counts every open card, including filtered cards.
+Just landed N counts landings whose current rev is not the acknowledged rev.
+The Just landed heading shows that same count in the Captain's Call count badge and hides the badge when it is 0, the same way the Overview Captain's Call badge hides when none are waiting.
+The phone tab still shows Just landed (0) when none are new, the same way Captain's Call (0) stays visible.
 The chosen tab is remembered for that viewer in localStorage under `fm-quarterdeck-overview-tab.v1`.
 A desktop width keeps both columns, with the same 22px gap, and does not show the tabs.
 The source is the same guarded snapshot.

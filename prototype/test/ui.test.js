@@ -111,6 +111,7 @@ test("Overview retains KPIs, replaces only the project tree with accessible live
   assert.match(overview, /id="overview-columns"/);
   assert.match(overview, /id="overview-primary"[\s\S]*id="captain-call" aria-labelledby="call-heading"/);
   assert.match(overview, /id="overview-secondary"[\s\S]*id="just-landed"/);
+  assert.match(overview, /id="just-landed-heading"[\s\S]*Just landed <b id="landed-new-count" class="call-badge" hidden>0<\/b>/);
   assert.match(overview, /id="landed-ack-toggle"/);
   assert.match(overview, /Checking for landings/);
   assert.doesNotMatch(overview.slice(overview.indexOf('id="overview-secondary"')), /placeholder|coming soon|Charted|Procrastinate/i);

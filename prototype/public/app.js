@@ -1855,12 +1855,12 @@ callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
   focusTarget: () => [...document.querySelectorAll('.primary-tab[data-view="overview"], [data-mobile-view="overview"]')].find((node) => node.getClientRects().length),
   onDismiss(key) { if (callPatcher.tracker.state().selected === key) callPatcher.tracker.deselect(); },
 });
-const landedBoard = window.bearingsLanded?.createController?.({ list: $("#landed-cards"), toggle: $("#landed-ack-toggle"), onChange: () => overviewTabs?.paint() });
+const landedBoard = window.bearingsLanded?.createController?.({ list: $("#landed-cards"), toggle: $("#landed-ack-toggle"), badge: $("#landed-new-count"), onChange: () => overviewTabs?.paint() });
 const overviewTabs = window.overviewTabs?.createController?.({
   root: $("#overview-view"),
   tabs: $("#overview-section-tabs"),
   panels: { calls: $("#overview-primary"), landed: $("#overview-secondary") },
-  counts: { calls: () => callPatcher?.applied?.cards?.length || 0, landed: () => landedBoard?.count?.() || 0 },
+  counts: { calls: () => callPatcher?.applied?.cards?.length || 0, landed: () => landedBoard?.newCount?.() ?? 0 },
   storage: localStorage,
   media: window.matchMedia?.("(max-width: 720.005px)"),
 });

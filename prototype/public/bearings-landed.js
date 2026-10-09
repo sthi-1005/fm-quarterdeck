@@ -44,8 +44,8 @@ window.bearingsLanded = (() => {
       </form>`;
   }
 
-  function createController({ list, toggle, invalid, onChange = () => {}, doc = document, fetchImpl = (...args) => globalThis.fetch(...args), timers = globalThis, uuid = () => globalThis.crypto.randomUUID(), pollMs = 15000 } = {}) {
-    if (!list) return { update() {}, destroy() {}, count() { return 0; } };
+  function createController({ list, toggle, badge, invalid, onChange = () => {}, doc = document, fetchImpl = (...args) => globalThis.fetch(...args), timers = globalThis, uuid = () => globalThis.crypto.randomUUID(), pollMs = 15000 } = {}) {
+    if (!list) return { update() {}, destroy() {}, count() { return 0; }, newCount() { return 0; } };
     const text = window.bearingsView?.createTextController?.({ list, keyAttribute: "data-landed-key" });
     const drafts = new Map();
     const histories = new Map();
@@ -63,6 +63,7 @@ window.bearingsLanded = (() => {
     };
     const cards = () => Array.isArray(model.landed) ? model.landed : [];
     const acknowledged = (card) => acks[card.key] === card.rev;
+    const newCount = () => cards().filter((card) => !acknowledged(card)).length;
     const nodeOf = (key) => [...list.querySelectorAll("[data-landed-key]")].find((node) => node.getAttribute("data-landed-key") === key) || null;
 
     function paintPhase(node, key) {
@@ -160,6 +161,12 @@ window.bearingsLanded = (() => {
         if (text && empty.textContent !== text) empty.textContent = text;
       }
       const count = cards().filter(acknowledged).length;
+      const fresh = newCount();
+      if (badge) {
+        badge.textContent = String(fresh);
+        badge.hidden = fresh === 0;
+        badge.setAttribute("aria-label", fresh === 1 ? "1 new landing" : `${fresh} new landings`);
+      }
       if (toggle) {
         toggle.textContent = `Acknowledged (${count})`;
         toggle.disabled = count === 0;
@@ -357,6 +364,7 @@ window.bearingsLanded = (() => {
     return {
       update(next) { model = next || model; render(); },
       count: () => cards().length,
+      newCount,
       destroy() {
         text?.destroy?.();
         timers.clearInterval?.(pollTimer);

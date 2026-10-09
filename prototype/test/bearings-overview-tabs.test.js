@@ -187,3 +187,69 @@ test("a landed card continues a title, discloses a different one, and expands a 
   assert.equal(view.sourceShortened("https://example.invalid/pull/…"), true);
   board.destroy();
 });
+
+test("the Just landed heading badge and phone tab count only unacknowledged landings", async () => {
+  const dom = callDom();
+  const timers = fakeTimers();
+  const { context, root, tabs, calls, landed } = mount(dom);
+  const list = dom.document.createElement("div");
+  const empty = dom.document.createElement("p");
+  empty.setAttribute("data-landed-empty", "");
+  list.append(empty);
+  const toggle = dom.document.createElement("button");
+  toggle.id = "landed-ack-toggle";
+  const badge = dom.document.createElement("b");
+  badge.id = "landed-new-count";
+  badge.className = "call-badge";
+  badge.hidden = true;
+  badge.textContent = "0";
+  const heading = dom.document.createElement("h2");
+  heading.id = "just-landed-heading";
+  heading.textContent = "Just landed ";
+  heading.append(badge);
+  landed.append(heading, toggle, list);
+  const rev = "a".repeat(16);
+  const otherRev = "b".repeat(16);
+  const acked = { key: "landed:local-notes", task: "local-notes", rev, what: "Notes", artifact: "local main", repo: "sample-notes", owner: "(main)", clock: { label: "Landed", at: "2026-10-02" } };
+  const fresh = { key: "landed:ship-window", task: "ship-window", rev: otherRev, what: "Ship the window", repo: "example-app", owner: "(main)", url: "https://example.invalid/acme/example-app/pull/42", artifact: null, clock: { label: "Landed", at: "2026-10-01" } };
+  const records = { [acked.key]: rev };
+  const board = context.window.bearingsLanded.createController({
+    list, toggle, badge, doc: dom.document, timers,
+    onChange: () => phone.paint(),
+    fetchImpl: async (url, options) => {
+      if (String(url).includes("/landed/ack") && options?.method === "POST") {
+        records[JSON.parse(options.body).key] = otherRev;
+      }
+      if (String(url).includes("/thread")) return { ok: true, json: async () => ({ entries: [] }) };
+      return { ok: true, json: async () => ({ acks: { ...records } }) };
+    },
+  });
+  const phone = context.window.overviewTabs.createController({
+    root, tabs, panels: { calls, landed },
+    counts: { calls: () => 3, landed: () => board.newCount() },
+    storage: memoryStorage(), media: mediaQuery({ value: true }), doc: dom.document,
+  });
+  const landedTab = tabs.querySelector('[data-overview-tab="landed"]');
+  await new Promise((resolve) => setImmediate(resolve));
+  board.update({ state: "ready", landed: [acked, fresh], omitted: [] });
+  assert.equal(board.count(), 2, "the section still holds acknowledged cards");
+  assert.equal(board.newCount(), 1);
+  assert.equal(badge.textContent, "1");
+  assert.equal(badge.hidden, false);
+  assert.equal(badge.getAttribute("aria-label"), "1 new landing");
+  assert.equal(heading.contains(badge), true);
+  assert.equal(landedTab.textContent, "Just landed (1)");
+  const ack = list.querySelector('[data-landed-key="landed:ship-window"]').querySelector('[data-landed-ack]');
+  ack.dispatchEvent({ type: "click", preventDefault() {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(board.newCount(), 0);
+  assert.equal(badge.textContent, "0");
+  assert.equal(badge.hidden, true);
+  assert.equal(landedTab.textContent, "Just landed (0)");
+  toggle.click();
+  assert.equal(list.querySelector('[data-landed-key="landed:ship-window"]').hidden, false);
+  assert.equal(board.newCount(), 0, "reviewing an acknowledged landing does not make it new");
+  assert.equal(landedTab.textContent, "Just landed (0)");
+  board.destroy();
+  phone.destroy();
+});
