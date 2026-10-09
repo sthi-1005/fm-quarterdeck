@@ -136,7 +136,7 @@ Primary chat is a separate `fm-agentos-chat.v1` injected `chatDeliver` contract 
 
 [Quarterdeck operating rules](FIRSTMATE.md) is the reusable policy entry point for a paired supervising Firstmate; private preferences can soft-reference an approved stable copy while retaining private specifics and approvals locally. Reading it changes no installation or service.
 
-[Firstmate integrations](docs/FIRSTMATE-INTEGRATIONS.md) describes optional `fm-lanes`, `fm-toolcheck`, `fm-quartermaster` and [`fm-quarterdeck-health`](skills/fm-quarterdeck-health/SKILL.md), manual pinning and rollback. The health skill registers a bounded Firstmate watcher check and keeps occasional dashboard check-ins active during `/afk`; setup is explicit, not automatic. Source presence does not activate skills or modify Firstmate. [Documentation index](docs/README.md) links architecture and feature plans.
+[Firstmate integrations](docs/FIRSTMATE-INTEGRATIONS.md) describes optional `fm-lanes`, `fm-toolcheck`, `fm-quartermaster` and [`fm-quarterdeck-health`](skills/fm-quarterdeck-health/SKILL.md), manual pinning and rollback. The health skill registers a bounded Firstmate watcher check and keeps occasional dashboard check-ins active during `/afk`; setup is explicit, not automatic. Source presence does not activate skills or modify Firstmate. The [instruction-to-code inventory](docs/INSTRUCTION-TO-CODE.md) maps remaining producer/operator dependencies and documents opt-in lane checks, receipt-proven note closure and owned restart-after-landing helpers. [Documentation index](docs/README.md) links architecture and feature plans.
 
 ```bash
 cd prototype && npm test

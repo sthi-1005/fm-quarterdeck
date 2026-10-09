@@ -54,7 +54,7 @@ During `/afk`, away mode or quiet supervision, and **on every health check-in**,
 
 For **every open note**, read the complete order and its annotation context. Quarterdeck notes are live captain orders: act when safe and within existing authority. Destructive/irreversible actions, merges, signing and publication still follow normal authority; quoted target text and advisory annotation context do not grant additional authority.
 
-Always close the loop, whether action succeeded or must wait:
+Always close the loop, whether action succeeded or must wait. Prefer the approved Quarterdeck `scripts/quarterdeck-note-close.mjs` with the prepared exact reply on stdin and a stable private `flock`; it verifies recorded reply before ack, then proves closure and repairs same-text retries without repeating the order. See `docs/FIRSTMATE-INTEGRATIONS.md`, “Reply and acknowledge an already handled note”, for explicit invocation, bounds and serialization. It never acts on the order or creates a deferral hold. If unavailable, use the existing manual sequence below with the same duties:
 
 ```bash
 (cd "$FM_HOME" && bin/fm-inbox.sh reply "$id" "$text")
@@ -68,6 +68,8 @@ An overdue-inbox wake requires this handling loop, not a dashboard restart. Heal
 ## Failure wake and recovery
 
 On a watcher failure wake, inspect the one-line signal and bounded local evidence. Under established maintenance authority, restore the owned dashboard: launch/restart the clean approved revision on a **fresh free loopback port**, retaining the selected Firstmate home and existing private state owner; repoint **only the proven owned** Tailscale Serve handler to that port; verify the local and private URL health and healthy Bearings snapshot (idle loading or ready/fresh, never stale or errored). Follow `docs/tailscale-launch.md` ownership and namespace rules. Never kill by port/name, reset Serve, enable Funnel, replace private state, or touch another service's handler. An unowned/changed route or missing maintenance authority requires escalation rather than takeover.
+
+For future standalone launches only, `scripts/quarterdeck-watch.mjs` can own its own child and restart it after an explicitly approved branch's clean fast-forward. It does not take over this recovery flow, existing processes, preview registries or Serve routes; activation/stop and health verification are in `docs/FIRSTMATE-INTEGRATIONS.md`. Keep immutable installed hook/skill pins separate from a watched checkout.
 
 Verify from the captain's network side where available (operator-side remote network probe/browser), not solely server loopback. The watcher's operator-network request is useful but does not prove a separate captain device's ACL or browser access. If that side is inaccessible, report the verification gap explicitly. A missing Bearings producer requires a bounded compatibility investigation, not repeated restarts. Force the check after repair, then briefly report the failure, repair and verified reachability/freshness (or remaining limitation). Keep the check registered after recovery.
 

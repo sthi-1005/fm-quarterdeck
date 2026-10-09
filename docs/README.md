@@ -18,7 +18,8 @@ Quarterdeck is the Firstmate operational cockpit: conversations are the shell; l
 | [Open-source contributions](OPEN-SOURCE-CONTRIBUTIONS.md) | Public repository setup, required review/check enforcement and contribution triage |
 | [History-free export](HISTORY-FREE-EXPORT.md) | Reviewed allowlist, tree-only archive verification and temporary first-commit runtime/full-suite acceptance |
 | [Feature plan](FEATURE-PLAN.md) | Present capabilities, future decisions and acceptance contracts |
-| [Firstmate integrations](FIRSTMATE-INTEGRATIONS.md) | Optional skills, deliberate activation and rollback |
+| [Firstmate integrations](FIRSTMATE-INTEGRATIONS.md) | Optional skills/mechanical helpers, deliberate activation and rollback |
+| [Instruction-to-code inventory](INSTRUCTION-TO-CODE.md) | Feature/integration instruction dependencies, safe conversions and remaining judgment/authority gates |
 | [Toolcheck](TOOLCHECK.md) | Scoped installed-tool audit |
 | [Private Tailscale launch](tailscale-launch.md) | Optional exact-origin private Serve launch |
 | [Legacy branch inventory](dev-branch-inventory.md) / [parked work](parked-work.md) | Generic migration procedures, not installation inventories |
