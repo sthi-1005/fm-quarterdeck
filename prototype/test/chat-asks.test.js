@@ -68,7 +68,7 @@ test("marker grammar: line-start markers tolerant of markdown; mentions, code an
   assert.equal(mentionsTask("see sample-task.md", "sample-task"), false);
 });
 
-test("a Firstmate ask surfaces, a captain reply that repeats the quoted reply resolves it, and reads are incremental", async (context) => {
+test("a Firstmate ask surfaces, transcript input that repeats the quoted reply never resolves it, and reads are incremental", async (context) => {
   const env = await claudeHome(context);
   await writeFile(env.transcript, lines(
     captain("c-1", 0, "status?"),
@@ -87,22 +87,23 @@ test("a Firstmate ask surfaces, a captain reply that repeats the quoted reply re
   const cursor = Object.values(state.cursors)[0];
   assert.equal(cursor.offset, (await readFile(env.transcript)).length);
 
-  // A machine envelope never answers; a reply typed in a later captain message does, exactly.
+  // A transcript role=user line is unverified input (authorship.js), not the captain's
+  // reply: neither a machine envelope nor a matching reply resolves the ask.
   await appendFile(env.transcript, lines(captain("c-2", 3, "FIRSTMATE_OP: retire both"), captain("c-3", 4, "Retire both.")));
   // A trailing partial record is left for the next scan rather than parsed early.
-  await appendFile(env.transcript, captain("c-4", 5, "rotated").slice(0, 20));
-  assert.equal(await scanner.scan(), true);
-  assert.deepEqual(scanner.asks().map((ask) => ask.key), [keys[1]]);
-  const resolved = JSON.parse(await readFile(chatAsksPath(env.statePath), "utf8")).asks[keys[0]];
-  assert.equal(resolved.resolvedBy, "reply");
-  await appendFile(env.transcript, `${captain("c-4", 5, "rotated").slice(20)}\n`);
+  const partial = firstmate("f-3", 5, "ACTION NEEDED: Restart the sample preview. Reply \"restart\".");
+  await appendFile(env.transcript, partial.slice(0, 20));
   await scanner.scan();
-  assert.deepEqual(scanner.asks(), []);
+  assert.deepEqual(scanner.asks().map((ask) => ask.key), keys);
+  assert.equal(Object.values(JSON.parse(await readFile(chatAsksPath(env.statePath), "utf8")).asks).some((ask) => ask.resolvedBy === "reply"), false);
+  await appendFile(env.transcript, `${partial.slice(20)}\n${captain("c-4", 6, "rotated")}\n`);
+  await scanner.scan();
+  assert.deepEqual(scanner.asks().map((ask) => ask.recordId), ["f-1", "f-2", "f-3"]);
 
-  // A fresh process resumes from the persisted cursor and keeps resolutions.
+  // A fresh process resumes from the persisted cursor without duplicating cards.
   const restarted = scannerFor(env);
   await restarted.scan();
-  assert.deepEqual(restarted.asks(), []);
+  assert.deepEqual(restarted.asks().map((ask) => ask.recordId), ["f-1", "f-2", "f-3"]);
 });
 
 test("keys are stable, dismissals survive a rewritten transcript, re-asks supersede, and backfill skips stale asks", async (context) => {
@@ -130,7 +131,7 @@ test("keys are stable, dismissals survive a rewritten transcript, re-asks supers
   assert.deepEqual(scanner.asks().map((entry) => entry.recordId), ["f-3"]);
 });
 
-test("later captain messages resolve case and punctuation variants anywhere as whole phrases", async (context) => {
+test("transcript input quoting a suggested reply in any case or punctuation leaves asks open", async (context) => {
   const env = await claudeHome(context);
   await writeFile(env.transcript, lines(
     captain("before", 0, "archive sample notes"),
@@ -142,13 +143,13 @@ test("later captain messages resolve case and punctuation variants anywhere as w
   ));
   const scanner = scannerFor(env);
   await scanner.scan();
-  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["long"]);
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["case", "long"]);
   await appendFile(env.transcript, lines(captain("long-answer", 5, "Please ARCHIVE\t sample, notes ---- then check the sample preview.")));
   await scanner.scan();
-  assert.deepEqual(scanner.asks(), []);
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["case", "long"]);
   const restarted = scannerFor(env);
   await restarted.scan();
-  assert.deepEqual(restarted.asks(), []);
+  assert.deepEqual(restarted.asks().map(ask => ask.recordId), ["case", "long"]);
 });
 
 test("same-marker replies supersede older asks despite changed prose, not different markers", async (context) => {
@@ -163,7 +164,7 @@ test("same-marker replies supersede older asks despite changed prose, not differ
   assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker", "newer"]);
   await appendFile(env.transcript, lines(captain("answer", 4, "Please retire both -- inspect the logs too.")));
   await scanner.scan();
-  assert.deepEqual(scanner.asks(), [], "a reply tests every earlier open ask, including different markers");
+  assert.deepEqual(scanner.asks().map(ask => ask.recordId), ["different-marker", "newer"], "transcript input never resolves an ask");
 });
 
 test("an upgraded scanner replays a bounded window to repair persisted open asks and repeats", async (context) => {
@@ -188,7 +189,7 @@ test("an upgraded scanner replays a bounded window to repair persisted open asks
   await writeFile(chatAsksPath(env.statePath), JSON.stringify(legacy));
   const upgraded = scannerFor(env);
   await upgraded.scan();
-  assert.deepEqual(upgraded.asks().map(ask => ask.recordId), ["newer"]);
+  assert.deepEqual(upgraded.asks().map(ask => ask.recordId), ["answered", "newer"], "the repeat supersedes; transcript input resolves nothing");
   assert.equal(await upgraded.scan(), false, "repair is one-off; idle scans remain cheap");
 });
 

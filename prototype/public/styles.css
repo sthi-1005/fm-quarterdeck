@@ -190,7 +190,7 @@ input[type="search"]::-webkit-search-results-decoration {
 .status-pill.offline { color: var(--amber); }
 .status-pill.offline i { background: var(--amber); }
 .view-freshness { display: block; max-width: 248px; margin-top: 4px; color: var(--accent); font-size: 11px; line-height: 1.4; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.view-freshness[data-state="stale"], .view-freshness[data-state="disconnected"] { color: var(--danger); }
+.view-freshness[data-state="stale"], .view-freshness[data-state="disconnected"], .view-freshness[data-state="updating"] { color: var(--danger); }
 .view-freshness[data-state="refreshing"] { color: var(--blue); }
 .primary-nav { min-height: 0; display: grid; gap: var(--space-2); padding-bottom: var(--space-4); overflow-y: auto; }
 .primary-tab { width: 100%; min-width: 0; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); border: 1px solid transparent; background: transparent; text-align: left; }
@@ -308,7 +308,7 @@ input[type="search"]::-webkit-search-results-decoration {
 .message-origin.origin-conversation { border-color: #adc5e2; background: #e7eff9; color: #244f84; }
 .message-origin.origin-thinking { border-color: #d9bd85; background: #fbf0dc; color: var(--amber); }
 .message-origin.origin-crew, .message-origin.origin-supervision { border-color: #a9cdb9; background: var(--accent-soft); color: var(--accent); }
-.message-origin.origin-steer, .message-origin.origin-branch, .message-origin.origin-tools, .message-origin.origin-harness { background: var(--surface-soft); color: var(--muted); }
+.message-origin.origin-steer, .message-origin.origin-branch, .message-origin.origin-tools, .message-origin.origin-harness, .message-origin.origin-input { background: var(--surface-soft); color: var(--muted); }
 .message-origin.origin-captain { border-color: var(--text); background: var(--text); color: var(--surface); }
 .message-state { padding-inline: 6px; border-color: var(--line-strong); background: var(--surface); color: var(--muted); font-weight: 500; }
 .message-lane { max-width: 100%; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 6px; font-size: var(--text-small); overflow-wrap: anywhere; }

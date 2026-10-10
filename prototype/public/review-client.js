@@ -746,13 +746,20 @@ async function loadConfig() {
   // Status reads would fail too; keep the unavailable reason visible instead.
   if (config.ready) void refreshStatuses();
 }
-// Recovery re-reads run one at a time: while the open composer cannot send, and on tab return.
+// Recovery re-reads run one at a time while a composer can send: the review
+// panel, or the desktop inline composer while that panel is hidden. Tab return
+// re-reads too.
 let recheck = null;
 function recheckConfig() { recheck ||= loadConfig().finally(() => { recheck = null; }); }
+function reviewComposerOpen() {
+  const panel = el("review-panel");
+  const inline = el("review-annotation");
+  return Boolean(panel && !panel.hidden) || Boolean(inline && !inline.hidden);
+}
 // Live Captain's Call reuses this one update notice; it never reloads on its own.
 window.quarterdeckRevision = { recheck: recheckConfig, showUpdate: () => { updateNotice.hidden = false; } };
 if (typeof setInterval === "function") setInterval(() => {
-  if (!config.ready && !el("review-panel").hidden) recheckConfig();
+  if (!config.ready && reviewComposerOpen()) recheckConfig();
   else if (config.ready && sent.some((batch) => !["completed", "failed", "replied"].includes(batch.state))) void refreshStatuses();
 }, 5000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "hidden") recheckConfig(); });
@@ -1095,6 +1102,7 @@ async function submitBatch(captured) {
     retryBatches = retryBatches.filter((batch) => batch.id !== captured.id);
     openBatches.delete(captured.id);
     el("review-state").textContent = `${result.delivery === "local" ? statusLabels.accepted : "Delivery confirmed; downstream status unavailable"} · receipt ${result.receiptId}`;
+    window.dispatchEvent?.(new Event("quarterdeck-sent"));
     if (result.delivery === "local") void refreshStatuses();
     if (captured.payload.end && !queue.length && !retryBatches.length && !el("review-message").value.trim()) {
       selected = null; hovered = null; panel(false);
