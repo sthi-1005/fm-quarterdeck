@@ -27,6 +27,10 @@ Inside a source, only the model's own text parts count as Firstmate text: Claude
 - The ask is the rest of the marker line plus any following non-blank lines, such as a decision's option list. It ends at a blank line, another marker, a code fence or a `[fm-lane …]`/`[end …]` line. Code-fenced text is never an ask. A mid-sentence or backticked mention of a marker is not an ask. Ask text is capped at 4000 characters.
 - **Structured task marker:** `[task:<id>]` anywhere on the ask's marker line explicitly names its filed hold. Ids use `[A-Za-z0-9][A-Za-z0-9._-]{0,159}`; malformed markers do not count. Markers are extracted before ask text clipping and persisted independently of prose. Ordinary whole-token id mentions remain compatible. The optional code-enforced Stop hook requires this structured marker (see below).
 - **Replies** are quoted alternatives after the word *reply* (`Reply **"x"**`, `reply \`a\` or \`b\``, `shortest reply: "y"`), plus quoted option labels at the start of the ask body or a following list/continuation line (`- "stay here": continue`, `"plan A" keeps the setup`). Straight/curly single and double quotes and backticks are accepted. Mid-sentence quoted prose is not an option label. Unquoted replies are never guessed, and at most 6 are kept.
+- Lettered lines on a decision ask that has no quoted replies can become answer radios (`a)`, `(a)`, `a:`, `a -`, `Option A:`, a quoted `"a":`, or a lowercase `a.`).
+  The same grammar is in `prototype/BEARINGS.md`.
+  Those letters are not suggested-reply phrases, so a later chat message that contains the letter does not resolve the ask.
+  A quoted reply line that continues with a description shows that description under the radio.
 
 ### Card identity and deduplication
 
@@ -65,6 +69,7 @@ The state lives in one JSON file, `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json` (
 ## Known limits
 
 - An ask Firstmate phrases **without** a marker line is not detected. The marker convention is the one contract with Firstmate.
+- A letter on a decision line is an answer radio, not a suggested reply. A later message that merely contains that letter does not resolve the ask.
 - Chat-reply resolution needs the suggested reply's whole normalized phrase somewhere in the captain's message. A paraphrase ("ok, do it") leaves the card open until it is answered, dismissed or superseded. The matcher does not interpret negation or intent around a matching phrase.
 - When several open asks offer the same reply text, that matching phrase resolves all earlier open matches. A later same-marker ask offering the same reply supersedes older asks even if their prose differs; generic replies can therefore conflate distinct same-marker asks.
 - Linking needs a structured task marker, whole-token task-id mention, matching quoted reply or exact normalized reason. Otherwise an ask about a filed hold shows as its own card. If a linked ledger hold is omitted by bearings, its chat card remains visible rather than inventing a filed card.

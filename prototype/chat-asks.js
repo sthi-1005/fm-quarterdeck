@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { contentRevision, publicText, shortHash } from "./bearings.js";
+import { enumeratedLetterOptions, publishOptions, replyDescription } from "./enumerated-options.js";
 import { claudeTurns, findClaudePrimary } from "./claude-transcript.js";
 import { createHistoryReader } from "./history-reader.js";
 
@@ -503,14 +504,41 @@ export function createChatAskScanner({ home, claudeConfigDir = null, statePath =
 // Cards. A chat card answers through the same keyed relay as a snapshot card: question
 // chat.<id>, the quoted replies as options, and freeform text.
 export const chatQuestion = (key) => `chat.${key.slice("chat:".length)}`;
+const describedHint = (text, reply) => publicText(replyDescription(text, reply), 240);
 export function chatCard(ask) {
-  const options = ask.replies.map((reply, index) => ({ value: `reply-${index + 1}`, label: publicText(reply, 200), hint: "Firstmate's suggested reply" })).filter((option) => option.label);
+  let options = ask.replies.map((reply, index) => ({ value: `reply-${index + 1}`, label: publicText(reply, 200), hint: describedHint(ask.text, reply) || "Firstmate's suggested reply" })).filter((option) => option.label);
+  // A decision ask with no quoted replies still offers its explicit lettered lines.
+  // The letters are selections on this card, not suggested-reply phrases.
+  if (!options.length && ask.kind === "decision") options = publishOptions(enumeratedLetterOptions(ask.text), publicText);
   const card = { key: ask.key, type: "chat", kind: ask.kind, marker: ask.marker, summary: publicText(ask.text, Infinity) || `${ask.marker} (no text)`, replies: options.map((option) => option.label),
     source: ask.source.split("/")[0], transcript: { offset: ask.offset, part: ask.part }, clock: { label: "Asked", at: ask.at },
     answer: { question: chatQuestion(ask.key), options, recommend: null, close: null, freeform: true } };
   return { ...card, rev: shortHash(card) };
 }
-const linkedEntry = (ask) => ({ key: ask.key, kind: ask.kind, summary: publicText(ask.text, Infinity) || ask.marker, replies: ask.replies.map((reply) => publicText(reply, 200)).filter(Boolean), clock: { label: "Asked", at: ask.at } });
+const linkedEntry = (ask) => {
+  const replies = ask.replies.map((reply) => publicText(reply, 200)).filter(Boolean);
+  const replyHints = {};
+  for (const reply of replies) {
+    const hint = describedHint(ask.text, reply);
+    if (hint) replyHints[reply] = hint;
+  }
+  return { key: ask.key, kind: ask.kind, summary: publicText(ask.text, Infinity) || ask.marker, replies, ...(Object.keys(replyHints).length ? { replyHints } : {}), clock: { label: "Asked", at: ask.at } };
+};
+// A filed decision with no structured choices offers lettered lines from a linked decision ask.
+function withLinkedChoices(card, entries) {
+  const chatAsks = entries.map(linkedEntry);
+  const next = { ...card, chatAsks };
+  const existing = Array.isArray(next.answer?.options) ? next.answer.options : [];
+  if (next.type !== "decision" || existing.length || !next.answer) return next;
+  let best = [];
+  for (const ask of entries) {
+    if (ask.kind !== "decision") continue;
+    const options = publishOptions(enumeratedLetterOptions(ask.text), publicText);
+    if (options.length > best.length) best = options;
+  }
+  if (!best.length) return next;
+  return { ...next, answer: { ...next.answer, options: best } };
+}
 
 // Compose the served model: snapshot cards first (each carrying the chat asks linked to it),
 // then unlinked open chat asks, newest first, at most MAX_OPEN.
@@ -530,7 +558,7 @@ export function composeCallModel(base, asks, chatView) {
     const entries = linked.get(card.task);
     if (!entries) return card;
     const { rev, ...rest } = card;
-    const withAsks = { ...rest, chatAsks: entries.map(linkedEntry) };
+    const withAsks = withLinkedChoices(rest, entries);
     return { ...withAsks, rev: shortHash(withAsks) };
   });
   const chatCards = unlinked.slice(0, MAX_OPEN).map(chatCard);

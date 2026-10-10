@@ -325,6 +325,7 @@ test("review panel keeps desktop Sent/Queued sections and phone Message/Review t
   const batchCss = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
   assert.match(batchCss, /\.review-batch > summary \{[^}]*font-size: 12px;[^}]*line-height: 1\.25;[^}]*white-space: nowrap/);
   assert.match(batchCss, /\.review-note-text,\n\.review-batch > p \{ font-size: 12px; line-height: 1\.25; \}/);
+  assert.match(batchCss, /\.review-note-text,\n\.review-note-preview,\n\.review-batch > p,\n\.review-batch-full,\n\.review-batch-label,\n\.review-batch-meta time \{[^}]*-webkit-user-select: text; user-select: text; \}/);
   assert.doesNotMatch(batchCss, /\.review-note-full \{[^}]*font-size:/);
   assert.match(batchCss, /\.review-batch-label \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/);
   assert.match(batchCss, /\.review-batch\[open\] > summary \.review-batch-full \{[^}]*white-space: normal/);

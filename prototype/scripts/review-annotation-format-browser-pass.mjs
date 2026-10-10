@@ -129,7 +129,34 @@ try {
     await closeReadingControls(browser);
     await until("document.querySelector('.review-meta[data-review-chip=note-0]')?.open");
     assert.ok(await evaluate("document.querySelector('.review-prompt-line').innerText.includes('Link the CI run here.')"));
-    console.log(`PASS ${width}px: text-range receipt/intake, prompt-only chips, keyboard/open-state, no overflow, clicked list item/fingerprint, metadata search`);
+    // Send batch takes text still in the compose box together with notes already queued.
+    await evaluate(`(() => {
+      const panel = document.querySelector('#review-panel');
+      if (panel.hidden) document.querySelector('#review-panel-toggle').click();
+      document.querySelector('#review-conversation-tab').click();
+      const message = document.querySelector('#review-message');
+      message.value = 'Queued before the batch.';
+      message.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#review-form').requestSubmit();
+      message.value = 'Typed with the queued note.';
+      message.dispatchEvent(new Event('input', { bubbles: true }));
+      message.scrollIntoView({ block: 'center' });
+    })()`);
+    await until("!document.querySelector('#review-send').disabled && document.querySelector('#review-message').value === 'Typed with the queued note.' && JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).queue.some(entry => entry.prompt === 'Queued before the batch.')");
+    if (process.env.SCREENSHOT_DIR) {
+      await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
+      const { data } = await command("Page.captureScreenshot", { format: "png" });
+      await writeFile(path.join(process.env.SCREENSHOT_DIR, `send-batch-compose-${width}.png`), Buffer.from(data, "base64"));
+    }
+    await evaluate("document.querySelector('#review-send').click()");
+    await until("document.querySelector('#review-message').value === '' && JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).sent.some(batch => batch.entries.some(entry => entry.prompt === 'Typed with the queued note.'))");
+    const combined = await evaluate("JSON.parse(sessionStorage.getItem('fm-agentos-review-draft-v1')).sent.find(batch => batch.entries.some(entry => entry.prompt === 'Typed with the queued note.')).entries.map(entry => entry.prompt)");
+    assert.deepEqual(combined, ["Queued before the batch.", "Typed with the queued note."]);
+    if (process.env.SCREENSHOT_DIR) {
+      const { data } = await command("Page.captureScreenshot", { format: "png" });
+      await writeFile(path.join(process.env.SCREENSHOT_DIR, `send-batch-compose-sent-${width}.png`), Buffer.from(data, "base64"));
+    }
+    console.log(`PASS ${width}px: text-range receipt/intake, prompt-only chips, keyboard/open-state, no overflow, clicked list item/fingerprint, metadata search, send batch includes compose`);
     await browser.close(); browser = null;
   }
 } finally {

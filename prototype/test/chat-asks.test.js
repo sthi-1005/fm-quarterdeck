@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { answerEnvelope, formatAnswerNote, validateAnswer } from "../bearings-answer.js";
 import { createBearingsHub, normalizeSnapshot } from "../bearings.js";
-import { chatAsksPath, composeCallModel, createCallSource, createChatAskScanner, extractAsks, extractReplies, mentionsTask } from "../chat-asks.js";
+import { chatAsksPath, chatCard, composeCallModel, createCallSource, createChatAskScanner, extractAsks, extractReplies, mentionsTask } from "../chat-asks.js";
 import { claudeProjectDirectory } from "../claude-transcript.js";
 import { createServer } from "../server.js";
 
@@ -296,6 +296,67 @@ test("chat cards answer through the keyed relay as the captain's own reply, even
   assert.match(note.split("\n")[0], /reply to your chat ask: retire both$/);
   assert.deepEqual(note.split("\n").filter((line) => line.startsWith("```")), ["```json fm-bearings-answer", "```"]);
   assert.throws(() => validateAnswer({ requestId: "00000000-0000-4000-8000-000000000002", key: card.key, cardRev: card.rev, selection: "", note: "x" }, { ...model, chat: { ...model.chat, state: "unavailable" } }), /not current/);
+});
+
+test("lettered decision lines are radios, and a quoted reply keeps its own description", () => {
+  const sample = (overrides) => ({
+    key: "chat:sampleletter", kind: "decision", marker: "DECISION NEEDED",
+    text: "Choose the sample window.\na) Staged rollout\nb) Wait a week",
+    replies: [], source: "session-one.jsonl", offset: 0, part: 0, at: at(1), ...overrides,
+  });
+  const lettered = chatCard(sample({}));
+  assert.deepEqual(lettered.answer.options, [
+    { value: "a", label: "a", hint: "Staged rollout" },
+    { value: "b", label: "b", hint: "Wait a week" },
+  ]);
+  assert.deepEqual(lettered.replies, ["a", "b"]);
+  assert.deepEqual(chatCard(sample({ kind: "approval", marker: "APPROVAL NEEDED", key: "chat:approvalletter" })).answer.options, []);
+  const described = chatCard(sample({
+    key: "chat:described",
+    text: 'Choose.\n- "stay on Lyra": continue the current setup\nReply "pause work".',
+    replies: ["stay on Lyra", "pause work"],
+  }));
+  assert.deepEqual(described.answer.options.map((option) => [option.value, option.label, option.hint]), [
+    ["reply-1", "stay on Lyra", "continue the current setup"],
+    ["reply-2", "pause work", "Firstmate's suggested reply"],
+  ]);
+  assert.deepEqual(described.replies, ["stay on Lyra", "pause work"]);
+  assert.equal(chatCard(sample({ text: 'Choose. Reply "stay".', replies: ["stay"] })).answer.options[0].hint, "Firstmate's suggested reply");
+  assert.deepEqual(extractReplies('Reply with "a", "b" or `c`; later reply: "d". Unquoted reply yes.'), ["a", "b", "c", "d"]);
+  assert.deepEqual(extractAsks("DECISION NEEDED: pick a sample plan.\n- Option A: ship behind a flag\n- Option B: wait a week. Reply `flag` or `wait`.")[0].replies, ["flag", "wait"]);
+  const optionLines = chatCard(sample({ text: "pick a sample plan.\n- Option A: ship behind a flag\n- Option B: wait a week" }));
+  assert.deepEqual(optionLines.answer.options.map((option) => [option.value, option.hint]), [["A", "ship behind a flag"], ["B", "wait a week"]]);
+  const valid = validateAnswer({ requestId: "00000000-0000-4000-8000-000000000011", key: lettered.key, cardRev: lettered.rev, selection: "a", note: "" }, { state: "ready", cards: [lettered], chat: { state: "ready" } });
+  const envelope = answerEnvelope(valid, "model");
+  assert.equal(envelope.selection, "");
+  assert.equal(envelope.note, "a");
+});
+
+test("a filed decision with no options takes lettered lines from a linked decision ask", async (context) => {
+  const env = await claudeHome(context);
+  await writeFile(env.transcript, lines(
+    firstmate("letters", 1, "DECISION NEEDED: [task:hold-letters] Choose the sample window.\na) Staged rollout\nb) Wait a week"),
+    firstmate("approval-letters", 2, "APPROVAL NEEDED: [task:hold-approval] Approve the sample window.\na) yes now\nb) not yet"),
+    firstmate("described", 3, 'DECISION NEEDED: [task:hold-described] Choose the sample plan.\n- "stay on Lyra": continue the current setup\n- "pause work": wait for the check'),
+    firstmate("structured", 4, "DECISION NEEDED: [task:hold-structured] Keep or change the filed options.\na) staged rollout\nb) wait a week"),
+  ));
+  const scanner = scannerFor(env);
+  await scanner.scan();
+  const model = composeCallModel(base([
+    { id: "hold-letters", verb: "decide", summary: "Choose the sample window", owner: "(main)" },
+    { id: "hold-approval", verb: "approve", summary: "Approve the sample", owner: "(main)" },
+    { id: "hold-described", verb: "decide", summary: "Choose the sample plan", owner: "(main)" },
+    { id: "hold-structured", verb: "decide", summary: "Keep the filed options", owner: "(main)", options: [{ value: "later", label: "Later", hint: "Not now" }, { value: "now", label: "Now", hint: "Ship" }] },
+  ]), scanner.asks(), scanner.view());
+  const card = (task) => model.cards.find((entry) => entry.task === task);
+  assert.equal(model.chat.linked, 4);
+  assert.equal(model.chat.open, 0);
+  assert.deepEqual(card("hold-letters").answer.options.map((option) => [option.value, option.hint]), [["a", "Staged rollout"], ["b", "Wait a week"]]);
+  assert.deepEqual(scanner.asks().find((ask) => ask.recordId === "letters").replies, []);
+  assert.deepEqual(card("hold-approval").answer.options, []);
+  assert.deepEqual(card("hold-described").answer.options, []);
+  assert.deepEqual(card("hold-described").chatAsks[0].replyHints, { "stay on Lyra": "continue the current setup", "pause work": "wait for the check" });
+  assert.deepEqual(card("hold-structured").answer.options.map((option) => option.value), ["later", "now"]);
 });
 
 test("server: a refresh surfaces new asks; dismiss and a confirmed answer resolve them in Quarterdeck state only", async (context) => {
