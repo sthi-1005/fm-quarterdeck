@@ -18,9 +18,10 @@ export async function privateJson(file, maxBytes = 8 * 1024 * 1024) {
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || (stat.mode & 0o077) || stat.size > maxBytes || stat.uid !== process.getuid()) throw new Error("Private file requires repair");
-    const text = await handle.readFile("utf8");
-    if (Buffer.byteLength(text) > maxBytes) throw new Error("Private file too large");
-    return JSON.parse(text);
+    const buffer = Buffer.alloc(stat.size + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (bytesRead !== stat.size) throw new Error("Private file changed during read");
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, bytesRead)));
   } finally { await handle.close(); }
 }
 const emptyState = (binding) => ({ schema: NOTIFICATION_SCHEMA, binding, subscriptions: {}, seen: {}, events: {}, outbox: {} });

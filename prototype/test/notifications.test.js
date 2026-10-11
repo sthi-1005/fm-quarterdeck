@@ -238,3 +238,32 @@ test("HTTP exact origin/host/schema/rate/revision boundaries keep subscription m
   const stale = input([card("new-call")], f.now); stale.checkedAt = new Date(f.now - 16000).toISOString();
   assert.equal(eligibleView(stale, f.now), null);
 });
+
+test("final transport guard prevents sends after DNS when permission evidence or revision changes", async (t) => {
+  const f = await fixture(t); await f.service.enroll(device(), subscription());
+  f.configuration.provider = async (_subscription, _payload, options) => {
+    f.setEvidence({ ...input([card("race-call")], f.now), pending: [{ key: "decision:race-call" }] });
+    assert.equal(await options.beforeSend(), false);
+    return { skipped: true };
+  };
+  f.cards([card("race-call")]); await f.service.tick();
+  assert.equal(Object.values((await f.owner.read()).outbox)[0].state, "cancelled");
+  assert.equal(f.sends.length, 0);
+});
+
+test("bounded transport stops before connection on its final guard and rejects excessive provider bytes", async () => {
+  const vapid = { subject: "mailto:operator@example.invalid", publicKey: key.getPublicKey().toString("base64url"), privateKey: Buffer.alloc(32, 1).toString("base64url") };
+  const resolve = async () => [{ address: "8.8.8.8", family: 4 }];
+  let connected = 0;
+  const request = (_url, _options, callback) => {
+    connected++; const req = new EventEmitter();
+    req.destroy = (error) => { req.emit("error", error); req.emit("close"); };
+    req.end = () => { queueMicrotask(() => { const response = new EventEmitter(); response.statusCode = 201; response.headers = {}; callback(response); response.emit("data", Buffer.alloc(4097)); }); };
+    return req;
+  };
+  const provider = createPushProvider(vapid, { resolve, request });
+  assert.deepEqual(await provider(subscription(), {}, { ttl: 900, topic: "test", beforeSend: async () => false }), { skipped: true });
+  assert.equal(connected, 0);
+  assert.deepEqual(await provider(subscription(), {}, { ttl: 900, topic: "test", remainingTtl: () => 0 }), { skipped: true }); assert.equal(connected, 0);
+  await assert.rejects(provider(subscription(), {}, { ttl: 900, topic: "test" }), /response too large/); assert.equal(connected, 1);
+});

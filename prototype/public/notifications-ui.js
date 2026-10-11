@@ -46,6 +46,9 @@
         else if (capability === "install-ios") message = "On iOS, add Quarterdeck to the Home Screen and enable notifications from the installed app.";
         else if (permission === "denied") message = "Permission is denied. Change browser or OS notification settings, then check status.";
         else if (config.subscribed && (permission !== "granted" || !subscription)) message = "Server enrollment needs repair. Check permission settings, then enable again or disable.";
+        if (config.subscribed && config.failed) message += " A provider attempt failed; check operator configuration.";
+        if (config.subscribed && config.retrying) message += " Some sends are waiting to retry.";
+        if (config.accepted) message += ` Provider accepted: ${config.accepted}. Display and reading are unknown.`;
         status.textContent = message;
         enable.textContent = config.subscribed ? "Repair enrollment" : "Enable notifications";
         enable.disabled = capability !== "supported" || !config.configured || config.state === "needs-repair" || permission === "denied" || config.origin !== browser.location.origin;

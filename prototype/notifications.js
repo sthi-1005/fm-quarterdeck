@@ -179,7 +179,8 @@ export function createNotificationService({ configuration, source, evidence, ini
       const deliveries = Object.values(state?.outbox || {}).filter((item) => item.device === id);
       return { configured: true, origin: config.origin, publicKey: config.publicKey,
         state: !sub?.enabled ? "not-enabled" : !sub.baseline ? "waiting-for-baseline" : coverage === "ready" ? "enabled" : coverage,
-        subscribed: Boolean(sub?.enabled), accepted: deliveries.filter((item) => item.state === "accepted").length };
+        subscribed: Boolean(sub?.enabled), accepted: deliveries.filter((item) => item.state === "accepted").length,
+        failed: deliveries.filter((item) => item.state === "failed").length, retrying: deliveries.filter((item) => item.state === "retry").length };
     } catch { error = "needs-repair"; stopDemand(); return { configured: true, state: error }; }
   });
   async function enroll(id, subscription) {
