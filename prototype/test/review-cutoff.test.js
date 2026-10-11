@@ -852,3 +852,105 @@ test("Review relocates the same actions in Clear/Queue/Send order and restores M
   assert.match(css, /#review-clear-messages \{ background: var\(--surface\); color: var\(--danger\); border-color: var\(--danger\); \}/);
   assert.match(css, /#review-history-actions button \{ min-height: 44px; \}/);
 });
+
+function touchTarget(p, { fleet = true, recordId = 'transcript/sample.jsonl@0:0', source = 'transcript/sample.jsonl', text = 'Same <quoted> words', lanes = ['Sample Alpha'] } = {}) {
+  p.setDesktop(false);
+  p.element('review-annotation').hidden = true;
+  const surface = { id: 'sample-surface', dataset: {}, contains: () => true };
+  const article = { dataset: { laneMessageIndex: '0' }, isConnected: true };
+  const content = { tagName: 'DIV', matches: selector => selector === '.message-content' };
+  const node = { tagName: 'P', id: '', children: [], textContent: text, innerText: text,
+    isConnected: true, parentElement: fleet ? content : null,
+    matches: () => false, getAttribute: () => null,
+    closest(selector) {
+      if (selector.includes('.product-view')) return surface;
+      if (selector.includes('.message')) return fleet ? article : null;
+      if (selector.includes('[data-review-id]')) return surface;
+      return null;
+    },
+  };
+  const message = Object.freeze({ recordId, source, text, occurredAt: '2026-01-01T00:00:00Z',
+    lanes, author: 'Input', origin: 'Primary input · unverified', scope: 'sample-scope' });
+  p.context.touchNode = node;
+  p.context.window.quarterdeckMessageScope = 'sample-scope';
+  p.context.window.quarterdeckMessageContexts = new WeakMap([[article, message]]);
+  // Deliberately wrong current index table: touch must use the DOM-bound snapshot.
+  p.context.window.quarterdeckMessageTargets = [{ recordId: 'transcript/wrong.jsonl@0:0' }];
+  vm.runInContext('touchSnapshot = captureTouch(touchNode)', p.context);
+  return { node, article, message, attach(kind = 'annotation') {
+    p.context.touchKind = kind;
+    return vm.runInContext('openTouch(touchSnapshot, touchNode, touchKind)', p.context);
+  } };
+}
+
+test('touch annotation outside Fleet and exact Fleet reply open the existing composer without dispatch or quote injection', async () => {
+  for (const fleet of [false, true]) {
+    const h = harness(), p = h.page(); await tick();
+    const target = touchTarget(p, { fleet });
+    assert.equal(target.attach(fleet ? 'reply' : 'annotation'), true);
+    assert.equal(p.element('review-panel').hidden, false);
+    assert.equal(p.element('review-message').value, ''); assert.equal(h.posts.length, 0);
+    assert.equal(p.state().queue.length, 0);
+    if (fleet) {
+      assert.equal(p.state().selected.record.recordId, 'transcript/sample.jsonl@0:0');
+      assert.equal(p.state().selected.text, 'Same <quoted> words');
+      assert.match(p.element('review-target').textContent, /Primary input · unverified/);
+      assert.match(p.element('review-target').textContent, /Same <quoted> words/);
+      p.q('Clarify the sample.');
+      assert.equal(p.state().queue[0].record.recordId, 'transcript/sample.jsonl@0:0');
+      assert.equal(p.state().queue[0].prompt, 'Clarify the sample.');
+      assert.equal(p.state().queue[0].text, 'Same <quoted> words');
+      assert.equal(p.state().queue[0].touchIdentity, undefined);
+      assert.equal(p.state().queue[0].reply, undefined);
+    }
+  }
+});
+
+test('duplicate text, changed sources, filters, removal and version changes never substitute a gesture target', async () => {
+  for (const change of ['source', 'scope', 'disconnect', 'text', 'version']) {
+    const h = harness(), p = h.page(); await tick();
+    const target = touchTarget(p);
+    if (change === 'source') p.context.window.quarterdeckMessageContexts.set(target.article, { ...target.message, source: 'transcript/other.jsonl', recordId: 'transcript/other.jsonl@0:0' });
+    if (change === 'scope') p.context.window.quarterdeckMessageScope = 'other-scope';
+    if (change === 'disconnect') target.node.isConnected = false;
+    if (change === 'text') target.node.textContent = target.node.innerText = 'Changed';
+    if (change === 'version') vm.runInContext('config = { ...config, version: "new-version" }', p.context);
+    assert.equal(target.attach('reply'), false, change);
+    assert.equal(h.posts.length, 0); assert.equal(vm.runInContext('selected', p.context), null);
+  }
+});
+
+test('touch conflict preserves selected/plain drafts, staged queue and failed/uncertain captured payloads', async () => {
+  for (const draft of ['plain', 'selected']) {
+    const h = harness(), p = h.page(); await tick();
+    const target = touchTarget(p);
+    p.element('review-message').value = 'Retained draft';
+    if (draft === 'selected') vm.runInContext('selected = { id: "retained", label: "Existing", route: "#overview", version: config.version }', p.context);
+    vm.runInContext('saveDraft()', p.context);
+    const before = p.state(); assert.equal(target.attach('reply'), false);
+    assert.deepEqual(p.state(), before); assert.equal(h.posts.length, 0);
+  }
+  for (const mode of ['hold', 'fail']) {
+    const h = harness(), p = h.page(); await tick(); h.setMode(mode);
+    p.q('Captured note'); p.send(); await tick();
+    p.q('Staged later');
+    const before = p.state(); const target = touchTarget(p);
+    assert.equal(target.attach('reply'), mode !== 'hold');
+    const after = p.state();
+    assert.deepEqual(after.queue, before.queue); assert.deepEqual(after.retryBatches, before.retryBatches);
+    assert.deepEqual(after.inFlight, before.inFlight); assert.equal(h.posts.length, 1);
+    if (mode === 'hold') h.release(true);
+  }
+});
+
+test('attached touch source/version stays immutable across config refresh and stale Queue retains the draft', async () => {
+  const h = harness(), p = h.page(); await tick();
+  const target = touchTarget(p); assert.equal(target.attach('reply'), true);
+  const old = p.state().selected;
+  vm.runInContext('useCurrentVersion({ ...config, version: "new-version" })', p.context);
+  assert.equal(vm.runInContext('selected.version', p.context), old.version);
+  p.q('Retained reply');
+  assert.equal(p.element('review-message').value, 'Retained reply');
+  assert.equal(vm.runInContext('queue.length', p.context), 0);
+  assert.equal(h.posts.length, 0);
+});

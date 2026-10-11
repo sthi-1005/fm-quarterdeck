@@ -84,7 +84,7 @@ export function browserCpuRate(value = process.env.FM_BROWSER_CPU_RATE) {
   return rate;
 }
 
-export async function openBrowser() {
+export async function openBrowser({ initialUrl = "about:blank" } = {}) {
   const cpuRate = browserCpuRate();
   const profile = await mkdtemp(path.join(os.tmpdir(), "quarterdeck-browser-"));
   const chrome = spawn(process.env.CHROMIUM || "chromium", ["--headless=new", "--no-sandbox", "--disable-gpu",
@@ -108,7 +108,7 @@ export async function openBrowser() {
     chrome.stderr.removeListener("data", captureStartup);
     chrome.stderr.resume();
     // Own a dedicated page rather than racing Chrome's initial startup tab.
-    const pageResponse = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" });
+    const pageResponse = await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(initialUrl)}`, { method: "PUT" });
     if (!pageResponse.ok) throw Error(`Cannot create browser fixture page: ${pageResponse.status}`);
     const pageTarget = await pageResponse.json();
     ws = new WebSocket(pageTarget.webSocketDebuggerUrl);
@@ -161,7 +161,10 @@ export async function openBrowser() {
     await command("Runtime.enable");
     await command("Network.enable");
     if (cpuRate !== 1) await command("Emulation.setCPUThrottlingRate", { rate: cpuRate });
-    return { command, evaluate, until, close, onEvent: (fn) => listeners.add(fn) };
+    // Allows axi to acquire this exact owned target while the existing input
+    // connection remains bound to its task-created process/profile/port.
+    return { command, evaluate, until, close, browserUrl: `http://127.0.0.1:${port}`,
+      targetId: pageTarget.id, initialUrl, onEvent: (fn) => listeners.add(fn) };
   } catch (error) { await close(); throw error; }
 }
 

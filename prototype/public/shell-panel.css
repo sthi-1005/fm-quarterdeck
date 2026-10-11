@@ -253,3 +253,11 @@
   .workspace[data-shell-panel-collapsed="true"] .main-stage { height: 100vh; height: 100dvh; padding-bottom: 0; }
   .workspace:has(.uat-deployment-label)[data-shell-panel-collapsed="true"] .main-stage { height: auto; margin-bottom: 0; }
 }
+
+/* Literal reply context shares the existing attachment row and composer. */
+#review-target[data-reply="true"] {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  max-height: 120px;
+  overflow: auto;
+}

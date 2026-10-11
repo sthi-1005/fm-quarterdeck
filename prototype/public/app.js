@@ -843,6 +843,8 @@ function renderFeed() {
   window.quarterdeckMessageTargets = pageMessages.map((message) => message.recordId
     ? { type: "record", recordId: message.recordId }
     : { source: message.source, occurredAt: message.occurredAt, text: message.text, lanes: message.laneNames });
+  // Touch captures bind to this DOM lifetime, never a later page index or text match.
+  window.quarterdeckMessageScope = nextReadingScope;
   // Fingerprint the bounded page before Markdown rendering or DOM work.
   const fingerprint = JSON.stringify([pageMessages, messageFormat, transcriptQuery, emptyMessage, start, showingAllLive, laneSelection().all, laneStatusFilter, feedLaneOverrideId, dense]);
   if (fingerprint !== lastFeedFingerprint) {
@@ -881,6 +883,15 @@ function renderFeed() {
     const anchorKey = visibleAnchor?.dataset.recordKey;
     const anchorOffset = visibleAnchor ? visibleAnchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top : 0;
     messagesEl.innerHTML = feedHtml;
+    window.quarterdeckMessageContexts ||= new WeakMap();
+    [...messagesEl.querySelectorAll('article.message')].forEach((node, index) => {
+      const message = pageMessages[index];
+      window.quarterdeckMessageContexts.set(node, Object.freeze({
+        recordId: message.recordId || null, source: message.source, occurredAt: message.occurredAt,
+        text: message.text, lanes: Object.freeze([...message.laneNames]), author: message.author,
+        origin: messageTypeLabel(messageTypeId(message)), scope: nextReadingScope,
+      }));
+    });
     for (const node of messagesEl.querySelectorAll("article.message details")) {
       if (!node.dataset.chatCallDetail && open.has(`${node.closest("article.message").dataset.recordKey}:${node.dataset.reviewChip || "full"}`)) node.open = true;
     }
