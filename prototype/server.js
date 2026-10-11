@@ -1,3 +1,5 @@
+import { createNotificationService, notificationConfiguration } from "./notifications.js";
+import { deviceId } from "./notification-state.js";
 import { parseReviewNote } from "./review-note.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -54,6 +56,8 @@ const STATIC_FILES = new Map([
   ["/icons/quarterdeck-192.png", ["icons/quarterdeck-192.png", "image/png"]],
   ["/icons/quarterdeck-512.png", ["icons/quarterdeck-512.png", "image/png"]],
   ["/icons/apple-touch-icon-180.png", ["icons/apple-touch-icon-180.png", "image/png"]],
+  ["/notifications-ui.js", ["notifications-ui.js", "text/javascript; charset=utf-8"]],
+  ["/notifications-worker.js", ["notifications-worker.js", "text/javascript; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
   ["/sidebar-version.js", ["sidebar-version.js", "text/javascript; charset=utf-8"]],
   ["/work-hierarchy.js", ["work-hierarchy.js", "text/javascript; charset=utf-8"]],
@@ -1062,7 +1066,7 @@ async function sendJson(request, response, status, body) {
   response.end(payload);
 }
 
-export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource, bearingsStream = {}, answerRelay, threadRelay, costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options), procrastination = createProcrastinationStore(env), landedAcks = createLandedAckStore(env) } = {}) {
+export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaReader = createQuotaReader({ maxAge: env.FM_QUOTA_MAX_AGE }), bearingsSource, bearingsStream = {}, answerRelay, threadRelay, costReader = createConfiguredCostReader(env), expenseReader = loadExpenses, lanesReader = loadFirstmateHome, durabilityVerifier = verifyDurability, reviewDeliver = deliverReview, localReviewDeliver = (payload, statusPath) => deliverLocalReview(payload, undefined, statusPath), localReviewReceipt = reconcileLocalReview, reviewCount = (receipts) => awaitingReviewCount(undefined, receipts), reviewStatus = localReviewStatus, previewRegistry, chatDeliver, revisionResolver = createRevisionResolver(REPO_DIR, reviewVersion), lifecycleFactory = (entries, options) => new PreviewLifecycle(entries, options), procrastination = createProcrastinationStore(env), landedAcks = createLandedAckStore(env), notificationOptions = {} } = {}) {
   const review = reviewConfiguration(env);
   const agentStatePath = configuredStatePath(env);
   const agentStateOwner = createAgentStateOwner(agentStatePath);
@@ -1091,6 +1095,18 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     const commit = await revisionResolver.snapshot(force);
     return commit === servedCommit ? commit : null;
   };
+  const notifications = createNotificationService({
+    configuration: notificationConfiguration(env), source: bearingsSource, revision: syncRevision,
+    initializeEvidence: async () => { await inboxBatcher.initializeEvidence(); await procrastination.initializeEvidence(); },
+    evidence: async () => {
+      try {
+        const [input, pending, parked] = await Promise.all([bearingsSource.notificationEvidence(), inboxBatcher.pending({ strict: true }), procrastination.evidence()]);
+        return { ...input, pending, procrastination: parked };
+      } catch { return { available: false }; }
+    },
+    ...notificationOptions,
+  });
+  const notificationRate = { at: 0, count: 0 };
   const lastDataRead = new Map();
   // In-flight and confirmed sends in this gateway process share the same receipt.
   // The receiver must also deduplicate messageId durably across gateway restarts.
@@ -1110,7 +1126,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     return (/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host) && origin === `http://${host}`) ||
       Boolean(allowedReviewOrigin && host === allowedReviewOrigin.slice("https://".length) && origin === allowedReviewOrigin);
   };
-  const previewReads = new Set(["/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/inbox-pending.js", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/bearings-thread-panel.js", "/bearings-procrastinate.js", "/bearings-landed.js", "/bearings-work.js", "/overview-tabs.js", "/call-lifecycle.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
+  const previewReads = new Set(["/notifications-ui.js", "/", "/app.js", "/sidebar-version.js", "/bulk-controls.js", "/work-hierarchy.js", "/message-kinds.js", "/filter-view.js", "/pane-bounds.js", "/message-font-size.js", "/quota-view-model.js", "/cost-view-model.js", "/styles.css", "/inbox-pending.js", "/review-target.js", "/review-client.js", "/panel-resize.js", "/shell-panel.js", "/shell-panel-layout.js", "/shell-width.js", "/shell-panel.css", "/dev-reload.js", "/bearings-patch.js", "/bearings-live.js", "/bearings-view.js", "/bearings-answer-form.js", "/bearings-overflow.js", "/bearings-dismiss.js", "/bearings-thread-panel.js", "/bearings-procrastinate.js", "/bearings-landed.js", "/bearings-work.js", "/overview-tabs.js", "/call-lifecycle.js", "/api/dashboard", "/api/lanes", "/api/preferences", "/api/preferences/health", "/api/quota", "/api/bearings", "/api/costs", "/api/health", "/api/review", "/api/review/status", "/api/dev-reload"]);
   // Live Captain's Call streams (host only; previews poll /api/bearings?since).
   const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
   const streams = new Set();
@@ -1129,6 +1145,30 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
       const registeredSelection = preview ? registry.get(preview.id) : registry.get(hostId);
       const selected = registeredSelection?.id === hostId ? { ...registeredSelection, commit } : registeredSelection;
       const selectedCommit = selected?.commit || commit;
+      if (url.pathname.startsWith("/api/notifications/")) {
+        const pushOrigin = env.FM_QUARTERDECK_PUSH_ORIGIN;
+        const permitted = pushOrigin ? request.headers.host === pushOrigin.slice("https://".length) && request.headers.origin === pushOrigin : authorized(request);
+        if (!permitted || deploymentTier || dev || preview) { await sendJson(request, response, 403, { error: "Notifications require the stable private origin" }); return; }
+        if (request.method !== "POST" || url.search || !["/api/notifications/status", "/api/notifications/enroll", "/api/notifications/disable"].includes(url.pathname) || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 400, { error: "Notification JSON operation required" }); return; }
+        const minute = Math.floor(Date.now() / 60000);
+        if (minute !== notificationRate.at) { notificationRate.at = minute; notificationRate.count = 0; }
+        if (++notificationRate.count > 30) { await sendJson(request, response, 429, { error: "Notification request limit reached" }); return; }
+        let text = "";
+        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > 4096) { await sendJson(request, response, 413, { error: "Subscription too large" }); return; } }
+        let body;
+        try { body = JSON.parse(text); } catch {}
+        const enroll = url.pathname.endsWith("/enroll");
+        if (!body || Object.keys(body).sort().join(",") !== (enroll ? "id,subscription" : "id") || !deviceId(body.id)) { await sendJson(request, response, 400, { error: "Exact installation fields required" }); return; }
+        try {
+          const value = await (enroll ? notifications.enroll(body.id, body.subscription) : url.pathname.endsWith("/disable") ? notifications.disable(body.id) : notifications.status(body.id));
+          await sendJson(request, response, 200, value);
+        } catch { await sendJson(request, response, 409, { error: "Notifications unavailable; check configuration or installation state" }); }
+        return;
+      }
+      if (url.pathname === "/notifications-worker.js") {
+        const origin = await notifications.origin();
+        if (!origin || deploymentTier || dev || request.headers.host !== origin.slice("https://".length)) { await sendJson(request, response, 403, { error: "Notification worker requires the configured host" }); return; }
+      }
       if (request.method === "GET" && url.pathname === "/api/previews") {
         await lifecycle.ready;
         await sendJson(request, response, 200, lifecycle.list());
@@ -1639,10 +1679,12 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
   const closeServer = server.close.bind(server);
   server.close = (callback) => {
     for (const stream of [...streams]) stream.end("bye");
+    notifications.close();
     bearingsSource.close?.();
     return closeServer(callback);
   };
   server.bearings = bearingsSource;
+  server.notifications = notifications;
   server.previewLifecycle = lifecycle;
   server.shutdownPreviews = () => lifecycle.close();
   server.on("close", () => { inboxBatcher.close(); lifecycle.close().catch(() => {}); });
