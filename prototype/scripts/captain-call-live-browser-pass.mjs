@@ -278,7 +278,7 @@ try {
     await evaluate(`() => {
       const underway=document.querySelector('#underway'), charted=document.querySelector('#charted-next');
       if(!document.querySelector('#overview-secondary').contains(underway)||!document.querySelector('#overview-secondary').contains(charted))throw Error('work section placement');
-      if(underway.querySelectorAll('[data-work-key]').length!==3||charted.querySelectorAll('[data-work-key]').length!==2)throw Error('work row counts');
+      if(underway.querySelectorAll('[data-work-key]').length!==3||charted.querySelectorAll('[data-work-key]').length!==2)throw Error('work row counts '+underway.querySelectorAll('[data-work-key]').length+'/'+charted.querySelectorAll('[data-work-key]').length);
       if(!underway.textContent.includes('Check the sample layout')||!underway.textContent.includes('Validating sample geometry')||!charted.textContent.includes('Deferred until 2026-12-01')||!charted.textContent.includes('Blocked by: sample-mate/check-layout')||!charted.textContent.includes('Needs repair')||charted.querySelector('[data-work-count]').textContent!=='1')throw Error('work source fields');
       if(underway.querySelector('form,textarea,[data-call-answer]')||charted.querySelector('form,textarea,[data-call-answer]'))throw Error('work invented actions');
       for(const name of ['underway','charted']){
@@ -290,7 +290,7 @@ try {
       return {workSections:true,width:innerWidth};
     }`);
     if(width===1280||width===390){
-      if(width===390)await evaluate(`() => { document.querySelector('#overview-tab-underway').click();document.querySelector('#underway').scrollIntoView({block:'center'});return 'Underway visible'; }`);
+      await evaluate(`() => { if(innerWidth<=720)document.querySelector('#overview-tab-underway').click();document.querySelector('#underway').scrollIntoView({block:'center'});return 'Underway visible'; }`);
       await browser('screenshot', path.join(proof, `overview-work-${width}.png`));
       if(width===390){await evaluate(`() => {document.querySelector('#overview-tab-charted').click();document.querySelector('#charted-next').scrollIntoView({block:'center'});return 'Charted Next visible';}`);await browser('screenshot', path.join(proof, 'overview-charted-390.png'));await evaluate(`() => {document.querySelector('#overview-tab-calls').click();return 'calls restored';}`);}
     }
