@@ -185,7 +185,7 @@ function targetFor(node) {
   return actual === surface ? null : actual;
 }
 
-function regionFor(node) {
+function regionFor(node, messageTarget = null) {
   const range = pointerTextRange || capture?.textRangeTarget(window.getSelection?.());
   const actual = range?.element || targetFor(node);
   if (!actual) return null;
@@ -199,7 +199,7 @@ function regionFor(node) {
   const message = actual.closest(".message[data-lane-message-index]");
   if (message) {
     const index = Number(message.dataset.laneMessageIndex);
-    const target = window.quarterdeckMessageTargets?.[index];
+    const target = messageTarget || window.quarterdeckMessageTargets?.[index];
     if (!Number.isSafeInteger(index) || !target) return null;
     if (!precise) return { target, label: "Fleet Chat message", route: route(), version: config.version };
     const record = target.recordId ? { recordId: target.recordId } : { source: target.source, at: target.occurredAt, lanes: target.lanes };
@@ -473,8 +473,11 @@ function update() {
   el("review-toggle").setAttribute("aria-label", annotateByDefault
     ? "Annotation mode on: tap or click content to annotate; every click is captured. Alt-click to interact."
     : "Annotation mode off: tap or click to interact; Alt-click to annotate on desktop.");
-  el("review-target").textContent = selected ? `Annotating ${selected.label} · ${selected.route}` : "";
+  el("review-target").textContent = selected?.reply
+    ? `Reply to ${selected.reply.author} · ${selected.reply.origin} · ${selected.reply.lanes.join(", ")} · ${selected.reply.source} · ${selected.reply.recordId || "No original record ID; contextual fingerprint"}\n“${selected.text}”`
+    : selected ? `Annotating ${selected.label} · ${selected.route}` : "";
   el("review-target").hidden = !selected && Boolean(phoneReview?.matches);
+  el("review-target").setAttribute("data-reply", String(Boolean(selected?.reply)));
   updateSelectionAction();
   const queueLabel = selected ? "Queue annotation" : "Queue message";
   el("review-queue").textContent = "Queue";
@@ -690,8 +693,7 @@ function update() {
   if (queue.length) phoneThread.append(renderQueuedBatch());
   for (const [captured, title] of capturedBatches) phoneThread.append(renderCaptured(captured, title));
 }
-function selectRegion(node, point) {
-  const next = regionFor(node);
+function selectRegion(node, point, next = regionFor(node)) {
   if (!next) return;
   returnToArmed = pickingRegion;
   selected = next;
@@ -734,6 +736,53 @@ function selectRegion(node, point) {
   el("review-state").textContent = `Selected ${selected.label}. Describe it, then queue annotation.`;
 }
 
+function touchIdentity() {
+  // The serving origin/host and configured primary session own delivery; the
+  // selected record never chooses another recipient or a secondary home.
+  return JSON.stringify([location.origin, window.FM_HOST_ID, window.FM_PREVIEW_ID, config.version, config.delivery, config.sessionId]);
+}
+function captureTouch(node) {
+  const messageNode = node.closest?.('.message[data-lane-message-index]');
+  const message = messageNode && window.quarterdeckMessageContexts?.get(messageNode);
+  if (messageNode && !message) return null;
+  const region = regionFor(node, message);
+  if (!region) return null;
+  return { region, message, messageNode, identity: touchIdentity(), scope: window.quarterdeckMessageScope,
+    signature: JSON.stringify(region) };
+}
+function touchOwned() {
+  return !config.ready || pickingRegion || annotateByDefault || pending || Boolean(selected)
+    || Boolean(el("review-message").value.trim()) || !el("review-panel").hidden || !el("review-annotation").hidden;
+}
+function validTouch(snapshot, node) {
+    if (snapshot.identity !== touchIdentity() || snapshot.scope !== window.quarterdeckMessageScope) return false;
+    if (snapshot.message && window.quarterdeckMessageContexts?.get(snapshot.messageNode) !== snapshot.message) return false;
+    return captureTouch(node)?.signature === snapshot.signature;
+}
+function openTouch(snapshot, node, kind, point) {
+    if (touchOwned() || !node.isConnected || !validTouch(snapshot, node)) return false;
+    const next = snapshot.region;
+    next.touchIdentity = snapshot.identity;
+    if (kind === "reply") {
+      if (!snapshot.message) return false;
+      // Reuse the v2 annotation excerpt/record, with a literal quote in compose.
+      // No source Markdown, HTML or instructions are inserted into the draft.
+      const message = snapshot.message;
+      next.selector = ".message-content";
+      next.tag = "element";
+      next.text = message.text.replace(/\s+/g, " ").trim().slice(0, 240);
+      delete next.target;
+      next.reply = { source: message.source, recordId: message.recordId, author: message.author,
+        origin: message.origin, lanes: [...message.lanes] };
+      next.wireLabel = `Reply to ${message.author} · ${message.origin} · ${message.lanes.join(", ")} · ${message.source}`.slice(0, 160);
+      next.label = next.wireLabel;
+    }
+    selectRegion(node, point, next);
+    el("review-state").textContent = kind === "reply" ? "Reply context attached. Write your reply, then Queue or Send." : "Location attached. Write your note, then Queue or Send.";
+    return true;
+}
+window.QuarterdeckReviewTouch?.install({ document, owned: touchOwned, capture: captureTouch, valid: validTouch, open: openTouch });
+
 function useCurrentVersion(next) {
   if (!next?.ready || typeof next.version !== "string") return false;
   config = next;
@@ -742,7 +791,7 @@ function useCurrentVersion(next) {
   // A changed payload cannot reuse an earlier batch ID. Keep the notes for
   // deliberate review before another send; never auto-retry a rejected batch.
   queue = queue.map((entry) => ({ ...entry, version: next.version }));
-  if (selected) selected = { ...selected, version: next.version };
+  if (selected && !selected.touchIdentity) selected = { ...selected, version: next.version };
   batchId = null;
   // Captured batches may already be durable after a lost response. Preserve
   // their entire original payload until the server reconciles the receipt.
@@ -1000,6 +1049,10 @@ el("review-message").addEventListener("keydown", (event) => {
 function enqueue() {
   const text = el("review-message").value.trim();
   if (!text || queue.length >= 30) { el("review-state").textContent = !text ? "Write a note first." : "Send this batch before adding more."; return false; }
+  if (selected?.touchIdentity && selected.touchIdentity !== touchIdentity()) {
+    el("review-state").textContent = "The attached target belongs to an earlier source or version. Your draft is retained; explicitly cancel and select again.";
+    return false;
+  }
   if (selected?.target?.type === "quote") { el("review-state").textContent = "This old target must be selected again before queuing."; return false; }
   if (selected?.record && !selected.record.recordId && !selected.record.sha256) { el("review-state").textContent = "Capturing message identity; try Queue again shortly."; return false; }
   const note = { prompt: text, tag: selected?.tag || (selected ? "element" : "message"), selector: selected?.selector || "", text: selected?.text || "", route: selected?.route || route(), version: selected?.version || config.version };
