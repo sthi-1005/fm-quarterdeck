@@ -561,7 +561,7 @@ try {
   assert.deepEqual([queuedThread.key, queuedThread.question], ['decision:alpha-call', 'Queue rollout Tuesday']);
   assert.doesNotMatch(queuedThreadNote, /fm-bearings-answer/, 'a queued thread note is not an answer');
   await evaluate(`() => { if(window.reviewPosts)throw Error('answer batch used review delivery'); document.querySelector('#review-close').click(); const merge=document.querySelector('[data-call-key="merge:beta-merge"]'); merge.querySelector('[data-call-answer-again]').click(); const alpha=document.querySelector('[data-call-key="decision:alpha-call"]'); if(alpha.querySelector('[data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('thread send left alpha queued'); if(merge.querySelector('[data-call-answer]').dataset.callAnswerPhase!=='compose')throw Error('Answer again did not return merge'); document.activeElement?.blur(); document.body.click(); return 'queue uses both paths'; }`);
-  // Active header sends the same queued card answers as Send batch, including at 360 and 390.
+  // Active header sends the same queued card answers as Send, including at 360 and 390.
   const headerAnswersBefore = (await readFile(path.join(home, 'answer-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
   const headerThreadsBefore = (await readFile(path.join(home, 'thread-attempts'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
   await evaluate(`() => {

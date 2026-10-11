@@ -22,6 +22,7 @@
     "test/health-preferences-ui.test.js",
     "test/history-reader.test.js",
     "test/inbox-batcher.test.js",
+    "test/inbox-pending-ui.test.js",
     "test/layout-correction.test.js",
     "test/message-font-size.test.js",
     "test/message-kinds.test.js",
