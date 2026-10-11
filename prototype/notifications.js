@@ -159,7 +159,7 @@ export function createNotificationService({ configuration, source, evidence, ini
       if (result.skipped) { if (item.state === "sending") { item.state = "retry"; item.nextAt = now() + 5000; } return; }
       if (code >= 200 && code < 300) { item.state = "accepted"; item.acceptedAt = now(); }
       else if (code === 404 || code === 410) {
-        saved.subscriptions[item.device].enabled = false; item.state = "failed";
+        saved.subscriptions[item.device] = { enabled: false, baseline: false, subscription: null }; item.state = "failed";
         for (const pending of Object.values(saved.outbox)) if (pending.device === item.device && pendingStates.has(pending.state)) pending.state = "cancelled";
       }
       else if (now() >= send.event.expiresAt) item.state = "expired";
@@ -189,7 +189,7 @@ export function createNotificationService({ configuration, source, evidence, ini
       if (!config || error || closed || !await revision()) throw new Error("Notifications unavailable");
       if (!await owner.read()) await initializeEvidence();
       await owner.update((state) => {
-        if (Object.entries(state.subscriptions).some(([other, sub]) => other !== id && sub.subscription.endpoint === subscription.endpoint)) throw new Error("Subscription belongs to another installation");
+        if (Object.entries(state.subscriptions).some(([other, sub]) => other !== id && sub.subscription?.endpoint === subscription.endpoint)) throw new Error("Subscription belongs to another installation");
         const prior = state.subscriptions[id];
         state.subscriptions[id] = { subscription, enabled: true, baseline: prior?.enabled ? prior.baseline : false };
       }, true);
@@ -200,9 +200,9 @@ export function createNotificationService({ configuration, source, evidence, ini
   }
   async function disable(id) {
     await run(async () => {
-      if (!owner) return;
+      if (!owner) throw new Error("Notification owner unavailable; opt-out was not recorded");
       if (await owner.read()) await owner.update((state) => {
-        if (state.subscriptions[id]) { state.subscriptions[id].enabled = false; state.subscriptions[id].baseline = false; }
+        if (state.subscriptions[id]) { state.subscriptions[id] = { enabled: false, baseline: false, subscription: null }; }
         for (const item of Object.values(state.outbox)) if (item.device === id && pendingStates.has(item.state)) item.state = "cancelled";
       });
       await demand();

@@ -51,7 +51,7 @@ test("fresh enrollment baselines old calls, allocates one per producer/task, per
   assert.ok(!JSON.stringify(original.payload).includes("new-call"));
   f.cards([card("new-call", "(main)", "merge"), { ...card("new-call"), summary: "Edited summary", rev: "changed" }]); await f.service.tick();
   await f.restart(); assert.equal(f.sends.length, 1);
-  await f.service.disable(device()); assert.equal(f.listeners.size, 0); assert.equal(f.intervals.size, 0);
+  await f.service.disable(device()); assert.equal((await f.owner.read()).subscriptions[device()].subscription, null); assert.equal(f.listeners.size, 0); assert.equal(f.intervals.size, 0);
   f.cards([card("new-call"), card("idle-call")]); await f.service.enroll(device(), subscription(2));
   assert.equal(f.sends.length, 1, "reenrollment baselines unseen idle calls");
   f.cards([card("new-call", "other-owner")]); await f.service.tick(); assert.equal(f.sends.length, 2);
@@ -266,4 +266,10 @@ test("bounded transport stops before connection on its final guard and rejects e
   assert.equal(connected, 0);
   assert.deepEqual(await provider(subscription(), {}, { ttl: 900, topic: "test", remainingTtl: () => 0 }), { skipped: true }); assert.equal(connected, 0);
   await assert.rejects(provider(subscription(), {}, { ttl: 900, topic: "test" }), /response too large/); assert.equal(connected, 1);
+});
+
+test("unavailable configuration never falsely acknowledges durable opt-out", async () => {
+  const service = createNotificationService({ configuration: null });
+  await assert.rejects(service.disable(device()), /opt-out was not recorded/);
+  assert.equal((await service.status(device())).state, "operator-disabled"); service.close();
 });
