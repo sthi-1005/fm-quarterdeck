@@ -79,7 +79,7 @@ test("all public root assets and HTML are no-store outside dev mode", async (t) 
   for (const file of files.filter((entry) => entry.isFile() && entry.name !== "dev-reload.js")) {
     const route = file.name === "index.html" ? "/" : `/${file.name}`;
     const response = await fetch(base + route);
-    assert.equal(response.status, 200, route);
+    assert.equal(response.status, file.name === "notifications-worker.js" ? 403 : 200, route);
     assert.equal(response.headers.get("cache-control"), "no-store", route);
     await response.arrayBuffer();
   }

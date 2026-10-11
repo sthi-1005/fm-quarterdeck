@@ -285,6 +285,17 @@
             <button type="submit" disabled>Save health preferences</button>
             <p id="health-preferences-status" role="status" aria-live="polite">Loading health preferences…</p>
           </form>
+          <section id="notification-preferences" class="health-preferences-form" aria-labelledby="notification-title">
+            <h2 id="notification-title">Mobile notifications</h2>
+            <p>Generic lock-screen alerts for newly actionable filed Captain’s Calls, once per task. Existing calls, replies and chat-only asks do not alert.</p>
+            <p>Arrival is best effort. Opening and answering require private network access. Provider acceptance does not prove display or reading.</p>
+            <div class="notification-controls">
+              <button type="button" data-notification-enable disabled>Enable notifications</button>
+              <button type="button" data-notification-disable disabled>Disable notifications</button>
+              <button type="button" data-notification-check disabled>Check status</button>
+            </div>
+            <p data-notification-status role="status" aria-live="polite">Checking notification configuration…</p>
+          </section>
           <p id="preferences-state" class="notice" role="status" aria-live="polite">Loading preferences…</p>
           <div class="scan-controls" aria-label="Preference navigation"><label>Show <select id="preferences-density"><option value="titles">Titles only</option><option value="reasons">Titles and reasons</option><option value="details" selected>Titles, reasons and details</option></select></label><label>Sort <select id="preferences-sort"><option value="source">Source order</option><option value="newest">Newest evidence</option><option value="oldest">Oldest evidence</option></select></label><button type="button" id="preferences-expand">Expand all</button><button type="button" id="preferences-collapse">Collapse all</button></div>
           <div id="preferences-list" class="preferences-list"></div>
@@ -366,5 +377,6 @@
     <script type="module" src="/review-client.js"></script>
     <script type="module" src="/panel-resize.js"></script>
     <script type="module" src="/shell-panel.js"></script>
-  </body>
+  <script src="/notifications-ui.js" defer></script>
+</body>
 </html>

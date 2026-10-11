@@ -3037,3 +3037,6 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
     animation: none;
   }
 }
+
+.notification-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.notification-controls button { min-height: 40px; }
