@@ -795,7 +795,7 @@ function placeComposer() {
 }
 function placeSelectionAction() {
   const action = el("review-select-location");
-  const destination = phoneReview?.matches ? document.querySelector(".review-header-actions") : document.querySelector(".review-section-head");
+  const destination = phoneReview?.matches ? document.querySelector(".review-header-actions") : document.querySelector("#review-form .review-actions");
   if (action && destination?.insertBefore && action.parentElement !== destination) {
     if (phoneReview?.matches) destination.insertBefore(action, destination.firstChild); else destination.append(action);
   }
