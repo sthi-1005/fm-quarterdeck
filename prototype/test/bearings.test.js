@@ -560,3 +560,11 @@ test("streams are capped, recycled, refused through preview paths, and ended by 
   await c.until(() => c.ended, "server.close ends open streams instead of hanging");
   assert.equal(c.events.at(-1).event, "bye");
 });
+
+test('Overview work module is served as JavaScript from the host asset allowlist', async (context) => {
+  const { base } = await liveServer(context);
+  const response = await fetch(`${base}/bearings-work.js`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/javascript/);
+  assert.equal(await response.text(), await readFile(new URL('../public/bearings-work.js', import.meta.url), 'utf8'));
+});
