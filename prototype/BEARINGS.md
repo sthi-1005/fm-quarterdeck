@@ -16,7 +16,7 @@ Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/beari
 `GET /api/bearings` returns:
 
 ```
-{ schema, rev, state, observedAt, checkedAt, generatedAt, stale, error, cards[], coverage, omitted[], landed[] }
+{ schema, rev, state, observedAt, checkedAt, generatedAt, stale, error, cards[], coverage, omitted[], landed[], underway[], charted[], workCoverage }
 ```
 
 - `state`: `loading` (no run yet), `ready`, `stale` (last good calls; `error` says why the latest run failed) or `unavailable`.
@@ -32,7 +32,7 @@ Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/beari
 - Model `rev` hashes `cards`, `coverage`, `omitted`, and `landed` when any landed card is present. It never hashes the snapshot clock, so an unchanged Captain's Call is never pushed again. An empty landed list leaves the hash unchanged.
 - Privacy: `repo` is a basename, report and checkout paths are never served, and absolute paths inside free text are reduced to `…/<last segment>`.
 
-Sections are pluggable (`SECTIONS` in `bearings.js`). The served model enables `call` and `landed`. Later Underway and Charted Next sections add entries without changing the transport.
+Sections are pluggable (`SECTIONS` in `bearings.js`). The served model enables `call`, `landed`, `underway` and `charted` on the same snapshot and transport.
 
 ## Card clocks and sorting
 
@@ -308,10 +308,22 @@ An unknown or closed key is 409 `gone`.
 A successful post returns the same `{schema, until}` map.
 Saving a busy or invalid file is 503.
 
+## Underway and Charted Next
+
+Both read-only sections follow Just landed in the second Overview column. On phones, the existing Overview tab control includes both sections, remembers the selected tab under its existing storage key, and shows one section at a time. Captain's Call and Just landed keep their existing actions and counts.
+
+- `underway[]` projects only snapshot `in_flight` rows, including `home/task` child ids. Each row retains the producer's task-identifying `name` as `title`, run `state`, `doing`, `kind` and repository basename. Underway membership is the producer's observation, not a new Quarterdeck process-incarnation claim. An actively worked captain hold may also appear in Captain's Call.
+- `charted[]` projects only snapshot `gates` rows, with `title`, `reason`, `blockedBy`, owner, repository basename and durable `filed` clock. Dated rows sort newest first with stable unknown-date ties; the producer's reserved return-catchup warning stays first. `(main-inventory)` and `(return-catchup)` are action-free repair warnings and do not count as queued work. Explicit `kind: "warning"` is retained if supplied. Quarterdeck does not infer hold placement from prose or reclassify the producer's decision buckets.
+- Rows have stable owner-scoped `key`, content `rev`, `type` and `task`. Their content and coverage participate in the model revision, including chat composition, so work-only changes reach the existing live stream. Snapshot clocks alone do not change content revisions.
+- The existing bounded selected-home backlog read supplements only an already projected `(main)` gate's missing repository, using `parseBacklogTask` from `firstmate-records.js`. Duplicate ids fail closed. No row, hold reason, status or dispatch eligibility is created from the ledger; other homes remain unread.
+- `workCoverage` records whether each source array is available and carries sanitized snapshot work/inventory omission disclosures. Missing arrays remain unavailable; malformed present arrays fail the snapshot. Invalid or duplicate rows are withheld with `invalid-underway` / `invalid-charted` omission counts. Failed refreshes retain the last good rows and show stale evidence, including on freshness-only stream events. Empty messages refer to the current snapshot, never assert fleet-wide clearance.
+
+The installed `fm-bearings-snapshot.sh` owns `in_flight` and `gates`; the bearings board template owns the displayed name/state, gate reason/filed ordering and warning/count distinction. The snapshot does not expose the board's authored `dispatchable` boolean. These Overview sections therefore have no dispatch or answer controls; they add no additional information stream or board execution.
+
 ## Just landed
 
 Overview's second column shows the snapshot's `landed` rows as poster cards in the same visual language as Captain's Call.
-At the phone one-column breakpoint, the Overview body starts with two tabs, Captain's Call (N) and Just landed (N), and shows one section at a time.
+At the phone one-column breakpoint, the Overview body starts with four tabs, Captain's Call (N), Just landed (N), Underway (N) and Charted Next (N), and shows one section at a time.
 Captain's Call N counts every open card, including filtered cards.
 Just landed N counts landings whose current rev is not the acknowledged rev.
 The Just landed heading shows that same count in the Captain's Call count badge and hides the badge when it is 0, the same way the Overview Captain's Call badge hides when none are waiting.

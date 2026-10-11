@@ -586,7 +586,7 @@ export function composeCallModel(base, asks, chatView) {
   const chatCards = unlinked.slice(0, MAX_OPEN).map(chatCard);
   const chat = { state: chatView.state, error: chatView.error, open: unlinked.length, linked: asks.length - unlinked.length, omitted: Math.max(0, unlinked.length - MAX_OPEN), behind: Boolean(chatView.behind),
     sources: chatView.sources.map(({ source, backfillOmittedBytes }) => ({ source: source.split("/")[0], backfillOmittedBytes })), resolved: chatView.resolved || [] };
-  const content = { cards: [...cards, ...chatCards], coverage: base.coverage, omitted: base.omitted, chat };
+  const content = { ...base, cards: [...cards, ...chatCards], chat };
   return { ...base, cards: content.cards, chat, chatCheckedAt: chatView.checkedAt, rev: shortHash([contentRevision(content), chat]) };
 }
 

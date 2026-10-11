@@ -1,3 +1,4 @@
+import { parseBacklogTask } from "./firstmate-records.js";
 import { enumeratedLetterOptions, publishOptions } from "./enumerated-options.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -6,7 +7,7 @@ import { access, lstat, open, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-// Live Captain's Call and Just landed. Contract: BEARINGS.md. Quarterdeck runs only
+// Live Overview bearings sections. Contract: BEARINGS.md. Quarterdeck runs only
 // Firstmate's own bounded bearings projection. A bounded read of the selected home's
 // backlog adds durable clocks plus existing main-home titles, hold reasons and, when the
 // snapshot has no repository, the backlog repo name. The same read supplements `(main)`
@@ -233,6 +234,23 @@ export async function readBacklogHoldRecords(home) {
   } finally { await file.close(); }
 }
 
+// Supplements only projected main-home gates, using the shared trailing-field parser.
+export function backlogWorkRepos(text) {
+  const repos = new Map(), seen = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const item = /^\s*-\s+\[([ xX])\]\s+(\S+)\s+-\s+(.+)$/.exec(line);
+    if (!item || !TASK_ID.test(item[2])) continue;
+    const [, checked, id, prose] = item;
+    if (seen.has(id)) { repos.delete(id); continue; }
+    seen.add(id);
+    if (checked === " ") {
+      const repo = repoName(parseBacklogTask(prose, false).repositoryPath);
+      if (repo) repos.set(id, repo);
+    }
+  }
+  return repos;
+}
+
 async function addBacklogEvidence(output, home) {
   let file;
   try {
@@ -246,6 +264,10 @@ async function addBacklogEvidence(output, home) {
     const text = buffer.subarray(0, bytesRead).toString("utf8");
     const clocks = backlogClocks(text), reasons = backlogHoldReasons(text), titles = backlogTitles(text), repos = backlogRepos(text);
     raw.quarterdeck_holds = backlogHoldRecords(text);
+    const workRepos = backlogWorkRepos(text);
+    if (Array.isArray(raw.gates)) raw.gates = raw.gates.map(row =>
+      object(row) && row.owner === "(main)" && !repoName(row.repo) && workRepos.has(row.id)
+        ? { ...row, repo: workRepos.get(row.id) } : row);
     if (Array.isArray(raw.decisions_open)) raw.decisions_open = raw.decisions_open.map((row) =>
       object(row) && row.owner === "(main)" ? {
         ...clocks.get(row.id), ...row,
@@ -278,6 +300,7 @@ async function addBacklogEvidence(output, home) {
 export function validateSnapshot(raw) {
   if (!object(raw)) throw new BearingsUnavailable("Bearings output is not an object");
   if (raw.schema !== SOURCE_SCHEMA) throw new BearingsUnavailable("Unsupported bearings schema");
+  for (const name of ["in_flight", "gates"]) if (Object.hasOwn(raw, name) && !Array.isArray(raw[name])) throw new BearingsUnavailable(`Bearings ${name} invalid`);
   if (!Array.isArray(raw.decisions_open)) throw new BearingsUnavailable("Bearings decisions missing");
   if (!Array.isArray(raw.omitted)) throw new BearingsUnavailable("Bearings disclosure missing");
   const c = raw.contributions;
@@ -447,8 +470,7 @@ async function addBoardEvidence(output, home) {
   } catch { return output; }
 }
 
-// Sections are pluggable so Underway and Charted Next can join later without
-// changing the transport. The served model enables call and landed.
+// Every section uses the same authoritative snapshot and live transport.
 function callSection(raw) {
   const repos = new Map();
   for (const row of Array.isArray(raw.in_flight) ? raw.in_flight : []) {
@@ -539,11 +561,45 @@ function landedSection(raw) {
   }
   return { landed, landedInvalid };
 }
-export const SECTIONS = { call: callSection, landed: landedSection };
+// Preserve the snapshot's bucket membership and run state; no status/hold inference.
+const WORK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
+const WARNING_IDS = new Set(["(main-inventory)", "(return-catchup)"]);
+function workSection(raw, source, section) {
+  const rows = [], seen = new Set();
+  let invalid = 0;
+  for (const row of Array.isArray(raw[source]) ? raw[source] : []) {
+    const id = object(row) && typeof row.id === "string" && row.id.length <= 321
+      && (WORK_ID.test(row.id) || (section === "charted" && WARNING_IDS.has(row.id))) ? row.id : null;
+    const title = id ? publicText(section === "underway" ? row.name : row.title, Infinity) : null;
+    const owner = token(row?.owner);
+    const identity = `${owner || ""}:${id}`;
+    if (!id || !title || seen.has(identity)) { invalid += 1; continue; }
+    seen.add(identity);
+    const warning = section === "charted" && (row.kind === "warning" || WARNING_IDS.has(id));
+    rows.push(withRev({ key: `${section}:${owner || ""}:${id}`, type: section, task: id, title,
+      repo: repoName(row.repo), owner: token(row.owner),
+      kind: warning ? "warning" : section === "charted" ? "queued" : token(row.kind),
+      state: section === "underway" ? token(row.state) : null,
+      doing: section === "underway" ? publicText(row.doing, Infinity) : null,
+      reason: section === "charted" ? publicText(row.reason, Infinity) : null,
+      blockedBy: section === "charted" && row.blocked_by !== "-" ? publicText(row.blocked_by, Infinity) : null,
+      clock: { label: "Filed", at: section === "charted" ? durableDate(row.filed) : null },
+    }));
+  }
+  // Keep the producer's reserved catch-up warning first and stable unknown-date ties.
+  if (section === "charted") rows.sort((a, b) => a.task === "(return-catchup)" ? -1 : b.task === "(return-catchup)" ? 1
+    : (b.clock.at ? Date.parse(b.clock.at) : -Infinity) - (a.clock.at ? Date.parse(a.clock.at) : -Infinity));
+  return { [section]: rows, ...(invalid ? { workOmitted: [{ kind: `invalid-${section}`, count: invalid }] } : {}) };
+}
+export const SECTIONS = { call: callSection, landed: landedSection,
+  underway: raw => workSection(raw, "in_flight", "underway"), charted: raw => workSection(raw, "gates", "charted") };
 
-export function normalizeSnapshot(raw, enabled = ["call", "landed"]) {
+export function normalizeSnapshot(raw, enabled = ["call", "landed", "underway", "charted"]) {
   validateSnapshot(raw);
-  const content = { cards: [], coverage: null, omitted: [], landed: [] };
+  const content = { cards: [], coverage: null, omitted: [], landed: [], underway: [], charted: [],
+    workCoverage: { underway: Array.isArray(raw.in_flight), charted: Array.isArray(raw.gates),
+      disclosures: raw.omitted.filter(row => object(row) && typeof row.surface === "string" && /in_flight|gates|inventory|current|registry/.test(row.surface))
+        .map(row => publicText(row.surface, Infinity)).filter(Boolean) } };
   let landedInvalid = 0;
   for (const name of enabled) {
     const section = SECTIONS[name]?.(raw);
@@ -553,7 +609,10 @@ export function normalizeSnapshot(raw, enabled = ["call", "landed"]) {
       landedInvalid = section.landedInvalid || 0;
       continue;
     }
-    Object.assign(content, section);
+    if (name === "underway" || name === "charted") {
+      content[name] = section[name];
+      content.omitted.push(...(section.workOmitted || []));
+    } else Object.assign(content, section);
   }
   if (landedInvalid) content.omitted = [...(content.omitted || []), { kind: "invalid-landed", count: landedInvalid }];
   const holds = Array.isArray(raw.quarterdeck_holds) ? raw.quarterdeck_holds.filter(row => object(row) && TASK_ID.test(row.task) && row.source === "data/backlog.md")
@@ -562,7 +621,7 @@ export function normalizeSnapshot(raw, enabled = ["call", "landed"]) {
 }
 // The revision covers only what the captain sees, never the snapshot clock, so an
 // unchanged Captain's Call is never pushed again. Empty landed rows stay out of the hash.
-export const contentRevision = ({ cards, coverage, omitted, holds, landed }) => shortHash({ cards, coverage, omitted, ...(holds?.length ? { holds } : {}), ...(landed?.length ? { landed } : {}) });
+export const contentRevision = ({ cards, coverage, omitted, holds, landed, underway, charted, workCoverage }) => shortHash({ cards, coverage, omitted, ...(workCoverage ? { workCoverage } : {}), ...(underway?.length ? { underway } : {}), ...(charted?.length ? { charted } : {}), ...(holds?.length ? { holds } : {}), ...(landed?.length ? { landed } : {}) });
 
 export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = access, setPriority = os.setPriority, timeoutMs = 45000, maxStdout = 2 * 1024 * 1024, maxStderr = 4096 } = {}) {
   let pending = null;
@@ -645,7 +704,7 @@ export function createBearingsHub({ home, runner = createSnapshotRunner(home), f
   now = Date.now, timers = globalThis, minGapMs, maxAgeMs, debounceMs = 2000, tickMs = 10000, firstRunAfterMs = 60000, pollTtlMs = 60000 } = {}) {
   const gap = boundedMs(minGapMs, 30000, MIN_GAP_FLOOR_MS);
   const ceiling = Math.max(gap, boundedMs(maxAgeMs, 300000, MAX_AGE_FLOOR_MS));
-  const empty = { cards: [], coverage: null, omitted: [], landed: [] };
+  const empty = { cards: [], coverage: null, omitted: [], landed: [], underway: [], charted: [] };
   let model = { schema: MODEL_SCHEMA, rev: contentRevision(empty), state: "loading", observedAt: null, checkedAt: null, generatedAt: null, stale: false, error: null, ...empty };
   let lastGood = null;
   let lastAttemptAt = 0;
@@ -676,7 +735,7 @@ export function createBearingsHub({ home, runner = createSnapshotRunner(home), f
     try {
       const content = normalizeSnapshot(JSON.parse(await runner()));
       const at = new Date(now()).toISOString();
-      lastGood = { schema: MODEL_SCHEMA, rev: contentRevision(content), state: "ready", observedAt: at, checkedAt: at, generatedAt: content.generatedAt, stale: false, error: null, cards: content.cards, coverage: content.coverage, omitted: content.omitted, holds: content.holds, landed: content.landed || [] };
+      lastGood = { schema: MODEL_SCHEMA, rev: contentRevision(content), state: "ready", observedAt: at, checkedAt: at, generatedAt: content.generatedAt, stale: false, error: null, cards: content.cards, coverage: content.coverage, omitted: content.omitted, holds: content.holds, landed: content.landed || [], underway: content.underway || [], charted: content.charted || [], workCoverage: content.workCoverage };
       publish(lastGood);
     } catch (error) {
       const reason = error instanceof BearingsUnavailable ? error.message : error instanceof SyntaxError ? "Bearings output is not JSON" : "Bearings snapshot failed";

@@ -163,7 +163,9 @@
           <div id="summary" class="summary-grid"></div>
           <div id="overview-section-tabs" class="overview-section-tabs" role="tablist" aria-label="Overview sections">
             <button type="button" id="overview-tab-calls" role="tab" aria-selected="true" aria-controls="overview-primary" tabindex="0" data-overview-tab="calls">Captain's Call (0)</button>
-            <button type="button" id="overview-tab-landed" role="tab" aria-selected="false" aria-controls="overview-secondary" tabindex="-1" data-overview-tab="landed">Just landed (0)</button>
+            <button type="button" id="overview-tab-landed" role="tab" aria-selected="false" aria-controls="just-landed" tabindex="-1" data-overview-tab="landed">Just landed (0)</button>
+            <button type="button" id="overview-tab-underway" role="tab" aria-selected="false" aria-controls="underway" tabindex="-1" data-overview-tab="underway">Underway (0)</button>
+            <button type="button" id="overview-tab-charted" role="tab" aria-selected="false" aria-controls="charted-next" tabindex="-1" data-overview-tab="charted">Charted Next (0)</button>
           </div>
           <div id="overview-columns" class="overview-columns">
             <div id="overview-primary">
@@ -197,6 +199,16 @@
                 <div id="landed-cards" class="call-cards" aria-live="polite">
                   <p class="call-empty" data-landed-empty>Checking for landings…</p>
                 </div>
+              </section>
+              <section id="underway" aria-labelledby="underway-heading">
+                <h2 id="underway-heading" class="section-heading">Underway <b class="call-badge" data-work-count hidden>0</b></h2>
+                <p class="call-meta" data-work-status role="status"></p>
+                <div class="call-cards" data-work-cards></div>
+              </section>
+              <section id="charted-next" aria-labelledby="charted-next-heading">
+                <h2 id="charted-next-heading" class="section-heading">Charted Next <b class="call-badge" data-work-count hidden>0</b></h2>
+                <p class="call-meta" data-work-status role="status"></p>
+                <div class="call-cards" data-work-cards></div>
               </section>
             </div>
           </div>
@@ -344,6 +356,7 @@
     <script src="/bearings-thread-panel.js"></script>
     <script src="/bearings-procrastinate.js"></script>
     <script src="/bearings-landed.js"></script>
+    <script src="/bearings-work.js"></script>
     <script src="/overview-tabs.js"></script>
     <script src="/call-lifecycle.js"></script>
     <script src="/bearings-live.js"></script>

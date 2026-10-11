@@ -1868,17 +1868,19 @@ callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
   onDismiss(key) { if (callPatcher.tracker.state().selected === key) callPatcher.tracker.deselect(); },
 });
 const landedBoard = window.bearingsLanded?.createController?.({ list: $("#landed-cards"), toggle: $("#landed-ack-toggle"), badge: $("#landed-new-count"), onChange: () => overviewTabs?.paint() });
+const workBoard = window.bearingsWork?.createController?.({ sections: { underway: $("#underway"), charted: $("#charted-next") } });
 const overviewTabs = window.overviewTabs?.createController?.({
   root: $("#overview-view"),
   tabs: $("#overview-section-tabs"),
-  panels: { calls: $("#overview-primary"), landed: $("#overview-secondary") },
-  counts: { calls: () => callPatcher?.applied?.cards?.length || 0, landed: () => landedBoard?.newCount?.() ?? 0 },
+  panels: { calls: $("#overview-primary"), landed: $("#just-landed"), underway: $("#underway"), charted: $("#charted-next") },
+  secondary: $("#overview-secondary"),
+  counts: { calls: () => callPatcher?.applied?.cards?.length || 0, landed: () => landedBoard?.newCount?.() ?? 0, underway: () => workBoard?.count("underway") || 0, charted: () => workBoard?.count("charted") || 0 },
   storage: localStorage,
   media: window.matchMedia?.("(max-width: 720.005px)"),
 });
 const callLive = window.bearingsLive?.createBearingsLive({
-  onModel(model) { callPatcher.update(model); landedBoard?.update(model); renderCallBadge(model); observeBearings(model); },
-  onObserved(data) { callPatcher.observe(data); observeBearings(data); },
+  onModel(model) { callPatcher.update(model); landedBoard?.update(model); workBoard?.update(model); renderCallBadge(model); observeBearings(model); },
+  onObserved(data) { callPatcher.observe(data); workBoard?.observe(data); observeBearings(data); },
   onConnection({ state }) {
     freshness.bearings.connection = state;
     renderFreshness();
