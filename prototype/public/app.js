@@ -738,6 +738,7 @@ function renderLanesLoading() {
   $("#transcript-older").disabled = true;
   $("#transcript-newer").disabled = true;
   $("#messages").setAttribute("aria-busy", "true");
+  window.quarterdeckMessageContexts = new WeakMap();
   $("#messages").innerHTML = '<div class="notice" role="status">Loading Fleet Chats… Reading recent messages. Older history is available on demand.</div>';
 }
 
@@ -883,9 +884,13 @@ function renderFeed() {
     const anchorKey = visibleAnchor?.dataset.recordKey;
     const anchorOffset = visibleAnchor ? visibleAnchor.getBoundingClientRect().top - messagesEl.getBoundingClientRect().top : 0;
     messagesEl.innerHTML = feedHtml;
-    window.quarterdeckMessageContexts ||= new WeakMap();
+    window.quarterdeckMessageContexts = new WeakMap();
     [...messagesEl.querySelectorAll('article.message')].forEach((node, index) => {
       const message = pageMessages[index];
+      // Only this replacement's matching authored row can acquire a binding.
+      // Empty pages and retained/mismatched nodes must never inherit one.
+      if (!message || node.isConnected === false || node.dataset.recordKey !== recordKey(message)
+        || node.dataset.laneMessageIndex !== String(index) || node.dataset.recordIndex !== String(start + index)) return;
       window.quarterdeckMessageContexts.set(node, Object.freeze({
         recordId: message.recordId || null, source: message.source, occurredAt: message.occurredAt,
         text: message.text, lanes: Object.freeze([...message.laneNames]), author: message.author,
@@ -1052,6 +1057,7 @@ function renderLanesError(message) {
   $("#conversation-dot").className = "project-dot blocked";
   const offlineSub = $("#conversation-subtext");
   if (offlineSub) offlineSub.textContent = "Fleet Chats · offline";
+  window.quarterdeckMessageContexts = new WeakMap();
   $("#messages").innerHTML = `<div class="notice">${escapeHtml(message)}</div>`;
   $("#context-eyebrow").textContent = "STREAM CONTEXT";
   $("#context-title").textContent = "FM_HOME required";

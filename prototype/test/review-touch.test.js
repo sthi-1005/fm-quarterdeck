@@ -102,16 +102,19 @@ test('only the recognized compatibility click is consumed; subsequent taps and k
 
 test('renderer binds duplicate text to distinct immutable source records and lane context, independent of row indices', async () => {
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
-  const start = app.indexOf('    window.quarterdeckMessageContexts ||= new WeakMap();');
+  const start = app.indexOf('    window.quarterdeckMessageContexts = new WeakMap();');
   const end = app.indexOf('    for (const node of messagesEl.querySelectorAll', start);
   assert.ok(start > 0 && end > start);
-  const nodes = [{}, {}];
+  const nodes = [
+    { dataset: { recordKey: 'transcript/sample.jsonl@0:0', recordIndex: '0', laneMessageIndex: '0' } },
+    { dataset: { recordKey: 'transcript/other.jsonl@0:0', recordIndex: '1', laneMessageIndex: '1' } },
+  ];
   const records = [
     { recordId: 'transcript/sample.jsonl@0:0', source: 'transcript/sample.jsonl', occurredAt: '2026-01-01T00:00:00Z', text: 'Repeated words', laneNames: ['Sample Alpha'], author: 'Assistant', kind: 'conversation' },
     { recordId: 'transcript/other.jsonl@0:0', source: 'transcript/other.jsonl', occurredAt: '2026-01-01T00:01:00Z', text: 'Repeated words', laneNames: ['Sample Beta'], author: 'Input', kind: 'primary-input' },
   ];
   const context = vm.createContext({ window: {}, messagesEl: { querySelectorAll: () => nodes },
-    pageMessages: records, nextReadingScope: 'selected-sources', messageTypeId: message => message.kind,
+    pageMessages: records, start: 0, recordKey: message => message.recordId, nextReadingScope: 'selected-sources', messageTypeId: message => message.kind,
     messageTypeLabel: kind => kind === 'primary-input' ? 'Primary input · unverified' : 'Assistant' });
   vm.runInContext(app.slice(start, end), context);
   const [one, two] = nodes.map(node => context.window.quarterdeckMessageContexts.get(node));

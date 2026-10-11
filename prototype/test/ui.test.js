@@ -3184,3 +3184,62 @@ test("older-history disclosure persists at the maximum window without offering a
   render([{ ...source, omittedBytes: 0 }], [], 8, false);
   assert.equal(app.node("#transcript-window-status").hidden, true, "complete history has no truncation warning");
 });
+
+test('touch bindings invalidate an empty filtered feed even when a consumer retains stale articles', () => {
+  const app = ui(), feed = app.node('#messages');
+  seed(app, [lane('alpha', [record({ recordId: 'sample-record', text: 'Synthetic binding context' })])]);
+  const old = app.node('#touch-stale-row');
+  old.dataset = { recordKey: 'sample-record', recordIndex: '0', laneMessageIndex: '0' };
+  feed.querySelectorAll = selector => selector === 'article.message' ? [old] : [];
+  app.run('renderFeed()');
+  const bound = app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-stale-row"))');
+  assert.equal(bound.recordId, 'sample-record', 'nonempty control binds the actual record');
+  assert.doesNotThrow(() => app.run('transcriptQuery="no matching record"; renderFeed()'));
+  assert.match(feed.innerHTML, /No records match/);
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-stale-row"))'), undefined, 'no record means no usable old binding');
+  assert.equal(app.run('window.quarterdeckMessageTargets.length'), 0);
+});
+
+test('an empty filter with DOM replacement clears old touch bindings without changing feed history semantics', () => {
+  const app = ui(), feed = app.node('#messages');
+  seed(app, [lane('alpha', [record({ recordId: 'sample-record', text: 'Synthetic binding context' })])]);
+  const old = app.node('#touch-replaced-row');
+  old.dataset = { recordKey: 'sample-record', recordIndex: '0', laneMessageIndex: '0' };
+  // Counterfactual: only article acquisition changes to follow innerHTML replacement.
+  feed.querySelectorAll = selector => selector === 'article.message' && feed.innerHTML.includes('<article') ? [old] : [];
+  app.run('renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-replaced-row")).recordId'), 'sample-record');
+  assert.doesNotThrow(() => app.run('transcriptQuery="no matching record"; renderFeed()'));
+  assert.match(feed.innerHTML, /No records match/);
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-replaced-row"))'), undefined, 'removed nodes lose their bindings even if retained elsewhere');
+  assert.equal(app.run('messagesForSelection().length'), 0);
+});
+
+test('a stale article cannot acquire a sibling record with equal text at the same page index', () => {
+  const app = ui(), feed = app.node('#messages');
+  const old = app.node('#touch-wrong-row');
+  old.dataset = { recordKey: 'sample-original', recordIndex: '0', laneMessageIndex: '0' };
+  feed.querySelectorAll = selector => selector === 'article.message' ? [old] : [];
+  seed(app, [lane('alpha', [record({ recordId: 'sample-original', text: 'Repeated synthetic text' })])]);
+  app.run('renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-wrong-row")).recordId'), 'sample-original');
+  seed(app, [lane('alpha', [record({ recordId: 'sample-replacement', text: 'Repeated synthetic text' })])]);
+  app.run('renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-wrong-row"))'), undefined, 'never bind a mismatched stale DOM key to a new source record');
+  old.dataset.recordKey = 'sample-replacement';
+  app.run('lastFeedFingerprint=""; renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-wrong-row")).recordId'), 'sample-replacement', 'matching current DOM identity restores supported capture');
+});
+
+test('loading and unavailable feed replacements discard retained touch bindings', () => {
+  for (const replace of ['renderLanesLoading()', 'renderLanesError("Synthetic unavailable feed")']) {
+    const app = ui(), feed = app.node('#messages'), old = app.node('#touch-retained-row');
+    old.dataset = { recordKey: 'sample-record', recordIndex: '0', laneMessageIndex: '0' };
+    feed.querySelectorAll = selector => selector === 'article.message' ? [old] : [];
+    seed(app, [lane('alpha', [record({ recordId: 'sample-record' })])]);
+    app.run('renderFeed()');
+    assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-retained-row")).recordId'), 'sample-record');
+    app.run(replace);
+    assert.equal(app.run('window.quarterdeckMessageContexts.get(document.querySelector("#touch-retained-row"))'), undefined, replace);
+  }
+});
