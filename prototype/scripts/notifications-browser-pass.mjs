@@ -49,8 +49,8 @@ try {
     await browser("resize", String(width), String(height));
     await evaluate(`async () => {
       const original = document.querySelector('#notification-preferences');
-      const fixture = original.cloneNode(true); original.replaceWith(fixture);
-      const calls = [], stored = new Map(); let subscribed = false, granted = false, serverEnrolled = false;
+      let fixture = original.cloneNode(true); original.replaceWith(fixture);
+      const calls = [], stored = new Map(); let subscribed = false, permission = 'default', serverEnrolled = false;
       const subscription = { options: {}, toJSON: () => ({ endpoint: 'synthetic' }), unsubscribe: async () => { calls.push('unsubscribe'); subscribed = false; } };
       const registration = { active: { scriptURL: location.origin + '/notifications-worker.js' }, pushManager: {
         getSubscription: async () => subscribed ? subscription : null,
@@ -58,19 +58,42 @@ try {
       }, unregister: async () => { calls.push('unregister'); } };
       const fake = { isSecureContext: true, location, PushManager: {}, navigator: { userAgent: 'Android Chrome', serviceWorker: {
         getRegistration: async () => subscribed ? registration : null, register: async () => { calls.push('register'); return registration; }, ready: Promise.resolve(registration)
-      } }, Notification: { get permission() { return granted ? 'granted' : 'default'; }, requestPermission: async () => { calls.push('permission'); granted = true; return 'granted'; } },
+      } }, Notification: { get permission() { return permission; }, requestPermission: async () => { calls.push('permission'); permission = 'granted'; return 'granted'; } },
       matchMedia: () => ({ matches: false }), crypto, localStorage: { getItem: key => stored.get(key), setItem: (key, value) => stored.set(key, value) }, addEventListener() {},
       fetch: async (url) => { if (url.endsWith('/enroll')) serverEnrolled = true; if (url.endsWith('/disable')) { calls.push('server-disable'); serverEnrolled = false; }
         return { ok: true, json: async () => ({ configured: true, origin: location.origin, publicKey: btoa(String.fromCharCode(...new Uint8Array(65).fill(4))).replaceAll('+','-').replaceAll('/','_').replaceAll('=',''), state: serverEnrolled ? 'enabled' : 'not-enabled', subscribed: serverEnrolled }) };
       } };
       const controller = quarterdeckNotifications.mount(fake, fixture); await new Promise(resolve => setTimeout(resolve, 20));
+      const preference = fixture.querySelector('[data-notification-preference]');
+      const status = fixture.querySelector('[data-notification-status]');
+      if (!preference.checked || stored.has('fm-quarterdeck-push-alerts-v1')) throw Error('missing preference did not default on without writing consent');
+      if (!status.textContent.includes('preference is on') || !status.textContent.includes('permission: not granted')) throw Error('default/permission status is dishonest');
       if (calls.length) throw Error('status caused permission or registration');
+      for (const state of ['denied', 'unknown', 'granted', 'default']) {
+        permission = state; await controller.refresh();
+        if (calls.length || serverEnrolled || subscribed) throw Error('permission reconciliation enrolled');
+        if (fixture.querySelector('[data-notification-enable]').disabled !== ['denied', 'unknown'].includes(state)) throw Error('permission control mismatch ' + state);
+      }
+      preference.checked = false; preference.dispatchEvent(new Event('change'));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (stored.get('fm-quarterdeck-push-alerts-v1') !== 'false' || !status.textContent.includes('preference is off')) throw Error('explicit off not saved');
+      if (calls.join() !== 'server-disable') throw Error('off without enrollment caused browser mutations');
+      calls.length = 0;
+      preference.checked = true; preference.dispatchEvent(new Event('change'));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (calls.length || serverEnrolled || subscribed) throw Error('setting on alone enrolled');
       fixture.querySelector('[data-notification-enable]').click(); await new Promise(resolve => setTimeout(resolve, 20));
       if (calls.join() !== 'permission,register,subscribe') throw Error('enable ordering ' + calls);
       if (!fixture.textContent.includes('best effort')) throw Error('delivery promise not scoped');
       fixture.querySelector('[data-notification-disable]').click(); await new Promise(resolve => setTimeout(resolve, 20));
       if (calls.slice(-3).join() !== 'server-disable,unsubscribe,unregister') throw Error('disable ordering');
-      if (!fixture.textContent.includes('Disabled.')) throw Error('missing disabled status');
+      if (!fixture.textContent.includes('Disabled.') || preference.checked || stored.get('fm-quarterdeck-push-alerts-v1') !== 'false') throw Error('missing disabled preference/status');
+      await controller.refresh();
+      if (preference.checked || !status.textContent.includes('preference is off')) throw Error('refresh lost explicit off');
+      const remounted = fixture.cloneNode(true); fixture.replaceWith(remounted);
+      quarterdeckNotifications.mount(fake, remounted); await new Promise(resolve => setTimeout(resolve, 20));
+      if (remounted.querySelector('[data-notification-preference]').checked) throw Error('reload lost explicit off');
+      fixture = remounted;
       const buttons = [...fixture.querySelectorAll('button')];
       if (innerWidth > 1000 && buttons.some(button => Math.abs(button.getBoundingClientRect().top - buttons[0].getBoundingClientRect().top) > 1)) throw Error('desktop controls need the full panel width');
       for (const button of buttons) {
@@ -79,7 +102,7 @@ try {
       if (document.documentElement.scrollWidth > innerWidth + 1) throw Error('page horizontal overflow');
       if ((await navigator.serviceWorker.getRegistrations()).length) throw Error('mock flow registered a real worker');
       fixture.querySelector('[data-notification-status]').scrollIntoView({ block: 'center' });
-      return 'PASS mocked opt-in, disable and layout ${width}x${height}; no OS/provider proof';
+      return 'PASS mocked default-on preference, permission, explicit enable/disable and layout ${width}x${height}; no OS/provider proof';
     }`);
     if (process.env.FM_PUSH_PROOF_DIR) {
       await mkdir(process.env.FM_PUSH_PROOF_DIR, { recursive: true });

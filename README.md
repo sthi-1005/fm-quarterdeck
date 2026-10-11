@@ -114,7 +114,7 @@ Quarterdeck is installable and **online-only**: no offline data cache. The optio
 
 HTML and static assets use `no-store`. On startup or return to the foreground, the existing review configuration check can show **“Quarterdeck updated — reload to continue”** with a Reload button when the server revision differs from the open document. Reload is always explicit, never automatic; the current route is retained. Review drafts/retries keep their existing tab-local storage semantics. A failed check means unavailable, not an update. Real Android/iOS standalone installation and status-bar layout checks remain pending.
 
-Notifications are off by default. [Mobile notifications](docs/MOBILE-NOTIFICATIONS.md) describes the operator configuration, explicit installation opt-in, private state owner and remaining physical-device acceptance. Generic alerts arrive best effort; opening and answering still require private access.
+Captain's Call alert preference is on by default on each installation; explicit off is retained. Browser permission and enrollment still require an explicit Enable notifications tap, and the operator configuration remains disabled unless separately enabled. [Mobile notifications](docs/MOBILE-NOTIFICATIONS.md) describes the preference, operator configuration, private state owner and remaining physical-device acceptance. Generic alerts arrive best effort; opening and answering still require private access.
 
 ## Review and primary chat
 
