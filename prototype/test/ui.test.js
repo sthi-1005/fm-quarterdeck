@@ -2996,13 +2996,34 @@ test("phone fleet and kind tabs follow arrow, Home and End keys", () => {
   assert.equal(app.run("document.activeElement"), lanes);
 });
 
+test("second-mate selector belongs to Message kinds and follows its desktop disclosure", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const kinds = html.match(/<details[^>]*id="kind-filter-menu"[\s\S]*?<\/details>/)[0];
+  const fleets = html.slice(html.indexOf('<div id="lane-filter-controls"'), html.indexOf('<div id="lane-filter-rows"'));
+  assert.match(kinds, /class="lane-status-control message-origin-control"[\s\S]*id="secondmate-filter"/);
+  assert.doesNotMatch(fleets, /secondmate-filter/);
+  assert.equal((html.match(/id="secondmate-filter"/g) || []).length, 1);
+  const panel = element('aside', [], { 'data-collapsed': 'true' }, null, 'conversation-kind-panel');
+  const control = element('label', ['lane-status-control', 'message-origin-control'], {}, panel);
+  const rules = parseCss(css);
+  assert.equal(computed(rules, control, 1600).display, 'none');
+  panel.states = ['hover'];
+  assert.equal(computed(rules, control, 1600).display, 'grid');
+  panel.states = ['focus-within'];
+  assert.equal(computed(rules, control, 1600).display, 'grid');
+  panel.states = [];
+  panel.attrs['data-collapsed'] = 'false';
+  assert.equal(computed(rules, control, 1600).display, 'grid');
+  assert.equal(computed(rules, control, 390).display, 'grid');
+});
+
 test("second-mate selector composes with existing filters and preserves All order and routing", () => {
   const app = ui();
   const messages = [
     record({ recordId: 'primary', text: 'Firstmate mentions mate-alpha', occurredAt: '2030-01-01T00:00:00Z' }),
     record({ recordId: 'alpha-1', secondmateId: 'mate-alpha', kind: 'supervision', text: 'Example first', occurredAt: '2030-01-01T00:00:01Z' }),
     record({ recordId: 'beta-1', secondmateId: 'mate-beta', kind: 'supervision', text: 'Example mentions mate-alpha', occurredAt: '2030-01-01T00:00:02Z' }),
-    record({ recordId: 'alpha-2', secondmateId: 'mate-alpha', kind: 'supervision', taskId: 'example-task', text: 'Example last', occurredAt: '2030-01-01T00:00:03Z' }),
+    record({ recordId: 'alpha-2', secondmateId: 'mate-alpha', kind: 'supervision', taskId: 'example-task', transcriptSessionId: 'example-source', text: 'Example last', occurredAt: '2030-01-01T00:00:03Z' }),
   ];
   seed(app, [lane('example-app', messages), lane('acme', [messages[2]])]);
   const ids = () => app.run("messagesForSelection().map(message => message.recordId).join(',')");
@@ -3010,6 +3031,8 @@ test("second-mate selector composes with existing filters and preserves All orde
   const choose = value => app.node('#secondmate-filter').dispatchEvent({ type: 'change', target: { value } });
   choose('mate-alpha');
   assert.equal(ids(), 'alpha-1,alpha-2');
+  assert.match(app.node('#messages').innerHTML, /Example first/);
+  assert.doesNotMatch(app.node('#messages').innerHTML, /Firstmate mentions|Example mentions/);
   app.run("transcriptQuery = 'last'");
   assert.equal(ids(), 'alpha-2');
   app.run("transcriptQuery = ''; selectedMessageTypes.delete('supervision')");
@@ -3020,14 +3043,33 @@ test("second-mate selector composes with existing filters and preserves All orde
   assert.equal(ids(), '', 'mate selection retains task filter');
   app.run("selectedSessionId = ''; selectedTranscriptSession = 'missing-source'");
   assert.equal(ids(), '');
-  app.run("selectedTranscriptSession = ''; selectedLaneIds = new Set(['acme']); allLanesSelected = false");
+  choose('mate-alpha');
+  app.run("selectedTranscriptSession = 'example-source'");
+  assert.equal(ids(), 'alpha-2');
+  choose('');
+  assert.equal(ids(), 'alpha-2', 'All mates preserves the disk source intersection');
+  app.run("selectedTranscriptSession = ''");
+  const solo = id => app.node('#lane-filter-rows').dispatchEvent({ type: 'click', preventDefault() {},
+    target: { closest: selector => selector === '.lane-option' ? { dataset: { laneId: id } } : null } });
+  solo('acme');
+  assert.equal(ids(), 'beta-1', 'ordinary fleet selection works with All mates');
+  choose('mate-beta');
   assert.equal(ids(), 'beta-1');
   choose('mate-alpha');
   assert.equal(ids(), '', 'mate selection retains lane filter');
-  app.run("selectedLaneIds = new Set(['example-app', 'acme']); allLanesSelected = true");
+  choose('');
+  assert.equal(ids(), 'beta-1', 'All mates restores only the selected fleet');
+  choose('mate-alpha');
+  solo('example-app');
+  assert.equal(ids(), 'alpha-1,alpha-2', 'fleet selection retains the mate intersection');
+  app.node('#lane-bulk-toggle').dispatchEvent({ type: 'click' });
+  assert.equal(app.run('allLanesSelected'), true);
+  assert.equal(ids(), 'alpha-1,alpha-2');
+  const route = app.run('window.location.hash');
   choose('');
   assert.equal(ids(), 'primary,alpha-1,beta-1,alpha-2');
-  assert.equal(app.run("selectedSessionId"), '');
+  assert.equal(app.run("selectedSessionId"), null);
+  assert.equal(app.run('window.location.hash'), route, 'mate selection never chooses a routing destination');
 });
 
 test("older-history disclosure persists at the maximum window without offering an impossible expansion", () => {
