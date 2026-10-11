@@ -207,9 +207,11 @@ export function backlogHoldRecords(text) {
       if (!TASK_ID.test(id)) continue;
       if (seen.has(id)) { records.delete(id); continue; }
       seen.add(id);
+      const parsed = parseBacklogTask(fields, checked !== " ");
+      const captain = parsed.holdKind === "captain";
       current = { task: id, type: "decision", title: titles.get(id), reason: reasons.get(id),
-        open: checked === " " && fields.includes("(hold-kind: captain)"),
-        closed: checked !== " ", captain: fields.includes("(hold-kind: captain)"), source: "data/backlog.md", resolution: checked !== " " ? "closed" : null };
+        open: captain && parsed.holdActive,
+        closed: checked !== " ", captain, source: "data/backlog.md", resolution: checked !== " " ? "closed" : null };
       records.set(id, current);
     } else if (/^##\s/.test(line) || (line.trim() && !/^\s{2,}/.test(line))) current = null;
     else if (current && /^  Resolution recorded by fm-captain-hold\.$/.test(line)) current.recorded = true;
@@ -501,11 +503,19 @@ function callSection(raw) {
     }));
   }
   const merges = new Set();
+  const mainHolds = new Set((Array.isArray(raw.quarterdeck_holds) ? raw.quarterdeck_holds : [])
+    .filter(row => object(row) && row.source === "data/backlog.md" && row.open === true && TASK_ID.test(row.task))
+    .map(row => row.task));
   for (const row of raw.contributions.captain) {
     const task = object(row) && typeof row.task === "string" && TASK_ID.test(row.task) ? row.task : null;
     if (!task) { invalid += 1; continue; }
     // A live decision for the same task already asks the captain; one card per call.
     if (decided.has(task) || merges.has(task)) continue;
+    // Captain actor includes arbitration holds, even for a draft PR. Those are
+    // decisions, never Merge asks when a decision falls outside the snapshot bound.
+    // The selected-home ledger also covers deferred holds absent from captain.hold;
+    // its task ids apply only to that home's contribution owner.
+    if ((typeof row.hold === "string" && row.hold.trim()) || (row.owner === "(main)" && mainHolds.has(task))) continue;
     merges.add(task);
     cards.push(withRev({ key: `merge:${task}`, type: "merge", task, kind: token(row.kind), url: httpsUrl(row.url), reason: publicText(row.reason, Infinity), owner: token(row.owner), repo: repos.get(task) ?? null, checkedAt: isoDate(row.checked_at), clock: { label: "Checked", at: isoDate(row.checked_at) }, answer: mergeAnswer(task) }));
   }
