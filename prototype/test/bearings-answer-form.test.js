@@ -150,6 +150,35 @@ test("selecting a lettered option submits that letter, and text alone stays a th
   assert.deepEqual(t.fetches[0].body, { requestId: uuid(1), key, cardRev: "a1", selection: "a", note: "" });
 });
 
+test("a named linked alternative relays its exact label; unselected text uses the thread endpoint", async () => {
+  const card = { ...decision(), chatAsks: [{ summary: 'Choose the window. Reply "Staged rollout" or "Release now".', replies: ["Staged rollout", "Release now"] }] };
+  const key = card.key;
+  const t = setup();
+  t.patcher.update(model([card]));
+  const radio = t.node(key).querySelector('input[data-call-reply="Release now"]');
+  radio.checked = true;
+  radio.dispatchEvent({ type: "change" });
+  t.part(key, "text").type("Use the sample window");
+  t.submit(key);
+  assert.equal(t.fetches.length, 0);
+  assert.equal(t.part(key, "preview").textContent, "Release now - Use the sample window");
+  t.part(key, "send").click();
+  await flush();
+  assert.deepEqual(t.fetches[0].body, { requestId: uuid(1), key, cardRev: card.rev, selection: "", note: "Release now - Use the sample window" });
+  assert.equal(t.fetches[0].url, "/api/bearings/answer");
+
+  const note = setup();
+  note.patcher.update(model([card]));
+  note.part(key, "text").type("Release now");
+  note.submit(key);
+  assert.equal(note.answers.state(key).path, "thread", "matching an option's text is not selecting it");
+  note.part(key, "send").click();
+  await flush();
+  assert.equal(note.fetches[0].url, "/api/bearings/thread");
+  assert.equal(note.fetches[0].body.text, "Release now");
+  assert.equal(note.fetches[0].body.selection, undefined);
+});
+
 test("nothing is sent until Queue and then an explicit Send; the sent answer clears its draft and shows receipts", async () => {
   const t = setup({ responses: [{ status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } }, { status: 200, body: { answers: { [uuid(1)]: { state: "received" } } } }, { status: 200, body: { answers: { [uuid(1)]: { state: "replied", reply: "Holding until Tuesday" } } } }] });
   const card = decision();
