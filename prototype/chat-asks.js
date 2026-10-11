@@ -594,6 +594,7 @@ export function composeCallModel(base, asks, chatView) {
 // composed model. Chat scanning runs on each read and every scanEveryMs while streamed.
 export function createCallSource({ hub, chat, home = null, receipts = inboxReceipts, timers = globalThis, scanEveryMs = 3000 } = {}) {
   let answerReceipts = null, receiptsSignature = "", receiptsCheckedAt = 0;
+  let receiptEvidence = { available: false, checkedAt: null };
   let composed = null, composedFrom = null;
   const listeners = new Set();
   let timer = null;
@@ -622,7 +623,10 @@ export function createCallSource({ hub, chat, home = null, receipts = inboxRecei
   const refresh = () => (refreshing ||= (async () => {
     if (home && Date.now() - receiptsCheckedAt >= 15000) {
       receiptsCheckedAt = Date.now();
-      try { answerReceipts = await receipts(home); receiptsSignature = JSON.stringify(answerReceipts); } catch { /* Keep the last durable evidence on a failed read. */ }
+      try {
+        answerReceipts = await receipts(home); receiptsSignature = JSON.stringify(answerReceipts);
+        receiptEvidence = { available: true, checkedAt: new Date().toISOString() };
+      } catch { receiptEvidence = { available: false, checkedAt: new Date().toISOString() }; /* Preserve UI evidence, fail closed for notification eligibility. */ }
     }
     await chat.scan();
     await applyHolds().catch(() => false);
@@ -639,6 +643,21 @@ export function createCallSource({ hub, chat, home = null, receipts = inboxRecei
     current,
     freshness,
     refresh,
+    // Independent of the UI's 15-second receipt cache. This uses the same expanded
+    // per-item adapter and classifier, never a parser of combined batch prose.
+    async notificationEvidence() {
+      try {
+        const data = await receipts(home);
+        if (!Array.isArray(data?.pending) || !Array.isArray(data?.handled) || !Array.isArray(data?.replies) || data.omitted?.length) throw new Error("Incomplete receipts");
+        answerReceipts = data; receiptsSignature = JSON.stringify(data);
+        receiptEvidence = { available: true, checkedAt: new Date().toISOString() };
+        return { ...receiptEvidence, model: current(), receipts: data };
+      } catch {
+        receiptEvidence = { available: false, checkedAt: new Date().toISOString() };
+        return { ...receiptEvidence, model: current(), receipts: null };
+      }
+    },
+    receiptEvidence: () => ({ ...receiptEvidence }),
     chat,
     subscribe(listener) {
       listeners.add(listener);

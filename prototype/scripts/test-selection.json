@@ -27,6 +27,8 @@
     "test/message-kinds.test.js",
     "test/mobile-a11y.test.js",
     "test/mobile-quota-dock.test.js",
+    "test/notifications-ui.test.js",
+    "test/notifications.test.js",
     "test/pane-bounds.test.js",
     "test/panel-resize.test.js",
     "test/preview-selector.test.js",
