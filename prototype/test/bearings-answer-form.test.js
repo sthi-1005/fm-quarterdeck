@@ -499,7 +499,7 @@ test("queued answers list for the review queue, send together with their own ids
   assert.deepEqual(plain(t.answers.queued()), []);
 });
 
-test("Send batch relays every queued card on its own route and those cards become Sent", async () => {
+test("Send relays every queued card on its own route and those cards become Sent", async () => {
   const asked = new Set();
   const t = setup({
     responses: [{ status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:05.000Z" } }, { status: 202, body: { state: "accepted", sentAt: "2026-01-02T03:04:06.000Z" } }],

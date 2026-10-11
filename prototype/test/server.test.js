@@ -139,7 +139,7 @@ test("Lane Chat has no redundant Options button and preserves desktop identity",
   assert.match(js, /moveControl\(document\.querySelector\("\.conversation-head-actions"\), chatTools\)/);
   assert.match(js, /moveControl\(document\.querySelector\("\.feed-pagination"\), chatTools\)/);
   assert.match(css, /\.conversation-head:not\(:has\(#task-filter-chip:not\(\[hidden\]\)\)\) \{ display: none; \}/);
-  assert.match(js, /document\.querySelector\("#review-send"\)\.textContent = "Send batch"/);
+  assert.match(js, /document\.querySelector\("#review-send"\)\.textContent = "Send"/);
 });
 
 test("standalone UAT launch labels its own revision without claiming Main or a gateway", async (context) => {

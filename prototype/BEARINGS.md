@@ -170,7 +170,7 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
    Nothing has been sent.
    The confirm copy names an answer or a thread note to match the path.
    The queued item also joins the review panel's queue (see "Queue integration" below), so several can go together.
-3. **Send** (this card) or **Send batch** (the review queue) moves to *sending*, then:
+3. **Send** (this card) or **Send** (the review queue) moves to *sending*, then:
    - A thread note uses `POST /api/bearings/thread` with exactly `{requestId, key, text}`.
      `202` clears the draft and returns to *compose*.
      It does not use the answer phase *sent*.
@@ -192,10 +192,10 @@ Only the buttons for the current phase are shown (Queue in *compose*; Send and E
 
 **Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`.
 The review panel (`review-client.js`) lists queued items above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the item to its card for editing (keeping its request id once a send was attempted).
-**Send batch** and Ctrl+Enter send queued items first, each with its own request id: an answer through `POST /api/bearings/answer` and a thread note through `POST /api/bearings/thread`, then the review notes through review delivery.
+**Send** and Ctrl+Enter send queued items first, each with its own request id: an answer through `POST /api/bearings/answer` and a thread note through `POST /api/bearings/thread`, then the review notes through review delivery.
 On the Active status view, **Send queued (N)** calls that same `sendCallAnswers` sender when N staged items exist.
 It stays hidden on every other status and when N is 0, and it is disabled while a send is in flight.
-A second activation, including a concurrent **Send batch**, does not deliver those items again.
+A second activation, including a concurrent **Send**, does not deliver those items again.
 A card that was Queued only because of that staged item becomes Sent after the item is accepted.
 Batching changes no intake, and review delivery being unavailable does not block the items.
 A queued item survives reload in its *confirm* state; only an explicit click sends it.
@@ -467,7 +467,7 @@ request IDs and card/task references. Firstmate handles each item; Quarterdeck e
 no decision. One combined note receives one inbox acknowledgement and reply; the reply
 should name each item/task and appears on every affected card.
 
-Pending submissions remain visible on cards and in the review queue. **Send now** in the
+Pending submissions remain visible on cards and in the review queue. **Send** in the
 message composer submits its drafts urgently and flushes already saved pending work.
 Batch queue sends submit card items concurrently so they share the window. A page close
 or reload cannot cancel saved server work; tab storage also keeps uncertain client sends

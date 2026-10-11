@@ -225,7 +225,7 @@ test("desktop control and persistent review footer keep gesture and action order
   assert.match(html, /<footer id="desktop-review-footer"[\s\S]*id="review-panel-toggle"[\s\S]*<\/footer>/);
   assert.match(review, /destination\.insertBefore\(form, el\("review-panel-toggle"\)\)/);
   assert.match(review, /destination\.insertBefore\(form, el\("review-state"\)\)/);
-  assert.match(html, /id="review-message"[\s\S]*id="review-queue"[\s\S]*id="review-send"[\s\S]*id="review-end"[\s\S]*id="review-panel-toggle"/);
+  assert.match(html, /id="review-message"[\s\S]*id="review-queue"[\s\S]*id="review-send"[\s\S]*id="review-panel-toggle"/);
   assert.match(css, /\.lane-list \{ grid-column: 1; grid-row: 1 \/ 3; \}/);
   assert.match(css, /#desktop-review-footer \{ grid-column: 2 \/ -1; grid-row: 2;/);
   assert.match(html, /id="review-message"[^>]*placeholder="Message firstmate"/);
@@ -237,8 +237,8 @@ test("desktop control and persistent review footer keep gesture and action order
 
 test("annotation composer exposes the urgent send alongside queue, batch and end actions", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
-  assert.match(html, /<form id="review-form">[\s\S]*<div class="review-actions"><button id="review-queue" type="submit" aria-label="Queue message \(Enter\)" data-hint="Enter">Queue<\/button><button id="review-send" type="button" data-hint="Ctrl\/Cmd\+Enter">Send batch<\/button><button id="review-send-now" type="button">Send now<\/button><button id="review-end" type="button" data-hint="Then end chat">Send &amp; End<\/button><\/div><\/form>/);
-  assert.match(css, /\.review-actions \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(html, /<form id="review-form">[\s\S]*<div class="review-actions"><button id="review-queue" type="submit" aria-label="Queue message \(Enter\)" data-hint="Enter">Queue<\/button><button id="review-send" type="button" data-hint="Ctrl\/Cmd\+Enter">Send<\/button><\/div><\/form>/);
+  assert.match(css, /\.review-actions \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.review-actions button \{ min-width: 0;/);
 });
 

@@ -9,7 +9,7 @@ const tick = () => new Promise(setImmediate);
 function harness() {
   const data = new Map();
   const storage = { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
-  const posts = [];
+  const posts = [], headers = [];
   const waiting = [];
   const intervals = [];
   let mode = "success", configUp = true, uuid = 0;
@@ -44,7 +44,7 @@ function harness() {
       fetch: async (url, options) => {
         if (options?.method === "POST") {
           const body = JSON.parse(options.body);
-          posts.push(body);
+          posts.push(body); headers.push(options.headers);
           if (mode === "hold") return new Promise((resolve) => waiting.push(resolve));
           return mode === "fail" ? { ok: false, status: 502, json: async () => ({ error: "disk error" }) }
             : { ok: true, json: async () => ({ receiptId: `local:${body.batchId}`, delivery: "local" }) };
@@ -61,7 +61,7 @@ function harness() {
       element("review-message").value = text;
       element("review-form").listeners.submit({ preventDefault() {} });
     };
-    const send = (end = false) => element(end ? "review-end" : "review-send").listeners.click();
+    const send = () => element("review-send").listeners.click();
     const state = () => JSON.parse(data.get("fm-agentos-review-draft-v1"));
     const keydown = (event) => {
       let stopped = false;
@@ -84,7 +84,7 @@ function harness() {
     const body = posts.at(-1);
     waiting.shift()({ ok: !failure, status: failure ? 502 : 200, json: async () => failure ? { error: "disk error" } : { receiptId: `local:${body.batchId}`, delivery: "local" } });
   };
-  return { page, posts, data, intervals, release, setMode: (value) => { mode = value; }, setConfigUp: (value) => { configUp = value; } };
+  return { page, posts, headers, data, intervals, release, setMode: (value) => { mode = value; }, setConfigUp: (value) => { configUp = value; } };
 }
 
 test("open help consumes Escape before annotation, picking or review", async () => {
@@ -385,15 +385,17 @@ test("Ctrl/Cmd+Enter retries an unconfirmed identity instead of masking failure"
   assert.equal(p.state().sent.length, 1);
 });
 
-test("later accepted end status clears history, not unavailable status", async () => {
+test("legacy end status polling keeps history until explicit Review clearing", async () => {
   const h = harness(), p = h.page(); await tick();
   vm.runInContext(`sent = [{ id: "00000000-0000-4000-8000-000000000001", receiptId: "ignored", entries: [], state: "unavailable", end: true }]; update()`, p.context);
   assert.equal(p.state().sent.length, 1);
   await vm.runInContext("refreshStatuses()", p.context);
+  assert.equal(p.state().sent.length, 1);
+  p.element("review-clear-messages").click();
   assert.equal(p.state().sent.length, 0);
 });
 
-test("Send Batch snapshots multiple kinds, later queue and rapid second send remain distinct after acceptance", async () => {
+test("Send snapshots multiple kinds, later queue and rapid second send remain distinct after acceptance", async () => {
   const h = harness(), p = h.page(); await tick();
   p.q("same", "region"); p.q("same", "lane"); p.q("plain");
   h.setMode("hold"); p.send(); p.send(); await tick();
@@ -426,13 +428,13 @@ test("failed captured identity retries without merging later notes, including af
   assert.equal(reloaded.state().retryBatches[0].id, failed.id);
   h.setMode("success");
   reloaded.send(); await tick();
-  assert.notEqual(h.posts[1].batchId, failed.id, "a later Send Batch does not reuse a failed identity");
+  assert.notEqual(h.posts[1].batchId, failed.id, "a later Send does not reuse a failed identity");
   await vm.runInContext("submitBatch(retryBatches[0])", reloaded.context);
   assert.deepEqual(h.posts[2], h.posts[0]);
   assert.equal(reloaded.state().queue.length, 0);
 });
 
-test("Send and End drains recovered board once by item identity, not by equal text; failure retains it", async () => {
+test("Send recovers each draft identity once, retains failures and never clears history", async () => {
   const h = harness(), p = h.page(); await tick();
   p.q("identical"); p.q("identical"); p.q("third");
   const draft = p.state();
@@ -441,44 +443,32 @@ test("Send and End drains recovered board once by item identity, not by equal te
   const recovered = h.page(); await tick();
   assert.equal(recovered.state().queue.length, 3);
   assert.equal(recovered.element("review-panel").hidden, true);
-  h.setMode("fail"); recovered.send(true); await tick();
+  h.setMode("fail"); recovered.send(); await tick();
   assert.equal(recovered.element("review-panel").hidden, true);
   assert.deepEqual(h.posts[0].entries.map((e) => e.prompt), ["identical", "identical", "third"]);
-  assert.equal(h.posts[0].end, true);
+  assert.equal(h.posts[0].end, false);
   assert.equal(recovered.state().retryBatches.length, 1);
-  h.setMode("success"); recovered.send(true); await tick();
+  h.setMode("success"); recovered.send(); await tick();
   assert.deepEqual(h.posts[1], h.posts[0]);
   assert.equal(recovered.state().retryBatches.length, 0);
-  assert.equal(recovered.state().sent.length, 0, "accepted end clears history");
+  assert.equal(recovered.state().sent.length, 1, "acceptance keeps history until explicit clearing");
   assert.equal(recovered.element("review-panel").hidden, true);
 });
 
-test("Send and End drains failed prior identities separately from its recovered cutoff", async () => {
-  const h = harness(), p = h.page(); await tick();
-  p.q("old"); h.setMode("fail"); p.send(); await tick();
-  p.q("next"); h.setMode("hold"); p.send(true); await tick();
-  assert.equal(h.posts.length, 2);
-  assert.deepEqual(h.posts[1].entries.map((e) => e.prompt), ["old"]);
-  assert.deepEqual(p.state().retryBatches.map((b) => b.payload.entries[0].prompt), ["next"]);
-  h.release(true); await tick();
-  assert.equal(h.posts.length, 2, "failure stops the drain without losing the later cutoff");
-  h.setMode("success"); p.send(true); await tick();
-  assert.deepEqual(h.posts.slice(2).map((b) => b.entries[0].prompt), ["old", "next"]);
-  assert.equal(h.posts[2].batchId, h.posts[0].batchId);
-  assert.notEqual(h.posts[3].batchId, h.posts[2].batchId);
-  assert.equal(p.state().sent.length, 0);
-  assert.equal(p.state().retryBatches.length, 0);
-});
-
-test("reload during an uncertain drain preserves retry order and later queue", async () => {
+test("new sends and old retries keep independent cutoffs across reload", async () => {
   const h = harness(), p = h.page(); await tick();
   p.q("first"); h.setMode("fail"); p.send(); await tick();
-  p.q("second"); h.setMode("hold"); p.send(true); await tick();
+  const original = h.posts[0];
+  p.q("second"); h.setMode("hold"); p.send(); await tick();
   p.q("third");
   const reloaded = h.page(); await tick();
   assert.deepEqual(reloaded.state().retryBatches.map((b) => b.payload.entries[0].prompt), ["first", "second"]);
   assert.deepEqual(reloaded.state().queue.map((e) => e.prompt), ["third"]);
   h.release(true); await tick();
+  h.setMode("success");
+  await vm.runInContext("submitBatch(retryBatches[0])", reloaded.context);
+  assert.deepEqual(h.posts.at(-1), original);
+  assert.deepEqual(reloaded.state().queue.map((e) => e.prompt), ["third"]);
 });
 
 test("reload retains more than thirty independent retries and receipt batches", async () => {
@@ -533,19 +523,74 @@ test("reload retains Lavish receipts with unknown downstream state and storage f
   assert.match(reloaded.element("review-state").textContent, /Reload persistence unavailable/);
 });
 
-test("Send and End captures the whole board, keeps newer items and does not double-submit", async () => {
+test("Send keeps newer items and history without double submission or session ending", async () => {
   const h = harness(), p = h.page(); await tick();
   p.element("review-panel").hidden = false;
   p.q("one", "region"); p.q("two", "lane");
-  h.setMode("hold"); p.send(true); p.send(true); await tick();
+  h.setMode("hold"); p.send(); p.send(); await tick();
   assert.equal(h.posts.length, 1);
-  p.q("after end cutoff"); h.release(); await tick();
-  assert.equal(p.state().sent.length, 0, "accepted end clears history while later notes remain");
-  assert.deepEqual(p.state().queue.map((e) => e.prompt), ["after end cutoff"]);
-  assert.equal(p.element("review-panel").hidden, false, "later annotation keeps board open");
-  h.setMode("success"); p.send(true); await tick();
-  assert.equal(p.element("review-panel").hidden, true);
+  assert.equal(h.posts[0].end, false);
+  p.q("after cutoff"); h.release(); await tick();
+  assert.equal(p.state().sent.length, 1);
+  assert.deepEqual(p.state().queue.map((e) => e.prompt), ["after cutoff"]);
+  assert.equal(p.element("review-panel").hidden, false);
+  h.setMode("success"); p.send(); await tick();
+  assert.equal(p.element("review-panel").hidden, false);
   assert.notEqual(h.posts[0].batchId, h.posts[1].batchId);
+});
+
+test("Review clear removes only delivered history while preserving drafts, captures and sibling calls", async () => {
+  for (const phone of [false, true]) {
+    const h = harness(), p = h.page(); await tick();
+    p.setDesktop(!phone);
+    p.q("Delivered example-app note"); p.send(); await tick();
+    // Distinct receipt postures all remain history, independent of uncertain submissions.
+    vm.runInContext(`sent.push(...["received", "handling", "failed", "unavailable"].map((state, index) => ({...sent[0], id: "receipt-" + index, state}))); update()`, p.context);
+    h.setMode("fail"); p.q("Unconfirmed acme note"); p.send(); await tick();
+    h.setMode("hold"); p.q("Pending example-app note"); p.send(); await tick();
+    p.q("Unsent queued draft");
+    p.element("review-message").value = "Current unsent draft";
+    vm.runInContext(`selected = { id: "example-app", label: "Example app", route: "#overview", version: config.version }; window.quarterdeckCallQueue = { list: () => [{key: "sibling", phase: "confirm", text: "Keep option meaning"}] }; update()`, p.context);
+    const before = p.state();
+    assert.equal(p.element("review-clear-messages").disabled, false);
+    if (phone) {
+      vm.runInContext('setReviewTab("conversation")', p.context);
+      assert.equal(p.element("review-history-actions").hidden, true);
+      p.element("review-history-tab").click();
+    }
+    assert.equal(p.element("review-history-actions").hidden, false);
+    p.element("review-clear-messages").click();
+    const after = p.state();
+    assert.equal(after.sent.length, 0);
+    assert.deepEqual({...after, sent: before.sent}, before, "only the history array changes in persisted state");
+    assert.equal(vm.runInContext('callQueue()[0].key', p.context), "sibling");
+    assert.equal(h.posts.length, 3, "clearing does not submit anything");
+    assert.equal(p.element("review-clear-messages").disabled, true);
+    h.release(true); await tick();
+    assert.equal(p.state().sent.length, 0);
+    assert.equal(p.state().retryBatches.length, 2, "failure after clearing keeps captured IDs");
+    const restored = h.page(); await tick();
+    assert.equal(restored.state().sent.length, 0);
+    assert.equal(restored.state().queue[0].prompt, "Unsent queued draft");
+    assert.equal(restored.state().message, "Current unsent draft");
+    assert.deepEqual(restored.state().retryBatches, p.state().retryBatches);
+  }
+});
+
+test("receipt arriving after Review clear adds new history and a legacy end retry cannot clear or close", async () => {
+  const h = harness(), p = h.page(); await tick();
+  p.element("review-panel").hidden = false;
+  p.q("Delivered earlier"); p.send(); await tick();
+  p.q("Pending later"); h.setMode("hold"); p.send(); await tick();
+  p.element("review-clear-messages").click();
+  h.release(); await tick();
+  assert.equal(p.state().sent.length, 1, "a later durable acceptance appears independently");
+  h.setMode("success");
+  vm.runInContext('retryBatches.push({id: crypto.randomUUID(), payload: {...sent[0], schema: "fm-agentos-review.v2", batchId: "legacy-end", sessionId: "", end: true}})', p.context);
+  await vm.runInContext('submitBatch(retryBatches[0])', p.context);
+  assert.equal(h.posts.at(-1).end, true, "legacy identity retries unchanged");
+  assert.equal(p.state().sent.length, 2);
+  assert.equal(p.element("review-panel").hidden, false);
 });
 
 test("mobile blank strip regression: 48px header offset eliminates gap, and annotation exclusion is distinct from stage geometry", async () => {
@@ -704,4 +749,28 @@ test("phone composer re-enables Send when an unreachable server returns", async 
   assert.equal(h.posts.length, 1);
   assert.deepEqual(h.posts[0].entries.map((entry) => entry.prompt), ["Synthetic phone message"]);
   assert.equal(p.element("review-message").value, "");
+});
+
+test("single Send and keyboard flush saved work and keep call routes independent", async () => {
+  const h = harness(), p = h.page(); await tick();
+  const calls = [{key: "example-app-answer", phase: "confirm", text: "Choose option A"}, {key: "acme-note", phase: "confirm", text: "Ordinary thread note"}];
+  const options = []; let flushes = 0;
+  p.context.window.quarterdeckCallQueue = { list: () => calls, send: async (value) => { options.push(value); return false; } };
+  p.context.window.quarterdeckInboxPending = { count: () => 1, flush: () => { flushes++; } };
+  p.q("Staged review note");
+  p.element("review-message").value = "Current review message";
+  p.element("review-message").listeners.input();
+  p.element("review-message").listeners.keydown({key: "Enter", metaKey: true, preventDefault() {}});
+  await tick();
+  assert.equal(flushes, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(options)), [{ immediate: true }]);
+  assert.deepEqual(h.posts[0].entries.map((entry) => entry.prompt), ["Staged review note", "Current review message"]);
+  assert.equal(h.headers[0]["x-quarterdeck-send-now"], "1");
+  assert.equal(calls.length, 2, "partial call failure keeps sibling state with its provider");
+  p.context.window.quarterdeckCallQueue = { list: () => [] };
+  vm.runInContext("update()", p.context);
+  assert.equal(p.element("review-send").disabled, false, "saved pending work alone enables Send");
+  p.send(); await tick();
+  assert.equal(flushes, 2);
+  assert.equal(h.posts.length, 1, "pending-only send creates no empty review batch");
 });
