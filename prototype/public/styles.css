@@ -3038,5 +3038,5 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
   }
 }
 
-.notification-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.notification-controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 .notification-controls button { min-height: 40px; }
