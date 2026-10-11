@@ -39,6 +39,8 @@ test("status and focus never register, enroll or request permission; tap enrolls
   assert.match(f.elements.get("status").textContent, /best effort/);
   await f.click("disable"); assert.deepEqual(f.calls.slice(-3), ["server-disable", "unsubscribe", "unregister"]);
   assert.match(f.elements.get("status").textContent, /Disabled/);
+  assert.equal(f.elements.get("enable").textContent, "Enable notifications");
+  assert.equal(f.elements.get("disable").disabled, true);
 });
 
 for (const prompt of ["default", "denied"]) test(`permission ${prompt} does not enroll and later settings grant can be reconciled`, async () => {

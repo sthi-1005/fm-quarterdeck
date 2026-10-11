@@ -77,15 +77,18 @@
     disable.addEventListener("click", async () => {
       if (busy) return;
       busy = true; enable.disabled = disable.disabled = check.disabled = true;
+      let disabled = false;
       try {
-        await api("disable"); // Cancel durable server work before removing browser delivery.
+        config = await api("disable"); // Cancel durable server work before removing browser delivery.
         const worker = await registration();
         const subscription = await worker?.pushManager.getSubscription();
         if (subscription) await subscription.unsubscribe();
         await worker?.unregister();
+        disabled = true;
+        enable.textContent = "Enable notifications";
         status.textContent = "Disabled. OS permission may remain granted in settings.";
-      } catch { status.textContent = "Could not fully disable. Connect to the private network and retry; check browser settings too."; }
-      finally { busy = false; check.disabled = false; enable.disabled = false; disable.disabled = false; }
+      } catch { status.textContent = "Could not fully disable. Connect to the private network and retry, or ask the operator to repair configuration; check browser settings too."; }
+      finally { busy = false; check.disabled = false; enable.disabled = !config?.configured || browser.Notification?.permission === "denied"; disable.disabled = disabled; }
     });
     check.addEventListener("click", () => { void refresh(); });
     browser.addEventListener("focus", () => { void refresh(); });
