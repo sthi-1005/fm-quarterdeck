@@ -1800,7 +1800,7 @@ mark { background: #fdf0cd; color: var(--text); padding: 0 2px; border-radius: 2
 
 .review-form-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 #review-form .review-form-header label { margin-top: 0; }
-#review-annotation .review-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+#review-annotation .review-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 #review-annotation .review-actions button { min-width: 0; }
 #review-annotation #review-form-close { min-height: 32px; margin-left: 0; }
 

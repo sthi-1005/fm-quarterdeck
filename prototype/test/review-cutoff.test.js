@@ -774,3 +774,29 @@ test("single Send and keyboard flush saved work and keep call routes independent
   assert.equal(flushes, 2);
   assert.equal(h.posts.length, 1, "pending-only send creates no empty review batch");
 });
+
+test("Annotate follows the composer at tablet widths and uses the same draft across breakpoints", async () => {
+  const p = harness().page(); await tick();
+  const action = p.element("review-select-location");
+  const actions = { append(node) { node.parentElement = this; }, insertBefore(node) { node.parentElement = this; } };
+  const header = { insertBefore(node) { node.parentElement = this; } };
+  p.context.document.querySelector = (selector) => selector === "#review-form .review-actions" ? actions
+    : selector === ".review-header-actions" ? header : { textContent: "" };
+  p.q("Staged example-app annotation");
+  p.element("review-message").value = "Current acme draft";
+  p.element("review-message").listeners.input();
+  const before = p.state();
+  for (const width of [600, 768, 1024, 600, 1024]) {
+    p.setDesktop(width > 720);
+    vm.runInContext("placeSelectionAction()", p.context);
+    assert.equal(action.parentElement, width > 720 ? actions : header, `${width}px places the existing control with the active composer`);
+    assert.deepEqual(p.state(), before, "placement leaves queue, captures and drafts intact");
+    action.click();
+    assert.equal(vm.runInContext("pickingRegion", p.context), true);
+    assert.equal(action.textContent, "Select on page");
+    action.click();
+    assert.equal(vm.runInContext("pickingRegion", p.context), false);
+    assert.equal(p.state().message, "Current acme draft");
+    assert.deepEqual(p.state().queue, before.queue);
+  }
+});
