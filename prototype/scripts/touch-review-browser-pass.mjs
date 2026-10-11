@@ -58,7 +58,7 @@ const swipe = async (point, dx = -90, dy = 0) => {
 };
 const evidence = async label => {
   const events = await evaluate('window.touchEvidence');
-  assert.ok(events.some(e => e.type === 'touchstart' && e.trusted), label + ': trusted touch start');
+  assert.ok(events.some(e => e.type === 'touchstart' && e.trusted), label + ': trusted touch start ' + JSON.stringify(events));
   assert.ok(events.some(e => e.type === 'pointerdown' && e.pointer === 'touch' && e.trusted), label + ': trusted touch pointer');
   assert.ok(events.every(e => e.trusted), label + ': no DOM-dispatched imitation');
   results.push({ label, events });
@@ -90,7 +90,10 @@ try {
   await recorder();
   for (const width of [390, 820]) {
     await browser('emulate', '--viewport', `${width}x844x1,mobile,touch`);
-    await reset();
+    // Axi viewport emulation may reload the document; bind proof listeners only
+    // after that fresh exact revision is ready, before issuing native input.
+    await until(`document.querySelectorAll('article.message').length>=24 && window.FM_BOOT_REVISION===${JSON.stringify(head)}`);
+    await recorder(); await reset();
     const selector = 'article.message:last-child .message-content p';
     const point = await locate(selector);
     const expected = await evaluate(`window.quarterdeckMessageContexts.get(document.querySelector(${JSON.stringify(selector)}).closest('article')).recordId`);
