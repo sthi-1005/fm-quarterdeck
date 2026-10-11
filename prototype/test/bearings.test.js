@@ -176,6 +176,78 @@ async function syntheticHome(context, script) {
   return home;
 }
 
+test("merge eligibility follows current selected-home holds and released source transitions", async (context) => {
+  const home = await syntheticHome(context, 'cat "$FM_HOME/fixture.json"');
+  const run = createSnapshotRunner(home);
+  const task = "example-app-release";
+  const contribution = { task, kind: "pr", url: "https://example.invalid/example-org/example-app/pull/1", owner: "(main)", hold: null, checked_at: "2026-10-10T12:00:00Z" };
+  const sibling = { ...contribution, task: "example-app-sibling", url: "https://example.invalid/example-org/example-app/pull/2" };
+  const decision = { id: "example-app-choice", owner: "(main)", summary: "Choose the example-app window" };
+  const encoded = Buffer.from("Hold this task; do not merge yet.").toString("base64");
+  const raw = { schema: "fm-bearings.v1", decisions_open: [decision], contributions: { captain: [contribution, sibling], known: 2, checked: 2, proven_clear: false }, omitted: [] };
+  const read = async (metadata, captain = [contribution, sibling], body = "") => {
+    const ledger = `## In Flight\n- [ ] ${task} - Release example-app ${metadata}\n${body}`;
+    await writeFile(path.join(home, "data/backlog.md"), ledger);
+    await writeFile(path.join(home, "fixture.json"), JSON.stringify({ ...raw, contributions: { ...raw.contributions, captain } }));
+    const model = normalizeSnapshot(JSON.parse(await run()));
+    assert.equal(await readFile(path.join(home, "data/backlog.md"), "utf8"), ledger);
+    assert.doesNotMatch(JSON.stringify(model), /fm-quarterdeck-bearings-/);
+    return model;
+  };
+  const initial = await read("(repo: example-app)");
+  const otherCards = initial.cards.filter(card => card.task !== task);
+  assert.ok(initial.cards.some(card => card.key === `merge:${task}`));
+  for (const metadata of [
+    `(hold: fm-hold-v1:${encoded}) (hold-kind: captain)`,
+    `(hold: fm-hold-v1:${encoded}) (hold-kind: captain) (hold-until: 2099-01-01)`,
+  ]) {
+    const model = await read(metadata);
+    assert.ok(!model.cards.some(card => card.key === `merge:${task}`), "a current captain hold excludes Merge even when not in decisions_open");
+    assert.deepEqual(model.cards, otherCards, "decision and sibling Merge remain unchanged");
+  }
+  // The producer excludes unheld draft, closed and merged observations from captain.
+  for (const state of ["draft", "closed", "merged"]) {
+    const model = await read("(repo: example-app)", [sibling]);
+    assert.deepEqual(model.cards, otherCards, state);
+  }
+  const released = await read("(hold-kind: parked)", undefined, "  Resolution recorded by fm-captain-hold.\n  Resolution mode: released\n");
+  assert.deepEqual(released.cards, initial.cards, "release restores the eligible source contribution deterministically");
+  const prose = await read('Document "(hold-kind: captain)" syntax (repo: example-app)');
+  assert.deepEqual(prose.cards, initial.cards, "quoted prose is not authoritative hold metadata");
+});
+
+test("contribution holds cannot become Merge when their decision is omitted or belongs to another task", async () => {
+  const raw = await fixture("two-calls");
+  const merge = raw.contributions.captain.find(row => row.task === "beta-merge");
+  const otherCards = normalizeSnapshot(raw).cards.filter(card => card.task !== merge.task);
+  for (const owner of ["(main)", "registered-mate"]) {
+    merge.owner = owner;
+    merge.hold = "example-app-gate";
+    assert.deepEqual(normalizeSnapshot(raw).cards, otherCards, "structured contribution hold suppresses only its false Merge projection");
+  }
+  merge.hold = null;
+  assert.ok(normalizeSnapshot(raw).cards.some(card => card.task === merge.task), "released contribution remains eligible");
+});
+
+test("selected-home holds match exact task and main owner without hiding decisions", async () => {
+  const raw = await fixture("two-calls");
+  const merge = raw.contributions.captain.find(row => row.task === "beta-merge");
+  const before = normalizeSnapshot(raw).cards;
+  for (const hold of [
+    { task: "beta", open: true, source: "data/backlog.md" },
+    { task: merge.task, open: false, source: "data/backlog.md" },
+    { task: merge.task, open: true, source: "other-source" },
+  ]) {
+    raw.quarterdeck_holds = [hold];
+    assert.deepEqual(normalizeSnapshot(raw).cards, before);
+  }
+  raw.quarterdeck_holds = [{ task: merge.task, open: true, source: "data/backlog.md" }, { task: "alpha-call", open: true, source: "data/backlog.md" }];
+  merge.owner = "registered-mate";
+  assert.equal(normalizeSnapshot(raw).cards.length, before.length, "root hold must not hide a sibling owner's same task id");
+  merge.owner = "(main)";
+  assert.deepEqual(normalizeSnapshot(raw).cards, before.filter(card => card.task !== merge.task), "only the main owner's exact Merge is removed; decisions remain");
+});
+
 test("runner invokes only the guarded snapshot with --json under FM_HOME and shares one run", async (context) => {
   const raw = await fixture("two-calls");
   const home = await syntheticHome(context, `echo "$# $*|$FM_HOME" >> "$FM_HOME/calls"\nsleep 0.2\ncat "$FM_HOME/fixture.json"`);
