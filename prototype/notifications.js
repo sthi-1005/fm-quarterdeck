@@ -63,13 +63,13 @@ export function observeNotifications(state, view, now) {
   if (!view) return;
   const active = Object.entries(state.subscriptions).filter(([, sub]) => sub.enabled);
   const recipients = active.filter(([, sub]) => sub.baseline);
-  for (const [identity, { card, actionable, resolved }] of view) {
+  for (const [identity, { card, actionable }] of view) {
     if (state.seen[identity]) {
       const aliases = state.seen[identity].aliases ||= [state.seen[identity].key];
       if (!aliases.includes(card.key)) aliases.push(card.key);
       continue;
     }
-    if (resolved) continue;
+    // Positive closure is a durable identity even before a filed card is seen.
     const entry = { key: card.key, aliases: [card.key], detectedAt: now, sourceClock: card.clock?.at || null, disposition: !recipients.length ? "baseline" : !actionable ? "suppressed" : "event" };
     state.seen[identity] = entry;
     if (entry.disposition !== "event") continue;

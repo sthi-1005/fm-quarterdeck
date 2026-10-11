@@ -60,6 +60,19 @@ test("fresh enrollment baselines old calls, allocates one per producer/task, per
   assert.equal((await (await import("node:fs/promises")).stat(f.paths.state)).mode & 0o777, 0o600);
 });
 
+test("a first-seen closed hold stays suppressed through restart and rehold", async (t) => {
+  const f = await fixture(t); await f.service.enroll(device(), subscription());
+  const evidence = input([], f.now);
+  evidence.model.holds = [{ source: "data/backlog.md", task: "closed-before-card", closed: true, open: false }];
+  f.setEvidence(evidence); await f.service.tick();
+  await f.restart();
+  f.cards([card("closed-before-card", "(main)", "merge")]); await f.service.tick();
+  assert.equal(f.sends.length, 0, "positive closure prevents a reopened episode from alerting");
+  const state = await f.owner.read();
+  assert.equal(state.seen[filedIdentity(card("closed-before-card"))].disposition, "suppressed");
+  assert.equal(Object.keys(state.events).length, 0);
+});
+
 test("new device baselines current calls without replaying queued events", async (t) => {
   const f = await fixture(t); await f.service.enroll(device(), subscription());
   f.result(new Error("uncertain")); f.cards([card("new-call")]); await f.service.tick();
