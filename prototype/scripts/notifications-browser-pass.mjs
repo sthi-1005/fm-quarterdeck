@@ -94,6 +94,9 @@ try {
       quarterdeckNotifications.mount(fake, remounted); await new Promise(resolve => setTimeout(resolve, 20));
       if (remounted.querySelector('[data-notification-preference]').checked) throw Error('reload lost explicit off');
       fixture = remounted;
+      const box = fixture.querySelector('[data-notification-preference]');
+      const boxRect = box.getBoundingClientRect(), labelRect = box.closest('label').getBoundingClientRect();
+      if (boxRect.width < 16 || boxRect.width > 24 || boxRect.height > 24 || labelRect.height < 44) throw Error('checkbox inherited numeric-input sizing or lost its touch target');
       const buttons = [...fixture.querySelectorAll('button')];
       if (innerWidth > 1000 && buttons.some(button => Math.abs(button.getBoundingClientRect().top - buttons[0].getBoundingClientRect().top) > 1)) throw Error('desktop controls need the full panel width');
       for (const button of buttons) {
