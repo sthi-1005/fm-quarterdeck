@@ -495,15 +495,7 @@ const describedHint = (text, reply) => publicText(replyDescription(text, reply),
 export function chatCard(ask) {
   let options = ask.replies.map((reply, index) => ({ value: `reply-${index + 1}`, label: publicText(reply, 200), hint: describedHint(ask.text, reply) || "Firstmate's suggested reply" })).filter((option) => option.label);
   if (!options.length && (ask.kind === "decision" || ask.kind === "approval")) {
-    const fromText = publishOptions(enumeratedLetterOptions(ask.text), publicText);
-    if (fromText.length) {
-      options = fromText;
-    } else {
-      options = [
-        { value: "yes", label: "Yes", hint: "Approve or confirm" },
-        { value: "no", label: "No", hint: "Reject or discard" }
-      ];
-    }
+    options = publishOptions(enumeratedLetterOptions(ask.text), publicText);
   }
   const card = { key: ask.key, type: "chat", kind: ask.kind, marker: ask.marker, summary: publicText(ask.text, Infinity) || `${ask.marker} (no text)`, replies: options.map((option) => option.label),
     source: ask.source.split("/")[0], transcript: { offset: ask.offset, part: ask.part }, clock: { label: "Asked", at: ask.at },
@@ -558,26 +550,8 @@ export function composeCallModel(base, asks, chatView) {
       rest = withLinkedChoices(withoutRev, entries);
       modified = true;
     }
-    
-    // Fallback: derive Yes/No options if the card is a decision and still has no structured options
-    if (rest.type === "decision" && rest.answer && (!rest.answer.options || !rest.answer.options.length) && !/credential|authentication|access|login/i.test(`${rest.verb || ""} ${rest.summary || ""}`)) {
-      if (!modified) {
-        const { rev, ...withoutRev } = rest;
-        rest = withoutRev;
-      }
-      rest = {
-        ...rest,
-        answer: {
-          ...rest.answer,
-          options: [
-            { value: "yes", label: "Yes", hint: "Approve or confirm" },
-            { value: "no", label: "No", hint: "Reject or discard" }
-          ]
-        }
-      };
-      modified = true;
-    }
-    
+    // Missing choices stay text-only. The view already offers explicit linked replies;
+    // a decision/approval marker alone cannot establish a boolean question.
     if (modified) {
       return { ...rest, rev: shortHash(rest) };
     }

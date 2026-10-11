@@ -149,6 +149,7 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
   A selected Merge now with a typed note is relayed with empty `selection` and `note:"merge - <typed note>"`, so keyed intake reads instruction text.
   The answer endpoint still treats a note-only body as instruction text.
   The card does not send that body: text with no option selected is a thread note.
+- Missing options never default to Yes/No. Explicit named replies from linked chat asks remain radios sent as the selected label in the captain's own words. Explicit boolean options remain Yes/No; unstructured asks keep the text box and full question without guessed alternatives.
 
 **Captain flow** (`public/bearings-answer-form.js`; state per card key in memory and `sessionStorage` under `fm-quarterdeck-call-answer.v1:<key>`):
 

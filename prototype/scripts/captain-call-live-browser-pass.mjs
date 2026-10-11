@@ -251,12 +251,12 @@ try {
   const holdReason = "Ship the ledger change only after the captain picks a window.";
   extraBacklog = `- [ ] hold-reason - Choose a window (repo: quarterdeck) (hold: fm-hold-v1:${Buffer.from(holdReason).toString("base64")}) (hold-kind: captain)\n`;
   raw.decisions_open.push({ id: "hold-reason", key: "hold-reason", summary: "Choose", owner: "(main)", verb: "captain-hold" });
-  await appendFile(transcriptPath, chatRecord("synthetic-ask-reason", 'DECISION NEEDED: [task:hold-reason] reply "option A" or "option B".'));
+  await appendFile(transcriptPath, chatRecord("synthetic-ask-reason", 'DECISION NEEDED: [task:hold-reason] reply "Staged rollout" or "Release now".'));
   await change();
-  await until(`(() => { const card=document.querySelector('[data-call-key="decision:hold-reason"]'); if(!card) return false; const title=card.querySelector('h3'); const about=[...card.querySelectorAll('.call-context dd')].map(node=>node.textContent).join(' '); const ask=card.querySelector('.call-context-ask'); return !!(title && title.textContent==='${holdReason}' && about.includes('quarterdeck') && !about.includes('Repository not recorded') && ask && !ask.textContent.includes('[task:') && card.querySelectorAll('[data-call-reply]').length===2 && card.innerHTML.indexOf('data-call-reply')>card.innerHTML.indexOf(title.textContent)); })()`);
+  await until(`(() => { const card=document.querySelector('[data-call-key="decision:hold-reason"]'); if(!card) return false; const title=card.querySelector('h3'); const about=[...card.querySelectorAll('.call-context dd')].map(node=>node.textContent).join(' '); const ask=card.querySelector('.call-context-ask'); return !!(title && title.textContent==='${holdReason}' && about.includes('quarterdeck') && !about.includes('Repository not recorded') && ask && !ask.textContent.includes('[task:') && card.querySelectorAll('input[type=radio]').length===2 && [...card.querySelectorAll('input[type=radio]')].map(input=>input.dataset.callOptionLabel).join('|')==='Staged rollout|Release now' && card.innerHTML.indexOf('data-call-reply')>card.innerHTML.indexOf(title.textContent)); })()`);
   for (const width of [1280, 390]) {
     await browser("resize", String(width), "844");
-    await evaluate(`() => { document.querySelector('[data-call-key="decision:hold-reason"]').scrollIntoView({block:'center'}); return 'reason card ${width}'; }`);
+    await evaluate(`() => { const card=document.querySelector('[data-call-key="decision:hold-reason"]'); card.scrollIntoView({block:'center'}); if(document.documentElement.scrollWidth>innerWidth||card.scrollWidth>card.clientWidth+1)throw Error('named choices overflow'); for(const option of card.querySelectorAll('.call-opt')){const box=option.getBoundingClientRect(); if(box.height<44||box.left<0||box.right>innerWidth+1)throw Error('named choice touch target or containment');} if(card.querySelector('input:checked'))throw Error('named choice was preselected'); return 'named choices ${width}'; }`);
     await browser("screenshot", path.join(proof, `captain-decision-reason-${width}.png`));
   }
   raw.decisions_open = raw.decisions_open.filter((row) => row.id !== "hold-reason");
