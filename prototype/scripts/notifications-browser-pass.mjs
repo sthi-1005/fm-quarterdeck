@@ -71,11 +71,14 @@ try {
       fixture.querySelector('[data-notification-disable]').click(); await new Promise(resolve => setTimeout(resolve, 20));
       if (calls.slice(-3).join() !== 'server-disable,unsubscribe,unregister') throw Error('disable ordering');
       if (!fixture.textContent.includes('Disabled.')) throw Error('missing disabled status');
-      for (const button of fixture.querySelectorAll('button')) {
+      const buttons = [...fixture.querySelectorAll('button')];
+      if (innerWidth > 1000 && buttons.some(button => Math.abs(button.getBoundingClientRect().top - buttons[0].getBoundingClientRect().top) > 1)) throw Error('desktop controls need the full panel width');
+      for (const button of buttons) {
         const r = button.getBoundingClientRect(); if (r.width < 1 || r.height < 30 || r.right > innerWidth + 1 || r.left < 0) throw Error('button overflow');
       }
       if (document.documentElement.scrollWidth > innerWidth + 1) throw Error('page horizontal overflow');
       if ((await navigator.serviceWorker.getRegistrations()).length) throw Error('mock flow registered a real worker');
+      fixture.querySelector('[data-notification-status]').scrollIntoView({ block: 'center' });
       return 'PASS mocked opt-in, disable and layout ${width}x${height}; no OS/provider proof';
     }`);
     if (process.env.FM_PUSH_PROOF_DIR) {
