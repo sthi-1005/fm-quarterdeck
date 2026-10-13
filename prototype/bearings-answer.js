@@ -1,6 +1,8 @@
 import { shortHash } from "./bearings.js";
-import { inboxNoteState, inboxReceipts, noteWithRequestId } from "./inbox.js";
-import { receiptReply } from "./receipt-provenance.js";
+import { inboxReceipts, noteWithRequestId } from "./inbox.js";
+import { answerReceiptState } from "./receipt-provenance.js";
+import { displayAnswer } from "./call-note-evidence.js";
+export { displayAnswer } from "./call-note-evidence.js";
 
 // Captain's Call answers (BEARINGS.md "Answers"). Quarterdeck only relays the captain's
 // explicit answer to Firstmate as an fm-bearings-answer.v1 envelope, the same context the
@@ -27,9 +29,6 @@ function clipBytes(text, max) {
   for (const char of text) { if (bytes(out + char) > max - 3) break; out += char; }
   return `${out}…`;
 }
-// What the board shows and caps: the option value, its note, or the note alone.
-export const displayAnswer = (selection, note) => selection ? (note ? `${selection} - ${note}` : selection) : note;
-
 // Shape and size checks that need no model. The note keeps the captain's words; only
 // line endings are normalised, and other control characters are refused.
 function parseBody(body) {
@@ -145,14 +144,7 @@ export function createAnswerRelay({ home, note = noteWithRequestId, receipts = i
       if (!list.length) return { answers: {} };
       const data = await receipts(home);
       return { answers: Object.fromEntries(list.map((id) => {
-        const request = answerRequestId(id);
-        const state = inboxNoteState(data, request) || { state: "unknown" };
-        const note = data.handled.find(entry => entry.request_id === request) || data.pending.find(entry => entry.request_id === request);
-        if (note && state.state === "replied") {
-          const { scope } = receiptReply(data, note);
-          return [id, { ...state, replyScope: scope, ...(scope === "combined" ? { reply: "" } : {}) }];
-        }
-        return [id, state];
+        return [id, answerReceiptState(data, answerRequestId(id))];
       })) };
     },
   };
