@@ -10,7 +10,6 @@ const escapeHtml = (value) => String(value)
 
 const stateLabel = (state) => state.replaceAll("-", " ");
 const statusChoiceLabel = (state) => stateLabel(state).replace(/^./, (letter) => letter.toUpperCase());
-const money = ({ currency, amount }) => `${currency} ${amount}`;
 const { KEY: MESSAGE_TYPES_KEY, TYPES: MESSAGE_TYPES, hasStored: hasStoredMessageTypes, stored: storedMessageTypes, typeId: messageTypeId, label: messageTypeLabel, icon: messageTypeIcon, svg: messageTypeSvg } = window.messageKinds;
 const MESSAGE_FORMAT_KEY = "fm-agentos-message-format-v1";
 const { normalize: normalizeMessageFontSize, stored: storedMessageFontSize, rem: messageFontSizeRem, step: stepMessageFontSizeValue, bounds: messageFontSizeBounds, persist: persistMessageFontSize } = window.messageFontSizePrefs;
@@ -407,14 +406,15 @@ let transcriptPage = null;
 let previousPageCount = null;
 let transcriptSelection = "";
 let transcriptQuery = "";
-let expenseEntries = [];
-let expenseSort = { key: "date", direction: "desc" };
 const TRANSCRIPT_PAGE_SIZE = 200;
 const reviewId = (value) => {
   let hash = 2166136261;
   for (const char of String(value)) hash = Math.imul(hash ^ char.codePointAt(0), 16777619);
   return (hash >>> 0).toString(36);
 };
+const expensesFeature = window.expenseFeature.createExpenseController({
+  document, fetchJson, projectCosts: (data) => window.costViewModel.project(data), escapeHtml, reviewId,
+});
 
 function storedMessageFormat() {
   try {
@@ -1229,82 +1229,10 @@ function renderWorkSplit(split = workSplitData) {
     : '<p class="empty panel">No large projects match these filters.</p>';
 }
 
-function renderExpenseRows() {
-  const direction = expenseSort.direction === "asc" ? 1 : -1;
-  const sorted = [...expenseEntries].sort((a, b) => {
-    if (expenseSort.key === "amount") {
-      const amountOrder = BigInt(a.amount.replace(".", "")) < BigInt(b.amount.replace(".", "")) ? -1
-        : BigInt(a.amount.replace(".", "")) > BigInt(b.amount.replace(".", "")) ? 1 : 0;
-      return amountOrder * direction || a.currency.localeCompare(b.currency);
-    }
-    return String(a[expenseSort.key] || "").localeCompare(String(b[expenseSort.key] || ""), undefined, { numeric: true }) * direction;
-  });
-  document.querySelectorAll("[data-expense-column]").forEach((heading) => {
-    const active = heading.dataset.expenseColumn === expenseSort.key;
-    heading.setAttribute("aria-sort", active ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none");
-  });
-  const sortLabel = ({ projectName: "project", description: "description / note", confidence: "confidence / basis" })[expenseSort.key] || expenseSort.key;
-  $("#expense-sort-status").textContent = `Sorted by ${sortLabel} ${expenseSort.direction === "asc" ? "ascending" : "descending"}`;
-  $("#expense-entries").innerHTML = sorted.length ? sorted.map((entry) => `
-    <tr data-review-id="expense:${reviewId(entry.id || [entry.date, entry.projectId, entry.description].join(':'))}">
-      <td data-label="Date"><span class="expense-cell-label">Date</span><time datetime="${escapeHtml(entry.date)}">${escapeHtml(entry.date)}</time></td>
-      <td data-label="Project"><span class="expense-cell-label">Project</span><strong>${escapeHtml(entry.projectName)}</strong></td>
-      <td data-label="Category"><span class="expense-cell-label">Category</span><span class="category-chip">${escapeHtml(entry.category)}</span></td>
-      <td class="numeric amount${entry.amount.startsWith("-") ? " credit" : ""}" data-label="Amount"><span class="expense-cell-label">Amount</span>${escapeHtml(entry.amount)}</td>
-      <td data-label="Currency"><span class="expense-cell-label">Currency</span>${escapeHtml(entry.currency)}</td>
-      <td class="expense-description" data-label="Description / note"><span class="expense-cell-label">Description / note</span>${escapeHtml(entry.description)}</td>
-      <td data-label="Confidence / basis"><span class="expense-cell-label">Confidence / basis</span>${entry.confidence ? `<span class="confidence-label">${escapeHtml(entry.confidence)}</span>` : '<span class="muted">—</span>'}</td>
-    </tr>`).join("") : '<tr><td colspan="7" class="empty compact">No expenses recorded. Add entries to your selected private expense ledger.</td></tr>';
-}
-
-function renderExpenseBreakdown(selector, groups, emptyMessage) {
-  $(selector).innerHTML = groups.length ? groups.map((group) => `
-    <div class="expense-row" data-review-id="breakdown:${reviewId(`${selector}:${group.name}`)}">
-      <span>${escapeHtml(group.name)}</span>
-      <strong>${group.totals.map(money).map(escapeHtml).join(" · ")}</strong>
-    </div>`).join("") : `<div class="empty compact">${emptyMessage}</div>`;
-}
-
-function renderExpenses(expenses) {
-  $("#expense-source").textContent = expenses.source;
-  $("#expense-source").classList.toggle("demo", expenses.demo);
-  $("#entry-count").textContent = `${expenses.entryCount} ledger ${expenses.entryCount === 1 ? "entry" : "entries"}; currencies are not converted`;
-  $("#overall-total").innerHTML = expenses.overall.length
-    ? expenses.overall.map((total) => `<strong>${escapeHtml(money(total))}</strong>`).join("")
-    : '<strong class="zero">—</strong>';
-  renderExpenseBreakdown("#category-expenses", expenses.categories || [], "No category totals available.");
-  renderExpenseBreakdown("#project-expenses", expenses.projects || [], "No project totals available.");
-  expenseEntries = expenses.entries || [];
-  renderExpenseRows();
-
-  const notice = $("#expense-notice");
-  notice.classList.toggle("hidden", !expenses.error && !expenses.demo);
-  notice.textContent = expenses.error || (expenses.demo
-    ? "Showing sample costs because the canonical expenses/ledger.json is not present. It will be used automatically when available."
-    : "");
-}
-
-function renderCosts(data) {
-  const cards = window.costViewModel.project(data);
-  $("#cost-panels").innerHTML = cards.map((card) => `<article class="cost-card" data-review-id="cost:${card.id}">
-    <h3>${escapeHtml(card.title)}</h3>
-    <p class="cost-status" data-state="${escapeHtml(card.status)}">${escapeHtml(card.status)}${card.partial ? " · partial" : ""}${card.stale ? " · last-known snapshot" : ""}</p>
-    ${card.reason ? `<p class="notice">${escapeHtml(card.reason)}</p>` : ""}
-    <p>Captured at: ${card.capturedAt ? escapeHtml(new Date(card.capturedAt).toLocaleString()) : "Unknown"}${card.stale ? " · stale" : ""}</p>
-    <p>Covered period: ${card.period ? `${escapeHtml(card.period.start)} – ${escapeHtml(card.period.end)} · ${escapeHtml(card.period.basis)}` : "Unknown"}</p>
-    <dl>${card.rows.map(([name, value]) => `<div><dt>${escapeHtml(name)}</dt><dd>${escapeHtml(String(value))}</dd></div>`).join("")}</dl>
-    ${card.breakdowns.map((group) => Array.isArray(group.items) ? `<details><summary>${escapeHtml(group.kind)} breakdown</summary><ul>${group.items.map((item) => `<li>${escapeHtml(item.name)} · ${escapeHtml(String(item.amount))} ${escapeHtml(item.currency)}</li>`).join("")}</ul></details>` : "").join("")}
-    ${card.id === "github" && card.breakdowns.length ? `<details><summary>Reported repository / operating system usage</summary><ul>${card.breakdowns.map((item) => `<li>${escapeHtml(item.repository)} · ${escapeHtml(item.sku)} · ${escapeHtml(String(item.minutes))} minutes</li>`).join("")}</ul></details>` : ""}
-  </article>`).join("");
-}
-let costsRefreshing = false;
-async function refreshCosts() {
-  if (costsRefreshing) return;
-  costsRefreshing = true;
-  try { renderCosts(await fetchJson("/api/costs")); }
-  catch { renderCosts({}); }
-  finally { costsRefreshing = false; }
-}
+// Temporary host bridges retain the existing refresh/render call sites.
+function renderExpenses(expenses) { expensesFeature.renderExpenses(expenses); }
+function renderCosts(data) { expensesFeature.renderCosts(data); }
+function refreshCosts() { return expensesFeature.refreshCosts(); }
 
 async function fetchJson(url) {
   let response;
@@ -2159,6 +2087,8 @@ function setContextDrawer(open) {
 }
 
 function showView(view, closedLaneId = null, { updateRoute = true } = {}) {
+  if (view === "expenses") expensesFeature.enter();
+  else expensesFeature.dispose();
   if (view !== "conversations") { captureLastViewed(); pendingKindJump = null; clearExpandedMessageTarget(); }
   feedLaneOverrideId = closedLaneId;
   document.querySelector(".workspace").dataset.view = view;
@@ -2695,16 +2625,6 @@ $("#message-format-toggle").addEventListener("click", () => {
   messageFormat = messageFormat === "markdown" ? "raw" : "markdown";
   try { localStorage.setItem(MESSAGE_FORMAT_KEY, messageFormat); } catch { /* Preference is optional. */ }
   renderFeed();
-});
-
-$(".expense-table thead").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-expense-sort]");
-  if (!button) return;
-  const key = button.dataset.expenseSort;
-  expenseSort = expenseSort.key === key
-    ? { key, direction: expenseSort.direction === "asc" ? "desc" : "asc" }
-    : { key, direction: key === "date" || key === "amount" ? "desc" : "asc" };
-  renderExpenseRows();
 });
 
 function clearTaskFilter() {
