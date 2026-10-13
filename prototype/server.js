@@ -1,5 +1,5 @@
-import { createNotificationService, notificationConfiguration } from "./notifications.js";
-import { deviceId } from "./notification-state.js";
+import { createNotificationRuntime } from "./notification-runtime.js";
+import { createNotificationHandler } from "./notification-http.js";
 import { parseReviewNote } from "./review-note.js";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
@@ -1033,18 +1033,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
     const commit = await revisionResolver.snapshot(force);
     return commit === servedCommit ? commit : null;
   };
-  const notifications = createNotificationService({
-    configuration: notificationConfiguration(env), source: bearingsSource, revision: syncRevision,
-    initializeEvidence: async () => { await inboxBatcher.initializeEvidence(); await procrastination.initializeEvidence(); },
-    evidence: async () => {
-      try {
-        const [input, pending, parked] = await Promise.all([bearingsSource.notificationEvidence(), inboxBatcher.pending({ strict: true }), procrastination.evidence()]);
-        return { ...input, pending, procrastination: parked };
-      } catch { return { available: false }; }
-    },
-    ...notificationOptions,
-  });
-  const notificationRate = { at: 0, count: 0 };
+  const notifications = createNotificationRuntime(env, { bearingsSource, syncRevision, inboxBatcher, procrastination, notificationOptions });
   const lastDataRead = new Map();
   // In-flight and confirmed sends in this gateway process share the same receipt.
   // The receiver must also deduplicate messageId durably across gateway restarts.
@@ -1068,6 +1057,7 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
   // Live Captain's Call streams (host only; previews poll /api/bearings?since).
   const streamOptions = { heartbeatMs: 20000, recycleMs: 600000, maxStreams: 16, ...bearingsStream };
   const streams = new Set();
+  const handleNotifications = createNotificationHandler({ env, notifications, authorized, sendJson, deploymentTier, dev });
   const server = http.createServer(async (request, response) => {
     let release;
     let used = false;
@@ -1083,30 +1073,8 @@ export function createServer(env = process.env, { publicDir = PUBLIC_DIR, quotaR
       const registeredSelection = preview ? registry.get(preview.id) : registry.get(hostId);
       const selected = registeredSelection?.id === hostId ? { ...registeredSelection, commit } : registeredSelection;
       const selectedCommit = selected?.commit || commit;
-      if (url.pathname.startsWith("/api/notifications/")) {
-        const pushOrigin = env.FM_QUARTERDECK_PUSH_ORIGIN;
-        const permitted = pushOrigin ? request.headers.host === pushOrigin.slice("https://".length) && request.headers.origin === pushOrigin : authorized(request);
-        if (!permitted || deploymentTier || dev || preview) { await sendJson(request, response, 403, { error: "Notifications require the stable private origin" }); return; }
-        if (request.method !== "POST" || url.search || !["/api/notifications/status", "/api/notifications/enroll", "/api/notifications/disable"].includes(url.pathname) || !/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] || "")) { await sendJson(request, response, 400, { error: "Notification JSON operation required" }); return; }
-        const minute = Math.floor(Date.now() / 60000);
-        if (minute !== notificationRate.at) { notificationRate.at = minute; notificationRate.count = 0; }
-        if (++notificationRate.count > 30) { await sendJson(request, response, 429, { error: "Notification request limit reached" }); return; }
-        let text = "";
-        for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > 4096) { await sendJson(request, response, 413, { error: "Subscription too large" }); return; } }
-        let body;
-        try { body = JSON.parse(text); } catch {}
-        const enroll = url.pathname.endsWith("/enroll");
-        if (!body || Object.keys(body).sort().join(",") !== (enroll ? "id,subscription" : "id") || !deviceId(body.id)) { await sendJson(request, response, 400, { error: "Exact installation fields required" }); return; }
-        try {
-          const value = await (enroll ? notifications.enroll(body.id, body.subscription) : url.pathname.endsWith("/disable") ? notifications.disable(body.id) : notifications.status(body.id));
-          await sendJson(request, response, 200, value);
-        } catch { await sendJson(request, response, 409, { error: "Notifications unavailable; check configuration or installation state" }); }
-        return;
-      }
-      if (url.pathname === "/notifications-worker.js") {
-        const origin = await notifications.origin();
-        if (!origin || deploymentTier || dev || request.headers.host !== origin.slice("https://".length)) { await sendJson(request, response, 403, { error: "Notification worker requires the configured host" }); return; }
-      }
+      if ((url.pathname.startsWith("/api/notifications/") || url.pathname === "/notifications-worker.js") &&
+          await handleNotifications(request, response, url, preview)) return;
       if (request.method === "GET" && url.pathname === "/api/previews") {
         await lifecycle.ready;
         await sendJson(request, response, 200, lifecycle.list());
