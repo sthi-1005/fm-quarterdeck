@@ -49,10 +49,14 @@ test("canonical fmqd-lanes examples survive transcript ingestion and safe render
   const messageKinds = await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8");
   const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
   const renderCode = script.slice(0, script.indexOf("function orderedProjectLanes()")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "");
-  const context = vm.createContext({ window: {}, localStorage: { getItem: () => null, setItem() {} } });
+  const expenseController = await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8");
+  // Render preparation never enters a view or requests billing; dependencies
+  // exist for construction only, and any unexpected read refuses the fixture.
+  const context = vm.createContext({ document: {}, fetchJson() { throw new Error("Unexpected fixture read"); }, window: {}, localStorage: { getItem: () => null, setItem() {} } });
   vm.runInContext(fontPrefs, context);
   vm.runInContext(messageKinds, context);
   vm.runInContext(extraction, context);
+  vm.runInContext(expenseController, context);
   vm.runInContext(renderCode, context);
   for (const block of [generalBlock, databaseBlock, hostile]) {
     context.block = block;

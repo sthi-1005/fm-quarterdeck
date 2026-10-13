@@ -6,7 +6,7 @@ import { parseCss, computed, element } from './helpers/css-model.mjs';
 const css = parseCss(await readFile(new URL('../public/styles.css', import.meta.url), 'utf8'));
 const shellCss = parseCss(await readFile(new URL('../public/shell-panel.css', import.meta.url), 'utf8'));
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+const expenseController = await readFile(new URL('../public/expense-controller.js', import.meta.url), 'utf8');
 
 test('skip link is the first control and the main stage can take focus', () => {
   assert.match(html, /<body>\s*<a class="skip-link" href="#main-stage">Skip to content<\/a>/);
@@ -54,9 +54,9 @@ test('phone touch targets that were under 44px meet the minimum at 360 and 390',
 });
 
 test('phone expense ledger stacks instead of forcing a 980px sideways scroll', () => {
-  assert.match(app, /class="expense-cell-label">Date<\/span>/);
-  assert.match(app, /data-label="Description \/ note"/);
-  assert.match(app, /data-label="Confidence \/ basis"/);
+  assert.match(expenseController, /class="expense-cell-label">Date<\/span>/);
+  assert.match(expenseController, /data-label="Description \/ note"/);
+  assert.match(expenseController, /data-label="Confidence \/ basis"/);
   const table = element('table', ['expense-table']);
   const label = element('span', ['expense-cell-label']);
   const sort = element('button', [], {}, element('th', [], {}, element('tr', [], {}, element('thead', [], {}, table))));
