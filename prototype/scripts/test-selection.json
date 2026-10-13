@@ -10,6 +10,7 @@
     "test/bearings-thread-panel.test.js",
     "test/bearings-view.test.js",
     "test/bearings-work.test.js",
+    "test/captain-call-context.test.js",
     "test/call-lifecycle.test.js",
     "test/chat-asks-context.test.js",
     "test/chat-asks-hold-lifecycle.test.js",
