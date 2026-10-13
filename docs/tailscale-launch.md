@@ -12,7 +12,7 @@ Requires Node 18+, Git, a readable absolute Firstmate home, and an installed/aut
 
 The script stays **in the foreground**, imports the existing app directly and atomically binds only `127.0.0.1:4173`. Optional `PORT` changes that loopback port; `HOST=0.0.0.0` is rejected. Set `TAILSCALE_BIN` to an executable path if needed (otherwise `tailscale`, then `tailscale.exe` on PATH). Serve must reach the same network namespace. For Windows/WSL, the raw external request must demonstrably arrive at this owned listener; no relay, Host rewrite, or assumed localhost forwarding is added. A namespace mismatch fails verification and rolls back.
 
-It sets `FM_DEPLOYMENT_TIER=uat` and `FM_REVIEW_ALLOWED_ORIGIN` to the discovered exact origin. Optional `FM_REVIEW_STATUS_PATH` is passed through; review receipt/intake behavior remains the [existing contract](../README.md#private-tailscale-serve-review-optional). Registry/preview-root and Lavish configurations are rejected: this is standalone UAT, not a new preview controller. It does not publish, change a branch, or imply Main approval. Avoid inherited Git environment overrides.
+It sets `FM_DEPLOYMENT_TIER=uat` and `FM_REVIEW_ALLOWED_ORIGIN` to the discovered exact origin. Optional `FM_REVIEW_STATUS_PATH` is passed through; review receipt/intake behavior remains the [existing contract](../README.md#private-tailscale-review-optional). Registry/preview-root and Lavish configurations are rejected: this is standalone UAT, not a new preview controller. It does not publish, change a branch, or imply Main approval. Avoid inherited Git environment overrides.
 
 ## Safety and verification
 

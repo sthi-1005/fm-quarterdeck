@@ -4,7 +4,7 @@ A clone is not an installed Firstmate pairing. First install and initialize [kun
 
 ## One onboarding contract
 
-1. **Choose skill discovery from a stable approved checkout.** The canonical base set is `skills/fmqd-lanes`, `skills/fmqd-toolcheck`, and `skills/fmqd-quartermaster`. Follow the [integration inventory's per-skill discovery/projection, pinning, rollback and removal gates](FIRSTMATE-INTEGRATIONS.md#manual-activation-and-rollback), including any legacy-skill comparison. Do not project a disposable worktree, overwrite a projection, or assume cloning activates skills. The onboarding preview lists this same set and the discovery instructions; it does not change global projections or install anything. Validate discovery in your Firstmate harness separately.
+1. **Choose skill discovery from a stable approved checkout.** The canonical base set is `skills/fmqd-lanes`, `skills/fmqd-toolcheck`, and `skills/fmqd-quartermaster`. Follow the [integration inventory's per-skill discovery/projection, pinning, rollback and removal gates](FIRSTMATE-INTEGRATIONS.md#legacy-individual-activation-and-rollback), including any legacy-skill comparison. Do not project a disposable worktree, overwrite a projection, or assume cloning activates skills. The onboarding preview lists this same set and the discovery instructions; it does not change global projections or install anything. Validate discovery in your Firstmate harness separately.
 2. **Select the authoritative Firstmate home and preview the defaults.** From the approved checkout:
 
    ```bash

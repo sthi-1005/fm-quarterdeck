@@ -6,6 +6,11 @@ Quarterdeck is the Firstmate operational cockpit: conversations are the shell; l
 | --- | --- |
 | [License](../LICENSE), [governance](../GOVERNANCE.md), [security](../SECURITY.md), [contributions](../CONTRIBUTING.md), [notices](../THIRD-PARTY-NOTICES.md) | MIT source-preview posture, repository-owner maintenance and truthful upstream attribution |
 | [Architecture](ARCHITECTURE.md) | Data flow, message classes, surfaces and security boundaries |
+| [Refactoring specification](refactoring/README.md) | Confirmed single-captain product intent, proposed module boundaries, issue overlap and staged refactoring |
+| [Product experience and feature specs](product/README.md) | Captain-facing journeys, visible behavior, acceptance stories and proposed design choices for intent review |
+| [Implementation details](product/implementation/README.md) | Editable control behavior, appearance, placement and responsive preferences |
+| [Design decisions](product/DECISIONS.md) | Compact record of confirmed direction, labelled inferences and deferred details |
+| [Documentation model](DOCUMENTATION-MODEL.md) / [master registry](document-map.yaml) | Layer ownership and relationships among intent, implementation, rules, questions and plans |
 | [Live Captain's Call](../prototype/BEARINGS.md) | Overview calls, snapshot cadence, SSE, engagement hold, readable card text and confirmed answers |
 | [Chat asks](CHAT-ASKS.md) | Decision record: model-free extraction of chat asks into Captain's Call, resolution paths, limits and rejected alternatives |
 | [Quarterdeck rename](QUARTERDECK-RENAME.md) | Current product identity, retained compatibility namespaces and deliberate rollout |

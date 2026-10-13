@@ -1,0 +1,385 @@
+# Relationships only. Prose, answers and delivery evidence stay in their documents.
+# All paths are relative to the repository root. The registry includes all docs/ Markdown
+# plus the root and runtime rule documents supporting this specification set.
+schema: "fm-quarterdeck-document-map.v1"
+path_base: "repository_root"
+documents:
+  root-readme:
+    path: "README.md"
+    layer: "navigation"
+  agent-memory:
+    path: "AGENTS.md"
+    layer: "agent-memory"
+  docs-index:
+    path: "docs/README.md"
+    layer: "navigation"
+  documentation-model:
+    path: "docs/DOCUMENTATION-MODEL.md"
+    layer: "navigation"
+  product-experience:
+    path: "docs/product/README.md"
+    layer: "intent"
+  visual-product-guide:
+    path: "docs/product/visual/index.html"
+    layer: "review"
+  product-decisions:
+    path: "docs/product/DECISIONS.md"
+    layer: "review"
+  implementation-index:
+    path: "docs/product/implementation/README.md"
+    layer: "implementation"
+  feature-overview:
+    path: "docs/product/OVERVIEW.md"
+    layer: "intent"
+  feature-chats:
+    path: "docs/product/FLEET-CHATS.md"
+    layer: "intent"
+  feature-communication:
+    path: "docs/product/COMMUNICATION.md"
+    layer: "intent"
+  feature-work:
+    path: "docs/product/WORK-SPLIT.md"
+    layer: "intent"
+  feature-supporting:
+    path: "docs/product/SUPPORTING-FEATURES.md"
+    layer: "intent"
+  feature-future:
+    path: "docs/product/FUTURE-FEATURES.md"
+    layer: "intent"
+  detail-overview:
+    path: "docs/product/implementation/OVERVIEW.md"
+    layer: "implementation"
+  detail-chats:
+    path: "docs/product/implementation/FLEET-CHATS.md"
+    layer: "implementation"
+  detail-communication:
+    path: "docs/product/implementation/COMMUNICATION.md"
+    layer: "implementation"
+  detail-work:
+    path: "docs/product/implementation/WORK-SPLIT.md"
+    layer: "implementation"
+  detail-supporting:
+    path: "docs/product/implementation/SUPPORTING-FEATURES.md"
+    layer: "implementation"
+  detail-future:
+    path: "docs/product/implementation/FUTURE-FEATURES.md"
+    layer: "implementation"
+  refactoring-index:
+    path: "docs/refactoring/README.md"
+    layer: "planning"
+  refactoring-product:
+    path: "docs/refactoring/PRODUCT.md"
+    layer: "planning"
+  refactoring-architecture:
+    path: "docs/refactoring/ARCHITECTURE.md"
+    layer: "planning"
+  refactoring-intents:
+    path: "docs/refactoring/INTENT-MAP.md"
+    layer: "planning"
+  refactoring-plan:
+    path: "docs/refactoring/PLAN.md"
+    layer: "planning"
+  contract-current-architecture:
+    path: "docs/ARCHITECTURE.md"
+    layer: "contract"
+  contract-calls:
+    path: "prototype/BEARINGS.md"
+    layer: "contract"
+  contract-chat-asks:
+    path: "docs/CHAT-ASKS.md"
+    layer: "contract"
+  contract-transcripts:
+    path: "prototype/TRANSCRIPTS.md"
+    layer: "contract"
+  contract-history:
+    path: "prototype/SESSION-WINDOW.md"
+    layer: "contract"
+  contract-work:
+    path: "prototype/WORK-TAXONOMY.md"
+    layer: "contract"
+  contract-visual:
+    path: "prototype/VISUAL-DESIGN.md"
+    layer: "contract"
+  contract-layout:
+    path: "prototype/LAYOUT-CORRECTION.md"
+    layer: "contract"
+  contract-annotations:
+    path: "prototype/LANE-MESSAGE-ANNOTATIONS.md"
+    layer: "contract"
+  contract-quota:
+    path: "prototype/QUOTA-PAGE.md"
+    layer: "contract"
+  contract-expenses:
+    path: "expenses/README.md"
+    layer: "contract"
+  contract-notifications:
+    path: "docs/MOBILE-NOTIFICATIONS.md"
+    layer: "contract"
+  contract-private-runtime:
+    path: "docs/PRIVATE-RUNTIME.md"
+    layer: "contract"
+  contract-compatibility:
+    path: "docs/QUARTERDECK-RENAME.md"
+    layer: "contract"
+  contract-delivery:
+    path: "docs/branching-and-preview-model.md"
+    layer: "contract"
+  contract-validation:
+    path: "docs/SOURCE-PREVIEW-VALIDATION.md"
+    layer: "contract"
+  contract-integrations:
+    path: "docs/FIRSTMATE-INTEGRATIONS.md"
+    layer: "contract"
+  contract-portability:
+    path: "docs/PORTABILITY.md"
+    layer: "contract"
+  reference-feature-plan:
+    path: "docs/FEATURE-PLAN.md"
+    layer: "planning"
+  reference-first-run:
+    path: "docs/FIRST-RUN.md"
+    layer: "reference"
+  reference-toolcheck:
+    path: "docs/TOOLCHECK.md"
+    layer: "reference"
+  reference-public-source:
+    path: "docs/PUBLIC-SOURCE.md"
+    layer: "reference"
+  reference-contributions:
+    path: "docs/OPEN-SOURCE-CONTRIBUTIONS.md"
+    layer: "reference"
+  reference-export:
+    path: "docs/HISTORY-FREE-EXPORT.md"
+    layer: "reference"
+  reference-instruction-inventory:
+    path: "docs/INSTRUCTION-TO-CODE.md"
+    layer: "reference"
+  reference-branch-inventory:
+    path: "docs/dev-branch-inventory.md"
+    layer: "reference"
+  reference-parked-work:
+    path: "docs/parked-work.md"
+    layer: "reference"
+  reference-private-launch:
+    path: "docs/tailscale-launch.md"
+    layer: "reference"
+features:
+  overview:
+    intent: "feature-overview"
+    implementation: "detail-overview"
+    rules: ["contract-calls", "contract-chat-asks", "contract-visual", "contract-layout"]
+    planning: ["refactoring-product", "refactoring-architecture", "refactoring-intents", "refactoring-plan"]
+    questions: ["D01", "D02", "D07", "D09", "D10"]
+  fleet-chats:
+    intent: "feature-chats"
+    implementation: "detail-chats"
+    rules: ["contract-transcripts", "contract-history", "contract-annotations", "contract-layout", "contract-visual"]
+    planning: ["refactoring-product", "refactoring-architecture", "refactoring-intents", "refactoring-plan"]
+    questions: ["D03", "D05"]
+  communication:
+    intent: "feature-communication"
+    implementation: "detail-communication"
+    rules: ["contract-annotations", "contract-calls", "contract-validation", "contract-layout", "contract-private-runtime"]
+    planning: ["refactoring-product", "refactoring-architecture", "refactoring-intents", "refactoring-plan"]
+    questions: ["D01", "D02", "D04"]
+  work-split:
+    intent: "feature-work"
+    implementation: "detail-work"
+    rules: ["contract-work", "contract-layout", "contract-private-runtime", "contract-compatibility"]
+    planning: ["refactoring-product", "refactoring-architecture", "refactoring-intents", "refactoring-plan"]
+    questions: ["D05", "D08"]
+  supporting-features:
+    intent: "feature-supporting"
+    implementation: "detail-supporting"
+    rules: ["contract-quota", "contract-expenses", "contract-notifications", "contract-visual", "root-readme", "contract-private-runtime"]
+    planning: ["refactoring-product", "refactoring-architecture", "refactoring-intents", "refactoring-plan"]
+    questions: ["D06"]
+  future-features:
+    intent: "feature-future"
+    implementation: "detail-future"
+    rules: ["contract-quota", "contract-work", "contract-current-architecture", "contract-integrations"]
+    planning: ["refactoring-product", "refactoring-intents", "refactoring-plan"]
+    questions: ["D07", "D08", "D11"]
+shared:
+  intent: "product-experience"
+  implementation: "implementation-index"
+  rules: ["contract-visual", "contract-layout", "contract-compatibility", "contract-delivery", "contract-validation", "contract-integrations", "contract-portability"]
+  questions: ["D12", "G01", "M01"]
+questions:
+  D01:
+    document: "product-decisions"
+    anchor: "d01-answer-or-ask"
+    features: ["overview", "communication"]
+    previous_refs: ["product.D01"]
+  D02:
+    document: "product-decisions"
+    anchor: "d02-message-history"
+    features: ["communication", "overview"]
+    previous_refs: ["product.D02", "planning.Q01"]
+  D03:
+    document: "product-decisions"
+    anchor: "d03-origin-and-message-type-filters"
+    features: ["fleet-chats"]
+    previous_refs: ["product.D03", "planning.Q04"]
+  D04:
+    document: "product-decisions"
+    anchor: "d04-draft-lifetime"
+    features: ["communication"]
+    previous_refs: ["product.D04"]
+  D05:
+    document: "product-decisions"
+    anchor: "d05-fleet-terminology"
+    features: ["work-split", "fleet-chats"]
+    previous_refs: ["product.D05"]
+  D06:
+    document: "product-decisions"
+    anchor: "d06-alert-scope"
+    features: ["supporting-features"]
+    previous_refs: ["product.D06"]
+  D07:
+    document: "product-decisions"
+    anchor: "d07-recap-placement"
+    features: ["future-features", "overview"]
+    previous_refs: ["product.D07"]
+  D08:
+    document: "product-decisions"
+    anchor: "d08-systems-purpose"
+    features: ["future-features", "work-split"]
+    previous_refs: ["product.D08"]
+  D09:
+    document: "product-decisions"
+    anchor: "d09-incomplete-decision-context"
+    features: ["overview"]
+    previous_refs: ["planning.Q02"]
+  D10:
+    document: "product-decisions"
+    anchor: "d10-repeated-questions"
+    features: ["overview"]
+    previous_refs: ["planning.Q03"]
+  D11:
+    document: "product-decisions"
+    anchor: "d11-optional-feature-priority"
+    features: ["future-features"]
+    previous_refs: ["planning.Q05"]
+  D12:
+    document: "product-decisions"
+    anchor: "d12-feature-intent-corrections"
+    features: ["overview", "fleet-chats", "communication", "work-split", "supporting-features", "future-features"]
+    previous_refs: []
+  G01:
+    document: "product-decisions"
+    anchor: "g01-shared-visual-and-layout-preferences"
+    features: ["overview", "fleet-chats", "communication", "work-split", "supporting-features", "future-features"]
+    previous_refs: []
+  M01:
+    document: "product-decisions"
+    anchor: "m01-source-policy-wording"
+    features: []
+    previous_refs: ["planning.public-source-policy-drift"]
+ui_entries:
+  UI-OV-001:
+    document: "detail-overview"
+    anchor: "status-and-send-queued-ui-ov-001"
+    feature: "overview"
+  UI-OV-002:
+    document: "detail-overview"
+    anchor: "call-compose-ui-ov-002"
+    feature: "overview"
+  UI-OV-003:
+    document: "detail-overview"
+    anchor: "question-and-context-ui-ov-003"
+    feature: "overview"
+  UI-OV-004:
+    document: "detail-overview"
+    anchor: "procrastinate-ui-ov-004"
+    feature: "overview"
+  UI-OV-005:
+    document: "detail-overview"
+    anchor: "section-layout-ui-ov-005"
+    feature: "overview"
+  UI-FC-001:
+    document: "detail-chats"
+    anchor: "filters-ui-fc-001"
+    feature: "fleet-chats"
+  UI-FC-002:
+    document: "detail-chats"
+    anchor: "reading-navigation-ui-fc-002"
+    feature: "fleet-chats"
+  UI-FC-003:
+    document: "detail-chats"
+    anchor: "source-coverage-ui-fc-003"
+    feature: "fleet-chats"
+  UI-FC-004:
+    document: "detail-chats"
+    anchor: "message-context-ui-fc-004"
+    feature: "fleet-chats"
+  UI-CO-001:
+    document: "detail-communication"
+    anchor: "composer-actions-ui-co-001"
+    feature: "communication"
+  UI-CO-002:
+    document: "detail-communication"
+    anchor: "attached-context-ui-co-002"
+    feature: "communication"
+  UI-CO-003:
+    document: "detail-communication"
+    anchor: "review-history-ui-co-003"
+    feature: "communication"
+  UI-CO-004:
+    document: "detail-communication"
+    anchor: "touch-capture-ui-co-004"
+    feature: "communication"
+  UI-WS-001:
+    document: "detail-work"
+    anchor: "work-filter-bar-ui-ws-001"
+    feature: "work-split"
+  UI-WS-002:
+    document: "detail-work"
+    anchor: "completion-acknowledgement-ui-ws-002"
+    feature: "work-split"
+  UI-WS-003:
+    document: "detail-work"
+    anchor: "evidence-and-classification-ui-ws-003"
+    feature: "work-split"
+  UI-SU-001:
+    document: "detail-supporting"
+    anchor: "quota-summary-ui-su-001"
+    feature: "supporting-features"
+  UI-SU-002:
+    document: "detail-supporting"
+    anchor: "expense-layout-ui-su-002"
+    feature: "supporting-features"
+  UI-SU-003:
+    document: "detail-supporting"
+    anchor: "preference-controls-ui-su-003"
+    feature: "supporting-features"
+  UI-SU-004:
+    document: "detail-supporting"
+    anchor: "notification-controls-ui-su-004"
+    feature: "supporting-features"
+  UI-FU-001:
+    document: "detail-future"
+    anchor: "library-ui-fu-001"
+    feature: "future-features"
+  UI-FU-002:
+    document: "detail-future"
+    anchor: "session-recap-ui-fu-002"
+    feature: "future-features"
+  UI-FU-003:
+    document: "detail-future"
+    anchor: "quota-history-ui-fu-003"
+    feature: "future-features"
+  UI-FU-004:
+    document: "detail-future"
+    anchor: "systems-inspection-ui-fu-004"
+    feature: "future-features"
+references:
+  source-policy:
+    documents: ["reference-public-source", "reference-contributions", "reference-export"]
+    questions: ["M01"]
+  setup-and-operation:
+    documents: ["reference-first-run", "reference-toolcheck", "reference-private-launch", "contract-portability", "contract-integrations"]
+    supports_features: ["supporting-features", "communication"]
+  interpretation-and-history:
+    documents: ["reference-instruction-inventory", "reference-feature-plan", "reference-branch-inventory", "reference-parked-work"]
+    supports_documents: ["refactoring-intents", "refactoring-plan"]

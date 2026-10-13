@@ -1,5 +1,7 @@
 # Quarterdeck taxonomy, attention and delivery
 
+Related product documents: [Work Split intent](../docs/product/WORK-SPLIT.md) and [editable work details](../docs/product/implementation/WORK-SPLIT.md).
+
 This is Quarterdeck-owned classification and presentation. It does not change stock Firstmate identities, task status, endpoint lifecycle, delivery, cleanup, decisions or the flat `[fm-lane Project]` / `[end Project]` grammar. Every existing composer still targets primary Firstmate only.
 
 ## Source characterization and boundary

@@ -2,6 +2,8 @@
 
 This roadmap describes product contracts, not an installation's branch history or acceptance record. [Branch/version authority](branching-and-preview-model.md) governs admission and promotion; a roadmap never authorizes a push, service change or merge.
 
+The [refactoring specification](refactoring/README.md) connects these capabilities to the single-captain product direction, maps issue overlap and proposes structural implementation slices. Its open choices remain proposals.
+
 ## Implemented surfaces
 
 - **Conversation workspace:** lane and message-kind filtering, explicit product aliases, safe Markdown/raw rendering, debounced search, source/session identity, independent source windows and 200-record pages. Refresh preserves selection, disclosures and reading intent.

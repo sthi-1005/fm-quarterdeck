@@ -7,6 +7,8 @@ This repository is the live Firstmate Quarterdeck product home; start with `READ
 - `prototype/` is the runnable custom frontend; its checks are documented in `README.md`.
 - `expenses/README.md` documents the expense ledger and helper commands.
 - `docs/README.md` indexes the Quarterdeck architecture and v2 phased feature plans.
+- `docs/document-map.yaml` maps document relationships; `docs/product/DECISIONS.md` records design direction. New specific desires belong in the relevant product/implementation sheet.
+- `docs/refactoring/README.md` indexes the draft refactoring spec; `docs/product/README.md` indexes the product experience and feature drafts. All Quarterdeck captain communication goes through primary Firstmate; fleet/task selection supplies context, never a worker recipient.
 - `docs/QUARTERDECK-RENAME.md` owns naming and legacy wire/storage compatibility; do not rename persisted namespaces as cosmetic cleanup.
 
 ## Maintaining this file

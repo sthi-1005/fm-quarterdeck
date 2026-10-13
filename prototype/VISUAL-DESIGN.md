@@ -1,5 +1,7 @@
 # Visual design contract
 
+Related product documents: [editable implementation sheets](../docs/product/implementation/README.md) and [shared visual preference answers](../docs/product/DECISIONS.md#g01-shared-visual-and-layout-preferences). Desired changes are recorded separately until this contract is reconciled.
+
 Quarterdeck uses a quiet reading workspace: warm white canvas, light content surfaces and dark forest ink, with a dark app-shell panel. Selection, identity, status and focus have text/shape semantics as well as color. Fonts are local system fonts, not remote dependencies.
 
 - Conversation text, supporting controls and metadata have distinct readable scales. Thinking and crew records use labeled disclosures, not invented content.

@@ -2,6 +2,12 @@
 
 Firstmate Quarterdeck is a web dashboard for [kunchenguid/firstmate](https://github.com/kunchenguid/firstmate). It presents your Firstmate fleet, conversations, preferences and operational evidence in a browser. `prototype/` contains the application and its Node server.
 
+The [refactoring specification](docs/refactoring/README.md) defines the product direction: one captain understands the entire fleet and communicates through primary Firstmate. It maps current requests and proposes internal boundaries for future refactoring.
+
+The [product experience and feature specs](docs/product/README.md) describe the intended captain-facing behavior and identify design choices for review.
+
+The [design decision record](docs/product/DECISIONS.md) captures the direction already supplied. Add exact button/layout desires directly to the [implementation sheets](docs/product/implementation/README.md); [document-map.yaml](docs/document-map.yaml) links those details to intent and technical rules.
+
 **A configured Firstmate installation is required for real operation.** Quarterdeck reads Firstmate's private home and uses its file and inbox contracts; this repository does not include Firstmate's agent orchestration or bootstrap it. The two repositories are installed separately. Without a Firstmate home, Quarterdeck can serve a limited synthetic preview and run offline tests, but that is not a functioning Firstmate fleet.
 
 ## Feature maturity

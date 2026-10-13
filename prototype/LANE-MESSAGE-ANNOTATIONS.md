@@ -1,5 +1,9 @@
 # Lane Chat message annotations (Quarterdeck only)
 
+Related product documents: [communication intent](../docs/product/COMMUNICATION.md) and [editable composer details](../docs/product/implementation/COMMUNICATION.md).
+
+Pending product reconciliation: [D02/D04](../docs/product/COMMUNICATION.md#protected-unfinished-work) retain supported composer/annotation history until Clear messages but discard raw unfinished drafts on user-driven departures/reloads. Existing storage/recovery mechanics below remain current implementation; immutable in-flight and uncertain payloads are delivery records, not raw drafts, and must retain same-ID reconciliation.
+
 This is a Quarterdeck projection/context addition. It does **not** change default Firstmate message production, identity, ordering, or stock behavior. It is separate from Lane Chat send-time view context.
 
 The original `recordId` from the Lane Chat API identifies transcript parts (`source:line:part` or stable windowed/Claude `source@byteOffset:part`), projected lane blocks (`:block:index`), and fleet outcomes (identity is defined in the [outcome source contract](TRANSCRIPTS.md#sources-and-confinement)). See `transcript.js`, `server.js` (`projectedBlocks`) and `supervision.js`. Many other Lane Chat records (captain notes, steers, outbox items, status lines) have no original record ID: `publicMessage` does not assign one. In particular, identical repeated status lines share source, mtime and text. Quarterdeck must not present the UI's hashed review address as an original ID.

@@ -1,5 +1,9 @@
 # Live Captain's Call
 
+Related product documents: [call intent](../docs/product/OVERVIEW.md), [editable call details](../docs/product/implementation/OVERVIEW.md), [communication details](../docs/product/implementation/COMMUNICATION.md). Desired details and pending designs remain distinct from the technical behavior below.
+
+Pending product reconciliation: [D01](../docs/product/DECISIONS.md#d01-answer-or-ask) gives Firstmate responsibility for interpreting free text, rather than requiring a question/answer mode or implying that thread text cannot be an answer. [D04](../docs/product/DECISIONS.md#d04-draft-lifetime) requests transient raw drafts with preservation only through automatic updates of the edited card. The existing thread boilerplate and session-storage recovery below describe current behavior until a separately scoped implementation reconciles them; receipt/closure guards remain distinct.
+
 Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves filed holds. Chat-only asks have the mechanical Quarterdeck resolution paths below.
 
 Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases), `public/call-lifecycle.js` (one lifecycle state per card), `public/bearings-overflow.js` (retained; cards no longer clamp) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.

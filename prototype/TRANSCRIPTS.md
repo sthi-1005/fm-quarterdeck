@@ -1,5 +1,7 @@
 # Durable transcript coverage
 
+Related product documents: [Fleet Chats intent](../docs/product/FLEET-CHATS.md) and [editable chat details](../docs/product/implementation/FLEET-CHATS.md).
+
 `transcript.js` (Pi sessions), `claude-transcript.js` (the Claude Code primary session) and `supervision.js` (fleet outcomes) are read-only adapters. No pane scraping, thinking generation, prompt changes or extra mirror traffic is required.
 
 ## Sources and confinement

@@ -1,5 +1,7 @@
 # Subscription limits page
 
+Related product documents: [supporting feature intent](../docs/product/SUPPORTING-FEATURES.md) and [editable quota details](../docs/product/implementation/SUPPORTING-FEATURES.md#quota-summary-ui-su-001).
+
 The Quota page presents sanitized, read-only source evidence. It does not refresh credentials, rank subscriptions by spend priority, or estimate consumption.
 
 - **At a glance:** Tightest / Most room use valid effective scope percentages from fresh providers only, with stable ties and visible unknown counts. Runway tallies source scope statuses. Next reset excludes past timestamps and individually stale/non-fresh providers. A failed whole refresh retains explicitly labelled **captured** upcoming reset evidence, but never effective availability, pace or runway.

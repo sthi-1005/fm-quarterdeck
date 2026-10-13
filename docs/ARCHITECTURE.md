@@ -2,6 +2,8 @@
 
 **Conversations are the application shell; lanes are the workspace.** Quarterdeck presents durable Firstmate records, work attention, expenses and subscription quota through a Node.js server and vanilla browser client.
 
+This document describes current behavior. The [refactoring specification](refactoring/README.md) captures confirmed product intent, proposed decomposition and known documentation drift to reconcile before implementation.
+
 ## Ownership and data flow
 
 ```text
