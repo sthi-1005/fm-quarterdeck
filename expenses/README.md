@@ -38,6 +38,10 @@ To inspect totals (output is private; the helper also creates/uses its colocated
 python3 expenses/expense_tracker.py rollup
 ```
 
+## Browser presentation ownership
+
+[`expense-controller.js`](../prototype/public/expense-controller.js) owns the existing ledger/billing rendering and tab-local sort state. [`app.js`](../prototype/public/app.js) keeps dashboard scheduling and view/manual refresh demand through temporary bridges. Entering Expenses attaches one sort listener; leaving disposes it without resetting the sort, changing shared timers or cancelling an existing billing read. Billing read failure still renders unavailable cards; dashboard read failure follows the host's existing behavior. Source selection, exact rollups, billing caches and private state stay with their existing server/helper owners. Rollback restores only controller/host/entry-script wiring, not saved keys or ledger data.
+
 ## Ledger fields
 
 Each entry uses:

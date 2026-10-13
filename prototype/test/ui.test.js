@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { parseCss, computed, element } from './helpers/css-model.mjs';
 
 const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
-const script = `${extraction}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
+const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("opt-in compact headers preserve Quota markup and expose full descriptions", async () => {
@@ -347,6 +347,11 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
             if (!listeners.has(event)) listeners.set(event, []);
             listeners.get(event).push(fn);
           },
+          removeEventListener(event, fn) {
+            const handlers = listeners.get(event) || [];
+            const index = handlers.indexOf(fn);
+            if (index >= 0) handlers.splice(index, 1);
+          },
           dispatchEvent(event) {
             for (const fn of listeners.get(event.type) || []) fn(event);
           },
@@ -395,6 +400,121 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
     hashchange: (hash) => windowListeners.get("hashchange")?.({ newURL: `http://localhost/${hash}` }),
     windowEvent: (name) => windowListeners.get(name)?.() };
 }
+
+const expenseFixture = () => ({ source: "private overlay (selected FM_HOME)", demo: false, entryCount: 4,
+  overall: [{ currency: "CAD", amount: "0.00" }, { currency: "USD", amount: "10.00" }],
+  categories: [{ name: "Services", totals: [{ currency: "CAD", amount: "0.00" }, { currency: "USD", amount: "10.00" }] }],
+  projects: [{ name: "Example & Store", totals: [{ currency: "USD", amount: "10.00" }] }],
+  entries: [
+    { id: "credit", date: "2030-01-01", projectId: "example", projectName: "Example & Store", category: "Credits", amount: "-2.00", currency: "USD", description: "Credit <note>", confidence: "Invoice" },
+    { id: "zero", date: "2030-01-02", projectId: "example", projectName: "Example & Store", category: "Services", amount: "0.00", currency: "CAD", description: "Unknown rate", confidence: null },
+    { id: "charge", date: "2030-01-03", projectId: "example", projectName: "Example & Store", category: "Services", amount: "12.00", currency: "USD", description: "Charge", confidence: "Estimate" },
+    { id: "tie", date: "2030-01-04", projectId: "shared", projectName: "Shared", category: "Services", amount: "0.00", currency: "USD", description: "Zero", confidence: "Recorded" },
+  ] });
+const expenseClick = (key) => ({ type: "click", target: { closest: () => ({ dataset: { expenseSort: key } }) } });
+const expenseOrder = (app) => [...app.node("#expense-entries").innerHTML.matchAll(/data-review-id="expense:([^\"]+)"/g)]
+  .map((match) => expenseFixture().entries.find((entry) => app.run(`reviewId(${JSON.stringify(entry.id)})`) === match[1])?.id);
+
+test("expense controller retains exact signed/currency rendering and sort defaults across refresh and reentry", () => {
+  const app = ui();
+  app.run(`renderExpenses(${JSON.stringify(expenseFixture())}); showView('expenses');`);
+  assert.deepEqual(expenseOrder(app), ["tie", "charge", "zero", "credit"]);
+  assert.match(app.node("#expense-entries").innerHTML, /amount credit/);
+  assert.match(app.node("#expense-entries").innerHTML, /Credit &lt;note&gt;/);
+  assert.match(app.node("#project-expenses").innerHTML, /Example &amp; Store/);
+  const totals = app.node("#overall-total").innerHTML;
+  app.node(".expense-table thead").dispatchEvent(expenseClick("amount"));
+  assert.deepEqual(expenseOrder(app), ["charge", "zero", "tie", "credit"]);
+  assert.equal(app.node("#expense-sort-status").textContent, "Sorted by amount descending");
+  app.run(`renderExpenses(${JSON.stringify(expenseFixture())}); showView('work'); showView('expenses');`);
+  assert.deepEqual(expenseOrder(app), ["charge", "zero", "tie", "credit"]);
+  app.node(".expense-table thead").dispatchEvent(expenseClick("amount"));
+  assert.deepEqual(expenseOrder(app), ["credit", "zero", "tie", "charge"]);
+  assert.equal(app.node("#overall-total").innerHTML, totals, "billing and sorting cannot change ledger totals");
+});
+
+test("expense view switches detach the actual listener; repeated enter/dispose never duplicates handlers", () => {
+  const app = ui();
+  app.run(`renderExpenses(${JSON.stringify(expenseFixture())}); showView('expenses'); showView('expenses');`);
+  const heading = app.node(".expense-table thead");
+  heading.dispatchEvent(expenseClick("date"));
+  assert.equal(app.node("#expense-sort-status").textContent, "Sorted by date ascending");
+  app.run("showView('work'); expensesFeature.dispose();");
+  const before = app.node("#expense-entries").innerHTML;
+  heading.dispatchEvent(expenseClick("date"));
+  assert.equal(app.node("#expense-entries").innerHTML, before, "disposed target has no owned listener");
+  app.run("showView('expenses'); expensesFeature.enter();");
+  heading.dispatchEvent(expenseClick("date"));
+  assert.equal(app.node("#expense-sort-status").textContent, "Sorted by date descending", "one callback, not two");
+});
+
+test("expense refresh keeps existing input drafts/focus, selection and view reading position untouched", () => {
+  const app = ui();
+  const draft = app.node("#review-message"), view = app.node("#expenses-view");
+  draft.value = "Unsubmitted synthetic text"; draft.focus(); view.scrollTop = 345;
+  app.run("selectedSessionId = 'task-example'; selectedLaneIds = new Set(['example']);");
+  app.run(`renderExpenses(${JSON.stringify(expenseFixture())}); renderCosts({});`);
+  assert.equal(draft.value, "Unsubmitted synthetic text");
+  assert.equal(app.run("document.activeElement === document.querySelector('#review-message')"), true);
+  assert.equal(app.run("selectedSessionId"), "task-example");
+  assert.equal(app.run("selectedLaneIds.has('example')"), true);
+  assert.equal(view.scrollTop, 345);
+});
+
+test("the shared host dashboard timer survives expense disposal with no feature timer or duplicated billing read", async () => {
+  const dashboard = []; let billingReads = 0;
+  const app = ui({ fetchImpl: (url) => {
+    if (url === '/api/dashboard') return new Promise(resolve => dashboard.push(resolve));
+    if (url === '/api/costs') billingReads++;
+    return new Promise(() => {});
+  } });
+  app.run("window.timers = []; window.setInterval = (fn, ms) => { window.timers.push({fn, ms}); return window.timers.length; };");
+  const reading = { fleet: { summary: {}, workSplit: null }, expenses: expenseFixture(), refreshMs: 5000 };
+  dashboard[0]({ ok: true, json: async () => reading });
+  await new Promise(resolve => setImmediate(resolve));
+  app.run("showView('expenses'); loadDashboard(); showView('work'); showView('expenses');");
+  assert.equal(billingReads, 1);
+  assert.equal(app.run("window.timers.length"), 1);
+  assert.equal(app.run("window.timers[0].ms"), 5000);
+  dashboard[1]({ ok: true, json: async () => reading });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.run("window.timers.length"), 1, "shared clock is not replaced or duplicated");
+  app.run("showView('work'); window.timers[0].fn();");
+  assert.equal(dashboard.length, 3, "host timer still requests the dashboard outside Expenses");
+  assert.equal(billingReads, 1, "hidden Expenses creates no cost demand");
+});
+
+test("expense controller retains empty, absent canonical demo and invalid overlay notice behavior", () => {
+  const app = ui();
+  app.run(`renderExpenses({source:'canonical ledger',demo:false,entryCount:0,entries:[],overall:[{currency:'USD',amount:'0.00'}]});`);
+  assert.match(app.node("#overall-total").innerHTML, /USD 0.00/);
+  assert.match(app.node("#expense-entries").innerHTML, /No expenses recorded/);
+  assert.equal(app.node("#expense-notice").classList.contains("hidden"), true);
+  app.run(`renderExpenses({source:'demo',demo:true,entryCount:0,overall:[]});`);
+  assert.match(app.node("#expense-notice").textContent, /canonical expenses\/ledger.json is not present/);
+  assert.equal(app.node("#expense-source").classList.contains("demo"), true);
+  app.run(`renderExpenses({source:'unavailable',demo:false,error:'Private expense overlay unavailable',entryCount:0,overall:[]});`);
+  assert.equal(app.node("#expense-notice").textContent, "Private expense overlay unavailable");
+  assert.equal(app.node("#overall-total").innerHTML, '<strong class="zero">—</strong>');
+});
+
+test("cost demand has one in-flight owner across leave/reentry, and failed reads still render unavailable", async () => {
+  const calls = [];
+  const app = ui({ fetchImpl: (url) => url === "/api/costs" ? new Promise((resolve, reject) => calls.push({ resolve, reject })) : new Promise(() => {}) });
+  app.run("showView('expenses'); loadDashboard(); showView('work'); showView('expenses');");
+  assert.equal(calls.length, 1);
+  app.run("showView('work');");
+  calls[0].resolve({ ok: true, json: async () => ({ azure: { state: 'stale', stale: true, actual: { amount: 0, currency: 'CAD' } } }) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(app.node("#cost-panels").innerHTML, /last-known snapshot/);
+  assert.match(app.node("#cost-panels").innerHTML, /0 CAD/);
+  app.run("showView('expenses'); loadDashboard();");
+  assert.equal(calls.length, 2);
+  calls[1].reject(new Error("Synthetic read failure"));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(app.node("#cost-panels").innerHTML, /Billing source unavailable/);
+  assert.doesNotMatch(app.node("#cost-panels").innerHTML, /last-known snapshot|0 CAD/);
+});
 
 test("selected unloaded task and disk displace retained IDs at the sixty-ID cap; automatic retries stop", () => {
   const app = ui();
