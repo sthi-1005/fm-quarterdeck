@@ -19,7 +19,8 @@ Node.js guarded readers -> bounded JSON APIs -> browser views
 
 No home discovery or saved circular pointer inside the home is required. The selected home remains an explicit startup input. [Private runtime ownership](PRIVATE-RUNTIME.md) details the expense overlay and existing owners that are not migrated by source cleanup. In particular, taxonomy state currently requires an explicit owner outside `FM_HOME` when the source checkout is inside it; receipts and browser state keep their existing owners until separately migrated.
 
-- `prototype/server.js`: HTTP mediation, home/fleet ingestion, bounded source windows and exact decimal expense rollups.
+- `prototype/server.js`: HTTP mediation, home/fleet ingestion, bounded source windows and expense source selection; retains the `rollupLedger` compatibility export.
+- `prototype/ledger-projection.js`: pure exact-cents ledger parsing, currency/project/category rollups and entry presentation, used by the server's unchanged expense selection.
 - `prototype/transcript.js` / `supervision.js`: JSONL normalization, exact-home session confinement, mirror deduplication and outcome notes.
 - `prototype/private-runtime.js` / `cost-config.js`: guarded private expense selection and validated attribution.
 - `prototype/costs.js` / `quota.js`: bounded allowlisted account adapters, cache coalescing and truthful unavailable/stale states.

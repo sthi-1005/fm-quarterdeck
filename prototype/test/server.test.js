@@ -7,6 +7,7 @@ import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import test from "node:test";
 import { createServer, dashboardData, rollupLedger } from "../server.js";
+import { rollupLedger as projectLedger } from "../ledger-projection.js";
 
 test("default document is the full-height conversation product", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
@@ -299,6 +300,26 @@ test("equal-clock transcript prompts sort before their response and status", asy
     "working: consequent status",
   ]);
   assert.ok(data.lanes[0].messages.every((message) => message.occurredAt === occurredAt));
+});
+
+test("server retains the ledger projection compatibility export", () => {
+  assert.equal(rollupLedger, projectLedger);
+});
+
+test("rollupLedger preserves invalid-input refusals and negative-zero detail", () => {
+  for (const ledger of [null, {}, { default_currency: "", entries: [] }, { default_currency: "USD", entries: null }]) {
+    assert.throws(() => rollupLedger(ledger), /ledger must include default_currency and an entries array/);
+  }
+  for (const amount of [undefined, null, 0, "0", "0.1", "0.001", "+0.00", " 0.00", "1e2"]) {
+    assert.throws(() => rollupLedger({ default_currency: "USD", entries: [{ amount, project_id: "sample" }] }), /invalid ledger amount/);
+  }
+  assert.throws(() => rollupLedger({ default_currency: "USD", entries: [{ amount: "1.00" }] }), /ledger entry is missing project_id/);
+  const result = rollupLedger({ default_currency: "USD", entries: [{ amount: "-0.00", project_id: "sample" }] });
+  assert.deepEqual(result.overall, [{ currency: "USD", amount: "0.00" }]);
+  assert.equal(result.entries[0].amount, "-0.00");
+  assert.equal(result.entries[0].category, "Credits");
+  assert.equal(result.entries[0].description, "No description provided");
+  assert.equal(result.entries[0].confidence, null);
 });
 
 test("rollupLedger totals exact cents overall and by project", () => {
