@@ -1,6 +1,6 @@
 # Opening and maintaining public contributions
 
-The contribution files prepare the future public source-preview repository. The current repository stays private; no settings, publication or access changes are implied. Source-controlled templates and CI cannot enforce GitHub review rules by themselves. Repository-owner setup below remains pending until the separately authorized public repository exists.
+The contribution files prepare the release-owner-designated source-preview workflow. This repository is publicly visible; intended publication policy remains deferred under [M01](product/DECISIONS.md#m01-source-policy-wording). Visibility alone does not verify the setup below or authorize settings, access, history transfer or release changes. Source-controlled templates and CI cannot enforce GitHub review rules by themselves. Existing independently reviewed export/disclosure and administrator requirements remain in force; their satisfaction is not established here.
 
 ## Before inviting contributions
 
@@ -23,4 +23,4 @@ Resolve conversations, obtain current approval and passing checks, then let an a
 
 ## Current preparation status
 
-The contribution guide, conduct policy, issue forms, PR template and offline Node 24/Python/Chromium workflow are source-controlled. GitHub UI rendering, fork execution, branch enforcement, public maintainer accounts and confidential contacts require the future public repository and have not been verified by these local changes. There is no promised maintainer response time, release schedule or production support window.
+The contribution guide, conduct policy, issue forms, PR template and offline Node 24/Python/Chromium workflow are source-controlled. GitHub UI rendering, fork execution, branch enforcement, public maintainer accounts and confidential contacts need separate release-owner verification and have not been verified by these documentation changes. There is no promised maintainer response time, release schedule or production support window.

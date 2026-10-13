@@ -4,7 +4,7 @@ Quarterdeck helps one captain understand the entire Firstmate fleet, see what ne
 
 The maintainer confirmed this direction on 2026-10-12. Firstmate owns orchestration and judgment; Quarterdeck owns faithful presentation, navigation, local presentation choices and its existing narrow communication contracts. The [specification index](README.md) distinguishes confirmed intent, preserved behavior and proposed changes.
 
-The captain's [review answers](../product/DECISIONS.md#summary) now refine this target. They supersede earlier assumptions about automatic draft restoration, typed-text intent, mate filters and future-view placement. Current technical contracts can still describe the earlier behavior; desired changes remain documentation, not implemented runtime changes.
+The captain's [review answers](../product/DECISIONS.md#summary) now refine this target. They supersede earlier assumptions about automatic draft restoration, typed-text intent, mate filters and future-view placement. D01/D03/D04 still describe desired changes, not implemented runtime behavior. [S01 reconciliation](S01-DOC-OWNERS.md) links the shipped domain owners and qualifies the immutable historical snapshot against [S00](S00-BASELINE.md).
 
 ## Product scope
 
@@ -44,7 +44,7 @@ The product is a privately operated dashboard. Multi-user collaboration, public 
 | Task | The original exact source identity, including home scope where required |
 | Source record | A durable observation with its original source and record identity; one record can have several displayed projections |
 | Call | A filed decision, eligible merge ask or marker-derived chat ask, each with its existing authority and resolution rules |
-| Call occurrence or cycle | The particular held question. PR 112 adds decision `holdVersion`; this is distinct from presentation `rev` |
+| Call occurrence or cycle | The particular held question. Accepted source carries decision `holdVersion`, distinct from presentation `rev` ([BEARINGS](../../prototype/BEARINGS.md#lifecycle)) |
 | Delivery receipt | Evidence about a particular submitted request; it does not establish that its requested work happened |
 
 Repository, route, workstream, task, message kind, message origin and author provenance are independent dimensions within the fleet. Their labels may coincide without making their identities interchangeable. Workstream is the inferred descriptive term for grouping, not a confirmed replacement UI label. Existing route and storage names follow the [rename contract](../QUARTERDECK-RENAME.md).
@@ -77,7 +77,7 @@ Acceptance examples: an annotation on a worker message sends to primary Firstmat
 
 ### Inspect the evidence behind a call or outcome
 
-**R07:** The captain can inspect individually attributed current-call exchanges separately from shared replies, earlier-cycle exchanges and task-only context. The original combined submission remains reachable. No numbered heading or similar prose is used to assign a shared reply to one card. PR 112 is the pending foundation for this distinction.
+**R07:** The captain can inspect individually attributed current-call exchanges separately from shared replies, earlier-cycle exchanges and task-only context. The original combined submission remains reachable. No numbered heading or similar prose is used to assign a shared reply to one card. This foundation is in accepted source ([S00](S00-BASELINE.md)); [BEARINGS](../../prototype/BEARINGS.md#card-threads) owns exact attribution. This is not a claim of served or physical-device acceptance.
 
 **R08:** Fleet Chats supports intersecting fleet, source/task, message-kind and search choices over loaded records. It discloses source-window limits separately from page size and search coverage. Loading older records, refreshing or changing compact presentation preserves exact record targets and the captain's reading intent.
 

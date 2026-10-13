@@ -12,6 +12,14 @@ The Quota page presents sanitized, read-only source evidence. It does not refres
 
 The compact sidebar cards and phone sheet retain their previous renderer and visual rules. Page-only presentation is scoped to `.quota-family-page` and `#quota-view`.
 
+## Source reads and freshness
+
+`quota.js:createQuotaReader` owns allowlisted source admission and server caching. Its default invocation is `quota-axi --full --json --no-credential-refresh --max-age 5m`, with a 1 MiB output bound. The first attempt has a 15-second execution budget; later attempts have 6 seconds. Concurrent requests coalesce. Successful readings cache for one minute; failures retry after five seconds and retain prior good evidence as stale. Unknown/malformed provider entries are skipped with an additive `unsupportedProviders` count; a wholly unsupported nonempty response cannot replace the last good reading.
+
+`FM_QUOTA_MAX_AGE` controls source reuse: a positive integer with `s`, `m` or `h`, at most five minutes; unset/invalid/zero/over-limit values use `5m`. This is distinct from the server cache TTL and browser demand. Visible tabs request quota every five minutes independently of dashboard polling; hidden tabs catch up on visibility. Browser age ticks run every 15 seconds without creating source observations or disturbing focus, selection or disclosures.
+
+The source `generatedAt` is the capture basis when valid. Legacy injected fixtures without it use the reader clock for `readAt`, not proof of source capture. Provider freshness uses its own `refreshedAt`, otherwise age is unknown. Reused source readings disclose reuse age. Source-reported staleness, failed refresh with retained evidence, or age reaching the configured limit makes evidence stale: effective availability, pace and runway become unknown, while captured percentages and valid reset markers remain labelled source evidence. Older than fifteen minutes shows red age; exactly fifteen minutes retains amber treatment. Never substitute request completion or an age tick for a source clock.
+
 ## Offline validation
 
 ```sh

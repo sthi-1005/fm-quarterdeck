@@ -6,7 +6,7 @@ Quarterdeck is the Firstmate operational cockpit: conversations are the shell; l
 | --- | --- |
 | [License](../LICENSE), [governance](../GOVERNANCE.md), [security](../SECURITY.md), [contributions](../CONTRIBUTING.md), [notices](../THIRD-PARTY-NOTICES.md) | MIT source-preview posture, repository-owner maintenance and truthful upstream attribution |
 | [Architecture](ARCHITECTURE.md) | Data flow, message classes, surfaces and security boundaries |
-| [Refactoring specification](refactoring/README.md) | Confirmed single-captain product intent, proposed module boundaries, issue overlap and staged refactoring |
+| [Refactoring specification](refactoring/README.md), [S00 baseline](refactoring/S00-BASELINE.md), [S01 reconciliation](refactoring/S01-DOC-OWNERS.md) | Product intent/proposed boundaries; historical snapshot qualified by accepted source and current owner corrections |
 | [Product experience and feature specs](product/README.md) | Captain-facing journeys, visible behavior, acceptance stories and proposed design choices for intent review |
 | [Implementation details](product/implementation/README.md) | Editable control behavior, appearance, placement and responsive preferences |
 | [Design decisions](product/DECISIONS.md) | Compact record of confirmed direction, labelled inferences and deferred details |
@@ -36,6 +36,6 @@ Quarterdeck is the Firstmate operational cockpit: conversations are the shell; l
 - `skills/`: optional Quarterdeck-owned integration instructions/tools.
 - `prototype/TRANSCRIPTS.md`, `SESSION-WINDOW.md`, `WORK-TAXONOMY.md`, `LAYOUT-CORRECTION.md`, `VISUAL-DESIGN.md`: detailed ingestion, work and presentation contracts.
 
-Normal record readers are read-only. Narrow guarded review/intake, taxonomy and preview-selection operations are explicit exceptions, not arbitrary operational control. A local candidate, receipt, running process, remote checkpoint and deployed release are different evidence states.
+Normal source-record readers are read-only; supported snapshots can refresh their observational caches. Explicit guarded primary-intake sends and separately owned Quarterdeck state/settings writes are not source-record repair or arbitrary operational control. One owner per semantic state class does not mean one universal file; detailed contracts and [private runtime](PRIVATE-RUNTIME.md) retain the existing owners. Fleet/task selection supplies context, never another communication recipient. A local candidate, receipt, running process, remote checkpoint and deployed release are different evidence states.
 
 [Mobile notifications](MOBILE-NOTIFICATIONS.md) documents disabled-by-default direct Web Push, private ownership and the remaining device acceptance boundary.

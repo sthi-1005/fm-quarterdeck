@@ -6,7 +6,7 @@
 
 Captain's Call showed only what `fm-bearings-snapshot.sh --json` reports: filed captain holds and merge-ready contributions. When Firstmate asked the captain something in chat without filing a hold, Quarterdeck showed no card, even though a chat `/bearings` surfaced it. The ask existed only in the transcript, and filing it depended on Firstmate following a rule.
 
-Goal: every ask Firstmate makes in chat appears as a card on the next Quarterdeck refresh or live update. The parse is deterministic, involves no model, and does not depend on Firstmate filing anything.
+Supported goal: marker-derived asks in the bounded primary transcript appear on the next refresh/live update, subject to linking, resolution and coverage limits below. This is not detection of every semantic ask. The parse is deterministic, involves no model, and does not depend on Firstmate filing a hold.
 
 ## Decision
 
@@ -95,7 +95,7 @@ The state lives in one JSON file, `<FM_QUARTERDECK_STATE_PATH>.chat-asks.json` (
 ### Guarantees
 
 - **No AI.** Extraction, linking and resolution are regular expressions and exact comparisons. Nothing calls a model.
-- **Never writes Firstmate.** Nothing is written under `FM_HOME`, and Firstmate's backlog is never touched. The only outbound path is the existing guarded inbox note, sent after an explicit captain confirmation.
+- **Source scanner is read-only toward Firstmate.** It writes only its existing Quarterdeck cursor/ask/tombstone owner, never Firstmate's backlog or transcripts. Separately confirmed sends use the existing guarded primary inbox note path. Snapshot commands have their own documented observational-cache effects ([BEARINGS](../prototype/BEARINGS.md#source-and-authority)); neither exception permits source-record repair.
 - **Not dependent on the snapshot.** Chat cards appear even when the snapshot is loading, stale or unavailable. An answer to a chat card needs only the chat scan to be `ready`.
 - **Bounded.** Each scan only stats the sources when nothing grew. New bytes are read from the cursor, at most 4 MiB per source per scan, in whole lines. A record over 2 MiB is skipped to its newline, and only lines containing `NEEDED`, `"user"` or `"queued_command"` are JSON-parsed. There is no separate captain-line size cutoff: large pasted prompts and reminder-wrapped content are evaluated within the same whole-record bound. A new or rewritten source is backfilled from its newest 4 MiB only, and asks older than 24 hours in that backfill are recorded as closed. At most 100 unlinked chat cards are served (`chat.omitted` counts the rest).
 - **Cadence.** Every `GET /api/bearings` (page load, refresh or `?since` poll) scans before it answers. While a stream is open, a scan runs every 3 s, and snapshot events re-apply linking. A scan emits `model` only for a new composed revision and is otherwise silent (the stream heartbeat carries freshness, and each event costs every stream a revision check and an activity read); the last unsubscribe stops the interval.

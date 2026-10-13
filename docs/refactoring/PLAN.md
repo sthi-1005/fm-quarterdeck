@@ -4,7 +4,7 @@ Refactor by extracting a responsibility while preserving its observable behavior
 
 The [product requirements](PRODUCT.md), [architecture](ARCHITECTURE.md) and [intent map](INTENT-MAP.md) form the intake. The plan is a proposed sequence, not a request to implement every slice or an estimate of effort.
 
-[S00 source baseline](S00-BASELINE.md) records the accepted main composition for the separate `auto-refactor` lane and qualifies the historical specification snapshot. Its tracking issue owns actual validation/delivery status; later slices remain unstarted.
+[S00 source baseline](S00-BASELINE.md) records the accepted main composition for the separate `auto-refactor` lane and qualifies the historical specification snapshot. Its tracking issue owns actual validation/delivery status. [S01 owner reconciliation](S01-DOC-OWNERS.md) records documentation corrections; its [tracking issue](https://github.com/sthi-1005/fm-quarterdeck/issues/123) owns actual check/delivery status. S02–S07 remain unstarted; candidate documentation is not merge evidence.
 
 Use the [reconciled answers](../product/DECISIONS.md#summary) to distinguish preservation from desired behavior changes. D04 intentionally changes raw-draft recovery; D01 requires neutral free-text semantics; D03 specifies corresponding mate/type controls. Implement those as explicit behavior slices with affected contracts reconciled, rather than letting a structural extraction silently change them. D02 protects composer history and does not settle chat-only call closure.
 
@@ -46,8 +46,8 @@ Use the smallest relevant subset for a slice; broaden when changed dependencies 
 
 | Contract | Representative behavior to preserve | Existing evidence starting point |
 | --- | --- | --- |
-| Call source and identity | Scoped sibling tasks, stale retention, omissions, no ineligible Merge, canonical key/rev and new occurrence | Bearings, scoped-decision, chat-ask and hold-lifecycle tests; pending PR 112 producer/clarity suites |
-| Context and association | Same original text part, sibling bounds, missing context, exact current-cycle exchange and labelled shared provenance | `chat-asks-context.test.js`, bearings thread tests; pending receipt/cycle tests |
+| Call source and identity | Scoped sibling tasks, stale retention, omissions, no ineligible Merge, canonical key/rev and new occurrence | Bearings, scoped-decision, chat-ask and hold-lifecycle tests; accepted receipt/cycle producer/clarity suites |
+| Context and association | Same original text part, sibling bounds, missing context, exact current-cycle exchange and labelled shared provenance | `chat-asks-context.test.js`, bearings thread tests; accepted receipt/cycle tests |
 | Delivery | No send on queue/cancel/gesture; partial batch acceptance; lost response; same-ID recovery; original provenance | Review, cutoff, inbox/batcher, answer and authorship suites |
 | Continuity | Engaged card hold, other cards update, draft stub, selection/focus/scroll and exact record capture after feed replacement | Bearings patch/answer form, UI and isolated browser scenarios; PR 95 remains separately incomplete |
 | Work | Conservative execution proof, explicit taxonomy, renewed completion, acknowledgement distinct from delivery | `work-model.test.js`, status/hold and work hierarchy coverage |

@@ -23,7 +23,9 @@ The bounded default is deliberately **Repository unknown**, **Lane unclassified*
 
 Each task's Evidence & classification disclosure can create explicit lane/theme records in its known repository, select an existing pair, or remove that presentation assignment. References that remain unknown cannot be assigned until their repository identity is resolved. Creation is captain input, not extraction from worker prose. Names are bounded, reject operational path/control characters, and records never cross repositories implicitly.
 
-## One durable Quarterdeck state owner
+## One durable taxonomy and completion state owner
+
+This owner covers classification, exact completion acknowledgements and completion bindings, not all Quarterdeck state. Chat cursors/asks/tombstones, review receipts/outbox, parking, landed acknowledgements, health preferences, quota caches and expense overlays retain their separate existing owners. [Private runtime](../docs/PRIVATE-RUNTIME.md#existing-owners-outside-this-expense-bundle) owns preservation; one owner per semantic class does not imply one universal file or a migration.
 
 Default: ignored `prototype/data/agent-state.json`. `FM_QUARTERDECK_STATE_PATH` may select one **absolute**, private Quarterdeck-owned file outside `FM_HOME`. Registered children inherit the host's same owner path. No private owner path, repository checkout path, process PID/boot identity, remote URL or credentials are served in the new projection.
 
