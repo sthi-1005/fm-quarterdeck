@@ -1,0 +1,24 @@
+# S00 source baseline
+
+S00 selects already accepted public `main` behavior for the separate `auto-refactor` lane. The [machine-readable composition record](s00-baseline.json) identifies exact source commits, genuine merge parents, the resulting composition tree and mapped dispositions. The [tracking issue](https://github.com/sthi-1005/fm-quarterdeck/issues/121) owns current validation and delivery evidence.
+
+The original specification snapshot is historical evidence, not current implementation status. [Receipt composition](https://github.com/sthi-1005/fm-quarterdeck/pull/112) is already merged into `main`; its accepted reconciliation includes [same-part context](https://github.com/sthi-1005/fm-quarterdeck/pull/118) and [ledger-only closure](https://github.com/sthi-1005/fm-quarterdeck/pull/119). Layout and privacy-checker foundations were already in the starting specification branch. The composition preserves every runtime/build/check file from accepted `main`, plus the existing specification/product documents and their links. No module is extracted or newly designed.
+
+## Selected contracts
+
+- [BEARINGS](../../prototype/BEARINGS.md) owns source-faithful recap, scoped calls, `holdVersion` versus presentation `rev`, current-cycle receipt posture and individually attributed exchanges. A prior-cycle note cannot lock a re-held call; a combined reply remains accessible as original provenance, not an individual reply body.
+- [CHAT-ASKS](../CHAT-ASKS.md) owns literal preceding context from the same original assistant text part and fresh selected-home ledger closure. A fresh missing snapshot row is not closure; missing, stale, remote or ambiguous ledger evidence does not manufacture it. Existing cursors/tombstones are not replayed to populate context.
+- Historical-answer admission remains default-disabled: the shipped CLI supplies no trusted selector. [TRANSCRIPTS](../../prototype/TRANSCRIPTS.md) and [source windows](../../prototype/SESSION-WINDOW.md) retain ordinary unverified-input provenance, bounded source admission and visible omissions.
+- [Private ownership](../PRIVATE-RUNTIME.md), persisted wire/storage names, original receipts/outbox membership and primary Firstmate intake remain unchanged. Firstmate-facing preferences, rules, integrations, pins and hooks are not changed or installed.
+
+[Touch interaction work](https://github.com/sthi-1005/fm-quarterdeck/pull/95) remains parked `v1`, with incomplete native acceptance and a retained unpublished correction. It is neither imported nor resumed. D01/D03/D04 desired behavior, documentation consolidation and optional features remain outside S00.
+
+## Acceptance and rollback
+
+Use the actual receipt/history/cycle and ledger/context groups, exhaustive deterministic selection, repository/expense/privacy controls, and resulting-candidate hosted `validate` and `browser` checks. The issue records commands actually run, exact candidate/check URLs and any failures. Prior accepted checks do not substitute for this composition's checks.
+
+The unchanged complete external-audit scan retains exactly eleven release-owner-accepted inherited findings: nine original product visual JPEGs and the two original pinned specification documents. Their exact path/blob/hash inventory and byte-equality proof remain off-tree. Every entire new/changed file must scan clean; no scanner/audit/category exemption is changed. Do not describe the failed whole-tree scan as zero total findings.
+
+[CI-Q3](../SOURCE-PREVIEW-VALIDATION.md#flake-quarantine-backlog) still excludes the entire Latest browser pass by default and retains its complete opt-in; it is not passed or repaired here. Historical failures remain historical, with their causes/qualifications unchanged. Synthetic source/check acceptance proves neither live served state, real Firstmate integration, trusted-selector activation nor physical-device acceptance. No service, Tailscale build, state owner or browser profile is switched or migrated.
+
+Rollback is a reviewed source-selection PR revert on `auto-refactor`, preserving merge history and private state. It performs no receipt replay, tombstone reset, store migration, live restart or promotion to `main`. Broad documentation drift belongs to S01.
