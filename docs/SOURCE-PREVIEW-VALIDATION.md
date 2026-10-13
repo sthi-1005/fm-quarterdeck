@@ -1,6 +1,6 @@
 # Source-preview validation
 
-Source-preview readiness means a reviewed tracked tree others can validate offline with maintained Node 24 LTS, Git and Linux/WSL, then pair with a separately initialized [Firstmate](https://github.com/kunchenguid/firstmate) installation for real operation inside a trusted private operator environment. It is not production readiness, public hosting approval, an authentication system or a live Firstmate acceptance result. Keep the current repository private and use the reviewed [history-free export](HISTORY-FREE-EXPORT.md) for a later separately authorized public copy.
+Source-preview readiness means a reviewed tracked tree others can validate offline with maintained Node 24 LTS, Git and Linux/WSL, then pair with a separately initialized [Firstmate](https://github.com/kunchenguid/firstmate) installation for real operation inside a trusted private operator environment. It is not production readiness, public hosting approval, an authentication system or a live Firstmate acceptance result. The repository is publicly visible; intended publication policy remains deferred under [M01](product/DECISIONS.md#m01-source-policy-wording), not settled by that visibility. Existing publication/access/disclosure guards and the reviewed [history-free export](HISTORY-FREE-EXPORT.md) requirements for a separately authorized copy remain; this factual correction approves no release, history transfer or private runtime exposure.
 
 ## Automated gate
 

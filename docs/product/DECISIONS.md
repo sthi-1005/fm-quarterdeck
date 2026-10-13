@@ -64,6 +64,6 @@ No new global visual preference was supplied. Existing styles remain the working
 
 ## M01 Source policy wording
 
-Publication-policy wording cannot be inferred from UI answers. Defer the recorded public/private documentation mismatch to publication work.
+Publication-policy intent cannot be inferred from UI answers or repository visibility. [S01](../refactoring/S01-DOC-OWNERS.md) corrects the factual public/private summary mismatch only. Intended publication policy and verification of release/contribution setup remain deferred to the release owner; private-runtime, access, licensing and disclosure guards are unchanged.
 
 Related: [product experience](README.md), [feature details](implementation/README.md), [document registry](../document-map.yaml).

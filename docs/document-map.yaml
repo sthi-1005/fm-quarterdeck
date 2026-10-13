@@ -79,6 +79,12 @@ documents:
   refactoring-plan:
     path: "docs/refactoring/PLAN.md"
     layer: "planning"
+  refactoring-baseline:
+    path: "docs/refactoring/S00-BASELINE.md"
+    layer: "planning"
+  refactoring-doc-owners:
+    path: "docs/refactoring/S01-DOC-OWNERS.md"
+    layer: "planning"
   contract-current-architecture:
     path: "docs/ARCHITECTURE.md"
     layer: "contract"
@@ -382,4 +388,4 @@ references:
     supports_features: ["supporting-features", "communication"]
   interpretation-and-history:
     documents: ["reference-instruction-inventory", "reference-feature-plan", "reference-branch-inventory", "reference-parked-work"]
-    supports_documents: ["refactoring-intents", "refactoring-plan"]
+    supports_documents: ["refactoring-intents", "refactoring-plan", "refactoring-baseline", "refactoring-doc-owners"]

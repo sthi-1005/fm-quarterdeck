@@ -2,7 +2,7 @@
 
 The proposed architecture keeps the current Node server and vanilla browser client as one application with explicit internal boundaries. The refactoring should make source interpretation, domain rules, delivery and presentation independently understandable while retaining their existing contracts. A framework change, database, service split or generic workflow engine is unnecessary for this goal.
 
-The [product requirements](PRODUCT.md) define the outcomes. This document proposes structural boundaries; [current architecture](../ARCHITECTURE.md) and the detailed domain contracts describe shipped behavior. PR 112 changes are a pending integration dependency, not assumed main behavior.
+The [product requirements](PRODUCT.md) define the outcomes. This document proposes structural boundaries; [current architecture](../ARCHITECTURE.md) and the detailed domain contracts describe shipped behavior. The accepted [S00 composition](S00-BASELINE.md) includes the landed receipt/cycle, same-part context and ledger-closure foundations. [S01 reconciliation](S01-DOC-OWNERS.md) qualifies the immutable historical snapshot; module boundaries below remain proposed.
 
 The [reconciled review](../product/DECISIONS.md#summary) adds a deliberate desired change: raw drafts survive automatic updates of the edited card but not user-driven departure/reload. Keep that behavior change separate from structural extraction and from durable sent/uncertain receipt recovery. Firstmate-owned free-text interpretation and corresponding mate/type checkboxes likewise describe desired behavior, not an already changed adapter.
 
@@ -50,7 +50,7 @@ The selected task, fleet or record travels as context. It never selects a crew e
 | Firstmate adapters | Confined files/commands, native formats, source identity and coverage | `history-reader.js`, transcript adapters, `firstmate-records.js`, `secondmate-messages.js`, activity reader | Small filesystem/process utilities and exact parsers |
 | Conversation projection | Message normalization, route projections, mirror deduplication, source selection and windows | Conversation functions in `server.js`, `lane-payload.js`, `authorship.js` | Adapters and pure routing/provenance rules |
 | Work projection | Explicit taxonomy, execution/pressure facts, completion and delivery evidence | `work-model.js`, work composition in `server.js` | Firstmate facts, the taxonomy owner, bounded durability probes |
-| Attention projection | Filed calls, linked chat asks, landed/underway/charted rows and receipt enrichment | `bearings.js`, `chat-asks.js`, `answered-calls.js`; pending `receipt-provenance.js` in PR 112 | Authoritative adapters, existing local state, read-only receipts |
+| Attention projection | Filed calls, linked chat asks, landed/underway/charted rows and receipt enrichment | `bearings.js`, `chat-asks.js`, `answered-calls.js`, accepted `receipt-provenance.js` | Authoritative adapters, existing local state, read-only receipts |
 | Intent delivery | Schema-specific answer/thread/review/chat validation, durable captures and idempotent intake | Existing relays, `review.js`, `review-v2.js`, `inbox.js`, `inbox-batcher.js` | Existing receipt/outbox owners and primary intake adapters |
 | Supporting domains | Ledger/cost projection, quota evidence, preference display and health settings | Pure expense functions in `server.js`, `costs.js`, `quota.js`, preference modules | Their own allowlisted adapters and state owners |
 | Browser features | Rendering, local interaction state and feature-specific refresh/disposal | Existing call controllers and view models; extract remaining chat/work/finance features | API client, pure domain/view helpers and shell interfaces |
@@ -89,7 +89,7 @@ Preserve these dimensions in each domain rather than compressing them into one g
 
 This is a design checklist for existing/additive models, not a mandate to migrate every API to a universal evidence schema. Missing fields retain existing conservative compatibility behavior. Public output continues to redact private paths and sensitive detail.
 
-For PR 112, preserve `holdVersion` precedence over presentation `cardRev` in the established consumers. Cosmetic changes can update `rev` without creating another cycle. A new recorded reason or hold clock changes the occurrence and excludes older-cycle locks. Preserve shared-reply membership without attributing its body to individual cards. Keep historical-answer admission default-disabled and separated from ordinary transcript input.
+For the accepted receipt/cycle foundation, preserve `holdVersion` precedence over presentation `cardRev` in the established consumers. Cosmetic changes can update `rev` without creating another cycle. A new recorded reason or hold clock changes the occurrence and excludes older-cycle locks. Preserve shared-reply membership without attributing its body to individual cards. Keep historical-answer admission default-disabled and separated from ordinary transcript input.
 
 ## State ownership
 
