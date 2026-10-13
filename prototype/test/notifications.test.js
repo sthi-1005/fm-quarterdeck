@@ -6,10 +6,13 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from 
 import { createECDH } from "node:crypto";
 import http from "node:http";
 import { EventEmitter } from "node:events";
+import { gunzipSync } from "node:zlib";
+import { createRevisionResolver } from "../revision.js";
 import { createNotificationService, eligibleView, filedIdentity, notificationConfiguration, retryDelay } from "../notifications.js";
 import { createNotificationOwner, digest, notificationPaths, privateJson } from "../notification-state.js";
 import { createPushProvider, publicIPv4, pushEndpoint, validSubscription } from "../push-provider.js";
 import { createServer } from "../server.js";
+import { createNotificationRuntime } from "../notification-runtime.js";
 import { createCallSource } from "../chat-asks.js";
 import { createProcrastinationStore } from "../call-procrastination.js";
 import { createInboxBatcher } from "../inbox-batcher.js";
@@ -20,6 +23,14 @@ const key = createECDH("prime256v1"); key.setPrivateKey(Buffer.alloc(32, 1));
 const subscription = (n = 1) => ({ endpoint: `https://fcm.googleapis.com/wp/synthetic-${n}`, expirationTime: null, keys: { auth: Buffer.alloc(16, 1).toString("base64url"), p256dh: key.getPublicKey().toString("base64url") } });
 const card = (task = "example-call", owner = "(main)", type = "decision") => ({ key: `${type}:${task}`, task, owner, type, clock: { at: null }, answer: { question: task, options: [] } });
 const initialNow = Date.parse("2030-01-01T00:00:00Z");
+const notificationRequest = (server, pathname, { method = "POST", text = "", headers = {} } = {}) => new Promise((resolve, reject) => {
+  const request = http.request({ hostname: "127.0.0.1", port: server.address().port, path: pathname, method,
+    headers: { "content-length": Buffer.byteLength(text), ...headers } }, (response) => {
+    const chunks = []; response.on("data", (chunk) => chunks.push(chunk));
+    response.on("end", () => { const bytes = Buffer.concat(chunks); resolve({ status: response.statusCode, headers: response.headers, text: (response.headers["content-encoding"] === "gzip" ? gunzipSync(bytes) : bytes).toString() }); });
+  });
+  request.on("error", reject); request.end(text);
+});
 const model = (cards, now = initialNow) => ({ state: "ready", stale: false, observedAt: new Date(now).toISOString(), cards, coverage: {}, omitted: [] });
 const input = (cards, now = initialNow) => ({ available: true, checkedAt: new Date(now).toISOString(), model: model(cards, now), receipts: { pending: [], handled: [], replies: [] }, pending: [], procrastination: { until: {} } });
 async function fixture(t) {
@@ -241,7 +252,129 @@ test("HTTP exact origin/host/schema/rate/revision boundaries keep subscription m
   revision = "b".repeat(40); assert.equal((await post("status")).status, 503);
 });
 
- test("positive local resolution cancels unsent work; absent and stale receipt evidence never renew identity", async (t) => {
+test("notification HTTP preserves refusal ordering, byte ceiling, worker content and source readiness", async (t) => {
+  const f = await fixture(t), initial = "a".repeat(40), origin = f.configuration.origin;
+  let head = initial, dirty = false, missing = false;
+  const revisionResolver = createRevisionResolver("/synthetic/notification-source", initial, { intervalMs: 0, git: async (args) => {
+    if (missing) throw new Error("Missing source identity");
+    if (args.includes("--show-toplevel")) return "/synthetic/notification-source";
+    if (args[0] === "status") return dirty ? " M prototype/server.js" : "";
+    if (args[0] === "rev-parse") return head;
+    throw new Error("Unexpected identity probe");
+  } });
+  const server = createServer({ FM_QUARTERDECK_PUSH_ORIGIN: origin }, {
+    revisionResolver, bearingsSource: { close() {} }, notificationOptions: { configuration: null },
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const wire = (pathname = "/api/notifications/status", { method = "POST", text = JSON.stringify({ id: device() }), headers = {} } = {}) => notificationRequest(server, pathname, {
+    method, text, headers: { host: "dashboard.example.invalid", origin, "content-type": "application/json", ...headers },
+  });
+  const expect = async (pathname, options, status, body) => {
+    const result = await wire(pathname, options);
+    assert.equal(result.status, status); assert.deepEqual(JSON.parse(result.text), body);
+    assert.equal(result.headers["content-type"], "application/json; charset=utf-8");
+    assert.equal(result.headers["cache-control"], "no-store"); assert.equal(result.headers.vary, "Accept-Encoding");
+    return result;
+  };
+  const disabled = { configured: false, state: "operator-disabled" };
+  await expect(undefined, {}, 200, disabled);
+  assert.equal((await expect(undefined, { headers: { "accept-encoding": "gzip" } }, 200, disabled)).headers["content-encoding"], "gzip");
+  for (const headers of [{ origin: "" }, { origin: "https://dashboard.example.invalid.evil.invalid" }, { host: "other.example.invalid" }, { origin: "", "x-forwarded-host": "dashboard.example.invalid", "x-forwarded-proto": "https" }]) {
+    await expect(undefined, { headers, method: "GET", text: "malformed" }, 403, { error: "Notifications require the stable private origin" });
+  }
+  for (const [pathname, options] of [["/api/notifications/status", { method: "GET" }], ["/api/notifications/status", { method: "PUT" }], ["/api/notifications/status?extra=1", {}], ["/api/notifications/unknown", {}], ["/api/notifications/status", { headers: { "content-type": "text/plain" } }]]) {
+    await expect(pathname, options, 400, { error: "Notification JSON operation required" });
+  }
+  for (const text of ["{", "null", "[]", "{}", JSON.stringify({ id: "invalid" }), JSON.stringify({ id: device(), extra: true })]) {
+    await expect(undefined, { text }, 400, { error: "Exact installation fields required" });
+  }
+  const body = JSON.stringify({ id: device() });
+  await expect(undefined, { text: body.padEnd(4096) }, 200, disabled);
+  await expect(undefined, { text: body.padEnd(4097) }, 413, { error: "Subscription too large" });
+  await expect(undefined, { text: JSON.stringify({ id: device(), extra: "é".repeat(2100) }) }, 413, { error: "Subscription too large" });
+  await expect("/api/notifications/enroll", { text: body }, 400, { error: "Exact installation fields required" });
+  await expect("/api/notifications/enroll", { text: JSON.stringify({ id: device(), subscription: subscription() }) }, 409, { error: "Notifications unavailable; check configuration or installation state" });
+  await expect("/api/notifications/disable", {}, 409, { error: "Notifications unavailable; check configuration or installation state" });
+  await expect("/api/notifications", {}, 404, { error: "Not found" });
+  const worker = await wire("/notifications-worker.js", { method: "GET" });
+  assert.equal(worker.status, 403, "unconfigured worker is refused even on the exact wire host");
+  for (const changed of ["dirty", "moved", "missing"]) {
+    dirty = changed === "dirty"; head = changed === "moved" ? "b".repeat(40) : initial; missing = changed === "missing";
+    await expect(undefined, { headers: { origin: "" }, text: "malformed" }, 503, { error: "Serving revision unavailable" });
+    assert.equal((await wire("/notifications-worker.js", { method: "GET" })).status, 503);
+  }
+});
+
+test("notification gateway constructs one service and closes its demand before source and preview disposal", async (t) => {
+  const f = await fixture(t), origin = f.configuration.origin, order = [];
+  let initialized = 0;
+  const source = { ...f.source, notificationEvidence: async () => input([card()], f.now), close() { order.push("source"); } };
+  const server = createServer({ FM_QUARTERDECK_PUSH_ORIGIN: origin }, {
+    revisionResolver: { initial: "a".repeat(40), snapshot: async () => "a".repeat(40) }, bearingsSource: source,
+    lifecycleFactory: () => ({ close: async () => { order.push("preview"); } }),
+    notificationOptions: { configuration: f.configuration, evidence: async () => input([card()], f.now), initializeEvidence: async () => { initialized++; }, timers: f.timers, now: () => f.now },
+  });
+  const service = server.notifications;
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { if (server.listening) return new Promise((resolve) => server.close(resolve)); });
+  const post = async (operation, body) => {
+    const response = await notificationRequest(server, `/api/notifications/${operation}`, { headers: { host: "dashboard.example.invalid", origin, "content-type": "application/json" }, text: JSON.stringify(body) });
+    assert.equal(response.status, 200); return JSON.parse(response.text);
+  };
+  await post("enroll", { id: device(), subscription: subscription() });
+  assert.equal(initialized, 1); assert.equal(f.listeners.size, 1); assert.equal(f.intervals.size, 1);
+  for (let n = 0; n < 3; n++) await post("status", { id: device() });
+  assert.equal(server.notifications, service); assert.equal(f.listeners.size, 1); assert.equal(f.intervals.size, 1);
+  const worker = await notificationRequest(server, "/notifications-worker.js", { method: "GET", headers: { host: "dashboard.example.invalid" } });
+  assert.equal(worker.status, 200); assert.equal(worker.headers["content-type"], "text/javascript; charset=utf-8");
+  assert.equal(worker.headers["cache-control"], "no-store"); assert.equal(worker.text, await readFile(new URL("../public/notifications-worker.js", import.meta.url), "utf8"));
+  assert.equal((await notificationRequest(server, "/notifications-worker.js", { method: "GET", headers: { host: "other.example.invalid" } })).status, 403);
+  assert.equal((await notificationRequest(server, "/notifications-worker.js", { headers: { host: "dashboard.example.invalid" } })).status, 404);
+  const close = service.close;
+  service.close = () => { order.push("notifications"); close(); assert.equal(f.listeners.size, 0); assert.equal(f.intervals.size, 0); };
+  await new Promise((resolve) => server.close(resolve));
+  assert.deepEqual(order, ["notifications", "source", "preview"]);
+  assert.equal(server.listening, false); assert.equal(f.sends.length, 0);
+});
+
+test("notification construction retains strict shared evidence, initialization order and unavailable inputs", async (t) => {
+  const f = await fixture(t), order = [];
+  let pending = [], failed = false, current = [card("old-call")], revision = true;
+  const service = createNotificationRuntime({}, {
+    bearingsSource: { ...f.source, notificationEvidence: async () => input(current, f.now) }, syncRevision: async () => revision,
+    inboxBatcher: { initializeEvidence: async () => { order.push("inbox"); }, pending: async (options) => { assert.deepEqual(options, { strict: true }); if (failed) throw new Error("Unavailable pending evidence"); return pending; } },
+    procrastination: { initializeEvidence: async () => { order.push("parked"); }, evidence: async () => ({ until: {} }) },
+    notificationOptions: { configuration: f.configuration, timers: f.timers, now: () => f.now },
+  });
+  t.after(() => service.close());
+  await service.enroll(device(), subscription());
+  assert.deepEqual(order, ["inbox", "parked"]); assert.equal(f.listeners.size, 1); assert.equal(f.intervals.size, 1);
+  current = [card("new-call")]; pending = [{ key: "decision:new-call" }]; await service.tick();
+  assert.equal(f.sends.length, 0); assert.equal((await f.owner.read()).seen[filedIdentity(current[0])].disposition, "suppressed");
+  current = [card("unknown-call")]; pending = []; failed = true; await service.tick();
+  assert.equal((await service.status(device())).state, "eligibility-unavailable");
+  assert.equal((await f.owner.read()).seen[filedIdentity(current[0])], undefined); assert.equal(f.sends.length, 0);
+  revision = false; await service.tick();
+  assert.equal((await service.status(device())).state, "revision-unavailable"); assert.equal(f.listeners.size, 0); assert.equal(f.intervals.size, 0);
+});
+
+test("notification HTTP retains authorized loopback fallback and stable-only mode restrictions", async (t) => {
+  const initial = "a".repeat(40);
+  for (const env of [{}, { FM_REVIEW_ALLOWED_ORIGIN: "https://dashboard.example.invalid" }, { FM_DEV: "1" }, { FM_DEPLOYMENT_TIER: "uat" }]) {
+    const server = createServer(env, { revisionResolver: { initial, snapshot: async () => initial }, bearingsSource: { close() {} }, notificationOptions: { configuration: null } });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const headers = { "content-type": "application/json", origin: env.FM_REVIEW_ALLOWED_ORIGIN || base,
+      ...(env.FM_REVIEW_ALLOWED_ORIGIN ? { host: "dashboard.example.invalid" } : {}) };
+    const response = await notificationRequest(server, "/api/notifications/status", { headers, text: JSON.stringify({ id: device() }) });
+    assert.equal(response.status, env.FM_DEV || env.FM_DEPLOYMENT_TIER ? 403 : 200);
+    assert.deepEqual(JSON.parse(response.text), env.FM_DEV || env.FM_DEPLOYMENT_TIER ? { error: "Notifications require the stable private origin" } : { configured: false, state: "operator-disabled" });
+  }
+});
+
+test("positive local resolution cancels unsent work; absent and stale receipt evidence never renew identity", async (t) => {
   const f = await fixture(t); await f.service.enroll(device(), subscription());
   f.result(new Error("unknown")); f.cards([card("resolved-call")]); await f.service.tick();
   f.advance(6000); f.cards([]); await f.service.tick(); assert.equal(Object.values((await f.owner.read()).outbox)[0].state, "retry");
