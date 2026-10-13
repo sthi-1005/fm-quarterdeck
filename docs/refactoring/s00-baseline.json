@@ -27,7 +27,7 @@
     ],
     "tree": "9757fe3655a1531f553632be5f74b45319c055de",
     "conflicts": [],
-    "runtimeBuildAndCheckFiles": "byte-identical to accepted public main",
+    "runtimeBuildAndCheckFiles": "byte-identical to accepted public main at the composition commit; subsequent test-only reviewed-baseline reconciliation is recorded separately",
     "existingSpecificationAndProductDocuments": "preserved; this record and minimal S00 status prose are a separate documentation commit",
     "finalDeliveryIdentity": "recorded in the tracking issue and slice pull request after the documentation commit"
   },
@@ -79,7 +79,10 @@
   "latestBrowserPass": "CI-Q3 whole pass EXCLUDED by default / retained complete opt-in; not passed or repaired",
   "inheritedDisclosureDisposition": {
     "acceptedFindings": 11,
-    "requiredProof": "exact original path/blob/SHA256 inventory and candidate byte equality retained off-tree",
+    "requiredProof": "fixed test-only original path/blob/SHA256/finding manifest; full external-audit and candidate byte-equality proofs retained off-tree",
+    "testOnlyManifest": "test/fixtures/vauto-disclosure-baseline.json",
+    "testOnlyManifestSha256": "c21249e213834717feddcb8f3a3a7a94b0df0e490d2cb7bb954a97e3ff215092",
+    "reviewedBaselineTest": "runs normally; rejects altered/missing/renamed original bytes, unexpected findings and self-approved evidence; absent manifest retains zero-finding contract",
     "newOrChangedFilesRequiredClean": true,
     "scannerOrAuditChanged": false,
     "zeroTotalClaim": false

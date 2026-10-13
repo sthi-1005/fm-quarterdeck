@@ -1,0 +1,94 @@
+{
+  "schema": "fm-quarterdeck-vauto-disclosure-baseline.v1",
+  "sourceCommit": "9409586bbfbdb418d85e4e663a9ed7307377775f",
+  "objects": [
+    {
+      "path": "docs/product/visual/assets/call.jpg",
+      "blob": "85a62c6df81ecd43ac39021962c7a18d2a8faae4",
+      "sha256": "2bc14635a8cf8cb296d3fa76eacd10d19467e3cfb70297dd253d5799c1c182e7",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/chats.jpg",
+      "blob": "0f05d59a1d54d5c96578a0c0b5c2dcf293fcd59b",
+      "sha256": "9792badd4790a06ac11e33fad906bc7451b5a0b118a7bd3ffd2c0fe454ae7e25",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/completion.jpg",
+      "blob": "2b51034d8cb881b22b4046c53304233de367846e",
+      "sha256": "a3d4675791c48a7843f29f5c9f577cfa71f7d77aba5d970f1c50dd6397e4ea11",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/composer.jpg",
+      "blob": "7e871b5752209e9ed41c95a45f1ec12a5f49058d",
+      "sha256": "7fd82546a822f35703aa6b1c4d4b6f28bf54a8f9cac25f289696292955fbe88a",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/expenses.jpg",
+      "blob": "6a2966bac07e43da122180b6c39653cae421efe4",
+      "sha256": "a60678b7ffe69840beed6091142ef16af411838ffe1e5dbb0e9c9d13271be47c",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/overview.jpg",
+      "blob": "28d44e00437a881bfc2b1ddcf15f4b45e6b2cdce",
+      "sha256": "3842bd0271639f967b1b2d36afce671839b00a504291a892aef37702f55588b3",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/preferences.jpg",
+      "blob": "cb6fd01426cc5d52c329686610cb1cb389ebdd6a",
+      "sha256": "6882f32f2fd038cd90d12ef3727d1edff8cadd96149de58ea8123d537e0a3258",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/quota.jpg",
+      "blob": "675d24089f8dea13d66c87f13c1527c5c9fe8240",
+      "sha256": "c7d800f192cc5eefd43aaf71b641e8117e773ca8ba561c6f311c3fc95c049365",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/product/visual/assets/work.jpg",
+      "blob": "566dba02a952d02ed0bc3868997f0dfaf8cb7c12",
+      "sha256": "bfe67557c34404009b87d6b88294ae2c664ebf90dd14aab85fa185397e5744c4",
+      "findings": [
+        "unreviewed binary"
+      ]
+    },
+    {
+      "path": "docs/refactoring/INTENT-MAP.md",
+      "blob": "563556321df50edff0f235676d361fe94cff8297",
+      "sha256": "652bedb0442a5ec910da1e268920b63f59747fff68b417a4a64f8ee104654317",
+      "findings": [
+        "F10: literal historical revision in documentation"
+      ]
+    },
+    {
+      "path": "docs/refactoring/README.md",
+      "blob": "64c0d335f5f6770607de10636cf7402f3ef6dda6",
+      "sha256": "2052638a4b29e88daa95e6f4daa346b02695fc9de168caf0bd74462afbbf75a3",
+      "findings": [
+        "F10: literal historical revision in documentation"
+      ]
+    }
+  ]
+}

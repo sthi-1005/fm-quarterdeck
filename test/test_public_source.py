@@ -1,6 +1,7 @@
 """Synthetic-only regression tests for the public-source gate."""
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -9,6 +10,40 @@ spec = importlib.util.spec_from_file_location("public_gate", Path(__file__).reso
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 sha = lambda value: hashlib.sha256(value).hexdigest()
+
+# Test-only release-owner evidence: immutable public vauto source objects, not
+# private audit fingerprints or a scanner/category exemption. Never regenerate
+# acceptance from the candidate tree. A different manifest requires new review.
+VAUTO_MANIFEST = "test/fixtures/vauto-disclosure-baseline.json"
+VAUTO_MANIFEST_SHA256 = "c21249e213834717feddcb8f3a3a7a94b0df0e490d2cb7bb954a97e3ff215092"
+
+
+def assert_reviewed_baseline(blobs, markers, blocked, evidence=None):
+    findings = gate.scan(blobs, markers, blocked)
+    if evidence is None:
+        # Main/v1 without the vauto evidence retains its zero-finding contract.
+        assert findings == [], "Unexpected disclosure findings without approved vauto evidence"
+        return
+    assert sha(evidence) == VAUTO_MANIFEST_SHA256, "Approved evidence changed"
+    manifest = json.loads(evidence)
+    assert manifest["schema"] == "fm-quarterdeck-vauto-disclosure-baseline.v1"
+    assert manifest["sourceCommit"] == "9409586bbfbdb418d85e4e663a9ed7307377775f"
+    data = dict(blobs)
+    assert len(data) == len(blobs), "Duplicate source paths"
+    assert data.get(VAUTO_MANIFEST) == evidence, "Approved evidence absent from tracked source"
+    expected = []
+    assert len(manifest["objects"]) == 11
+    for item in manifest["objects"]:
+        content = data.get(item["path"])
+        assert content is not None, "Approved object missing or renamed"
+        assert sha(content) == item["sha256"], "Approved object bytes changed"
+        blob = b"blob " + str(len(content)).encode("ascii") + b"\0" + content
+        assert hashlib.sha1(blob).hexdigest() == item["blob"], "Approved Git blob changed"
+        expected.extend((item["path"], category) for category in item["findings"])
+    assert len(expected) == 11
+    assert all(1 <= index <= len(blobs) for index, _ in findings)
+    actual = [(blobs[index - 1][0], category) for index, category in findings]
+    assert sorted(actual) == sorted(expected), "Unexpected, changed or missing disclosure findings"
 
 
 class PublicGateTests(unittest.TestCase):
@@ -207,7 +242,63 @@ class PublicGateTests(unittest.TestCase):
 
     def test_reviewed_baseline_is_quiet(self):
         root = Path(__file__).resolve().parents[1]
-        self.assertEqual(gate.scan(gate.tracked_blobs(root, worktree=True), self.markers, self.blocked), [])
+        blobs = gate.tracked_blobs(root, worktree=True)
+        assert_reviewed_baseline(blobs, self.markers, self.blocked, dict(blobs).get(VAUTO_MANIFEST))
+
+    def approved_vauto_fixture(self):
+        root = Path(__file__).resolve().parents[1]
+        evidence = (root / VAUTO_MANIFEST).read_bytes()
+        objects = json.loads(evidence)["objects"]
+        blobs = [(item["path"], (root / item["path"]).read_bytes()) for item in objects]
+        return blobs + [(VAUTO_MANIFEST, evidence)], evidence
+
+    def test_vauto_baseline_accepts_only_exact_reviewed_objects_and_findings(self):
+        blobs, evidence = self.approved_vauto_fixture()
+        assert_reviewed_baseline(blobs, self.markers, self.blocked, evidence)
+        with self.assertRaises(AssertionError):
+            assert_reviewed_baseline(blobs, self.markers, self.blocked)
+        # The no-manifest contract remains genuinely zero-clean, not a skip.
+        assert_reviewed_baseline([("neutral.txt", b"safe")], self.markers, self.blocked)
+
+    def test_vauto_baseline_rejects_changed_missing_or_renamed_approved_objects(self):
+        blobs, evidence = self.approved_vauto_fixture()
+        for index, (name, data) in enumerate(blobs[:-1]):
+            for changed in [
+                blobs[:index] + [(name, data + b"\n")] + blobs[index + 1:],
+                blobs[:index] + blobs[index + 1:],
+                blobs[:index] + [("renamed/" + name, data)] + blobs[index + 1:],
+            ]:
+                with self.subTest(name=name), self.assertRaises(AssertionError):
+                    assert_reviewed_baseline(changed, self.markers, self.blocked, evidence)
+
+    def test_vauto_baseline_rejects_new_and_changed_file_findings(self):
+        blobs, evidence = self.approved_vauto_fixture()
+        token = ("gh" + "p_" + "z" * 36).encode()
+        cases = [("new.bin", b"\xff\0"), ("new.md", b"Revision abc1234"),
+                 ("neutral.txt", token), ("neutral.txt", self.values["private-project"])]
+        clean = blobs + [("neutral.txt", b"safe")]
+        assert_reviewed_baseline(clean, self.markers, self.blocked, evidence)
+        for name, data in cases:
+            for candidate in [blobs + [(name, data)], clean[:-1] + [(name, data)]]:
+                with self.subTest(name=name), self.assertRaises(AssertionError):
+                    assert_reviewed_baseline(candidate, self.markers, self.blocked, evidence)
+        # Even unchanged approved bytes cannot gain another category/occurrence.
+        marker = b"revision"
+        markers = {len(marker): {sha(marker): "private-project"}}
+        with self.assertRaises(AssertionError):
+            assert_reviewed_baseline(blobs, markers, self.blocked, evidence)
+        with self.assertRaises(AssertionError):
+            assert_reviewed_baseline(blobs, self.markers, {sha(blobs[0][1])}, evidence)
+
+    def test_vauto_baseline_rejects_manifest_self_approval_or_missing_evidence(self):
+        blobs, evidence = self.approved_vauto_fixture()
+        for changed in [evidence + b"\n", evidence.replace(b"unreviewed binary", b"approved binary")]:
+            with self.assertRaises(AssertionError):
+                assert_reviewed_baseline(blobs[:-1] + [(VAUTO_MANIFEST, changed)], self.markers, self.blocked, changed)
+        with self.assertRaises(AssertionError):
+            assert_reviewed_baseline(blobs[:-1], self.markers, self.blocked, evidence)
+        with self.assertRaises(AssertionError):
+            assert_reviewed_baseline(blobs + [blobs[0]], self.markers, self.blocked, evidence)
 
     def test_fixture_review_is_confined_to_exact_files_and_complete_paths(self):
         private_path = ("/" + "home/" + "acme-private/data/report.md").encode()
