@@ -1,10 +1,11 @@
 import { stat } from "node:fs/promises";
 import { shortHash } from "./bearings.js";
-import { displayAnswer } from "./bearings-answer.js";
+import { cardTask, threadRequestId, THREAD_NOTE_TAG } from "./call-note-evidence.js";
+export { cardTask, taggedEnvelope, noteForCard, threadKeyPart, threadRequestId, THREAD_NOTE_TAG } from "./call-note-evidence.js";
 import { discoverPrimarySources, mentionsTask, recordTurns } from "./chat-asks.js";
 import { createHistoryReader } from "./history-reader.js";
 import { inboxReceipts, noteWithRequestId } from "./inbox.js";
-import { currentCardNote, receiptReply, replyBody } from "./receipt-provenance.js";
+import { cardNoteEvidence } from "./receipt-provenance.js";
 
 // Card threads (BEARINGS.md "Card threads"). Text in a Captain's Call card's one box, with
 // no option selected, sends the captain's note to Firstmate through the same guarded,
@@ -15,14 +16,10 @@ import { currentCardNote, receiptReply, replyBody } from "./receipt-provenance.j
 // primary-transcript messages that mention the card's task id. No model, no writes under
 // FM_HOME beyond the inbox note itself.
 export const THREAD_SCHEMA = "fm-quarterdeck-card-thread.v1";
-export const THREAD_NOTE_TAG = "fm-quarterdeck-thread";
 export const MAX_THREAD_BODY_BYTES = 4096;
 export const MAX_QUESTION_BYTES = 2000;
 const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CARD_KEY = /^(?:(?:decision|merge|chat|landed):[A-Za-z0-9._-]{1,160}|decision:[A-Za-z0-9][A-Za-z0-9._-]{0,159}\/[A-Za-z0-9][A-Za-z0-9._-]{0,159})$/;
-// fm-inbox.sh request ids: [A-Za-z0-9._:-], at most 128 characters.
-const INBOX_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-const PREFIX = "quarterdeck-thread:";
 const MAX_REMEMBERED = 200;
 const MAX_ENTRIES = 80;
 const MAX_ENTRY_CHARS = 16000;
@@ -35,18 +32,6 @@ const refuse = (status, code, message) => { throw new ThreadRefused(status, code
 const bytes = (text) => Buffer.byteLength(text, "utf8");
 
 export const validCardKey = (key) => typeof key === "string" && CARD_KEY.test(key);
-// The card key is embedded verbatim when it fits the inbox id grammar; a longer key is
-// replaced by its hash, and the note's tagged fence still names the exact key.
-export const threadKeyPart = (key) => INBOX_ID.test(`${PREFIX}${key}:${"0".repeat(36)}`) ? key : `h-${shortHash(key)}`;
-export const threadRequestId = (key, requestId) => `${PREFIX}${threadKeyPart(key)}:${requestId}`;
-const threadPrefix = (key) => `${PREFIX}${threadKeyPart(key)}:`;
-
-// The task a card is about: the card's own task, or the one its key names.
-export function cardTask(card, key) {
-  if (card?.task) return card.task;
-  const match = /^(?:decision|merge|landed):(.+)$/.exec(key);
-  return match ? match[1] : null;
-}
 const cardByKey = (model, key) => (model?.cards || []).find((entry) => entry.key === key) || (model?.landed || []).find((entry) => entry.key === key);
 const cardLabel = (card, key) => {
   if (card?.type === "chat" || key.startsWith("chat:")) return `Chat ask ${key.slice(5)}`;
@@ -89,38 +74,6 @@ export function formatThreadNote({ key, card, text, requestId }) {
     JSON.stringify(envelope, null, 2).replaceAll("`", "\\u0060"),
     "```",
   ].join("\n");
-}
-
-// The JSON of a tagged fence at the end of a note body, or null.
-export function taggedEnvelope(body, tag) {
-  if (typeof body !== "string" || body.length > 64 * 1024) return null;
-  const match = body.match(new RegExp(`\\n\`\`\`json ${tag}\\n([^]*?)\\n\`\`\`\\s*$`));
-  if (!match) return null;
-  try { const value = JSON.parse(match[1]); return value && typeof value === "object" && !Array.isArray(value) ? value : null; } catch { return null; }
-}
-
-// Does an inbox note belong to this card? Thread asks by request id or tagged key;
-// Captain's Call answers by their fm-bearings-answer envelope's question/task.
-export function noteForCard(note, key, card) {
-  const id = typeof note?.request_id === "string" ? note.request_id : "";
-  if (id.startsWith(PREFIX)) {
-    const envelope = taggedEnvelope(note.body, THREAD_NOTE_TAG);
-    if (envelope ? envelope.key === key : id.startsWith(threadPrefix(key))) return { kind: "ask", text: typeof envelope?.question === "string" ? envelope.question : note.body };
-    return null;
-  }
-  if (id.startsWith("quarterdeck-call:")) {
-    const envelope = taggedEnvelope(note.body, "fm-bearings-answer");
-    if (!envelope || envelope.channel !== "quarterdeck") return null;
-    const task = cardTask(card, key);
-    const mine = key.startsWith("chat:") ? envelope.type === "chat" && envelope.question === `chat.${key.slice(5)}`
-      : envelope.type === key.split(":")[0] && Boolean(task) && envelope.task === task;
-    if (!mine) return null;
-    return { kind: "answer", text: displayAnswer(String(envelope.selection || ""), String(envelope.note || "")) };
-  }
-  // Any other note that carries a thread fence for this exact card (for example one
-  // Firstmate filed by hand with the tag).
-  const envelope = taggedEnvelope(note?.body, THREAD_NOTE_TAG);
-  return envelope?.key === key && typeof envelope.question === "string" ? { kind: "ask", text: envelope.question } : null;
 }
 
 // Firstmate's own text in the newest window of each primary source. Cached per source by
@@ -199,12 +152,8 @@ export function createThreadRelay({ home, note = noteWithRequestId, receipts = i
       const notes = new Map();
       for (const item of [...data.pending, ...data.handled]) if (item?.id && !notes.has(item.request_id || item.id)) notes.set(item.request_id || item.id, item);
       for (const item of notes.values()) {
-        const match = noteForCard(item, key, card);
+        const { match, reply, scope, replyText, envelope, current } = cardNoteEvidence(data, item, key, card);
         if (!match) continue;
-        const { reply, scope } = receiptReply(data, item);
-        const replyText = replyBody(reply);
-        const envelope = taggedEnvelope(item.body, "fm-bearings-answer") || taggedEnvelope(item.body, THREAD_NOTE_TAG) || {};
-        const current = currentCardNote(card, envelope, item.at);
         const captain = { kind: match.kind, from: "captain", at: item.at || null, text: threadText(match.text), noteId: item.id, requestId: item.request_id,
           ...(card?.holdVersion ? { holdVersion: envelope.holdVersion || null, cardRev: envelope.cardRev || null, currentHold: current } : {}),
           ...(reply ? { replyScope: scope } : {}), state: reply ? "replied" : data.handled.some((entry) => entry.id === item.id) ? "received" : "waiting" };

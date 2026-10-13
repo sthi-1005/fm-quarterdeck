@@ -13,6 +13,52 @@ const note = (c,n,id='note-shared',extra={}) => ({id,at:'2026-01-01T12:01:00Z',r
 const history = (c,data,turns=[]) => createThreadRelay({home:'/synthetic',receipts:async()=>data,transcript:async()=>({turns,omitted:true})}).history(c.key,{cards:[c]});
 const data = (handled,replies) => ({pending:[],handled,replies});
 
+// The same original receipt is consumed after each source transition; never replay it.
+test('source transitions preserve exact exchanges, request status and original evidence', async () => {
+  const original = card('sample-a', { holdVersion: 'cycle-a', clock: { at: '2026-01-01T12:00:00Z' } });
+  const answer = { id: 'original', at: '2026-01-01T12:01:00Z', request_id: `quarterdeck-call:${uuid(7)}`,
+    body: '\n```json fm-bearings-answer\n' + JSON.stringify({ schema: 'fm-bearings-answer.v1', channel: 'quarterdeck', type: 'decision', task: original.task, question: original.task, holdVersion: original.holdVersion, cardRev: original.rev, selection: 'later', note: 'Keep the sample scope.' }) + '\n```' };
+  const receipts = data([answer], [{ in_reply_to: 'original', at: '2026-01-01T12:02:00Z', text: 'Recorded, not resolved.' }]);
+  const bytes = JSON.stringify(receipts);
+  const states = [
+    [original, true],
+    [{ ...original, rev: 'cosmetic', repo: 'example-app' }, true],
+    [{ ...original, holdVersion: 'cycle-b', reason: 'A different question.' }, false],
+    [{ ...original, clock: { at: '2026-01-01T13:00:00Z' } }, false],
+    [{ ...original, clock: { at: null } }, true],
+    [card('child-home/sample-a', { holdVersion: 'cycle-a', clock: original.clock }), false],
+    [card('sample-b', { holdVersion: 'cycle-a', clock: original.clock }), false],
+    [original, true],
+  ];
+  for (const [current, exact] of states) {
+    const projected = classifyAnsweredCalls([current], receipts)[0];
+    assert.equal(projected.answered === true, exact);
+    assert.equal(projected.sentReceipt, exact ? 'replied' : undefined);
+    const h = await history(current, receipts);
+    assert.deepEqual(h.entries.map(entry => entry.kind), exact ? ['answer', 'reply'] : []);
+    assert.equal(h.provenance.some(entry => entry.kind === 'earlier-note'), !exact && current.task === original.task);
+    const status = await createAnswerRelay({ home: '/synthetic', receipts: async () => receipts }).status([uuid(7)]);
+    assert.deepEqual(status.answers[uuid(7)], { state: 'replied', reply: 'Recorded, not resolved.', replyScope: 'individual' }, 'status describes the original request, not a new source cycle');
+    assert.equal(JSON.stringify(receipts), bytes);
+  }
+  for (const at of [null, 'not-a-clock']) {
+    const unversioned = { ...answer, at, body: answer.body.replace('"holdVersion":"cycle-a",', '').replace('"cardRev":"presentation-a",', '') };
+    const unknown = data([unversioned], []);
+    assert.equal(classifyAnsweredCalls([original], unknown)[0].answered, undefined);
+    assert.equal((await history(original, unknown)).entries.length, 0);
+  }
+});
+
+test('legacy embedded reply keeps consumer-specific availability without inventing status evidence', async () => {
+  const c = card();
+  const n = note(c, 8, 'embedded', { request_id: `quarterdeck-call:${uuid(8)}`, body: '\n```json fm-bearings-answer\n' + JSON.stringify({ schema: 'fm-bearings-answer.v1', channel: 'quarterdeck', type: 'decision', task: c.task, question: c.task }) + '\n```', reply: { body: 'Original embedded reply.' } });
+  const receipts = data([n], []);
+  assert.equal(classifyAnsweredCalls([c], receipts)[0].sentReceipt, 'replied');
+  assert.equal((await history(c, receipts)).entries[1].text, 'Original embedded reply.');
+  const status = await createAnswerRelay({ home: '/synthetic', receipts: async () => receipts }).status([uuid(8)]);
+  assert.deepEqual(status.answers[uuid(8)], { state: 'received', announced: false }, 'native request status has always required the replies collection');
+});
+
 test('optional cycle guard honors version, clock and legacy revision precedence without producing identities',()=>{
   const c=card('sample-a',{holdVersion:'current',clock:{at:'2026-01-01T12:00:00Z'}});
   for(const [envelope,at,expected] of [

@@ -25,6 +25,7 @@ No home discovery or saved circular pointer inside the home is required. The sel
 - `prototype/private-runtime.js` / `cost-config.js`: guarded private expense selection and validated attribution.
 - `prototype/costs.js` / `quota.js`: bounded allowlisted account adapters, cache coalescing and truthful unavailable/stale states.
 - `prototype/bearings.js` / `chat-asks.js`: the snapshot call hub and the deterministic transcript chat-ask extractor composed over it.
+- `prototype/receipt-provenance.js`: shared card-note evidence and answer-request status projection for answered calls and threads; `call-note-evidence.js` owns pure tagged-note association and request identity. Existing answer/thread exports remain compatibility façades. [BEARINGS](../prototype/BEARINGS.md#lifecycle) retains cycle/provenance semantics; [CHAT-ASKS](CHAT-ASKS.md) retains same-part context and ledger-only closure.
 - `prototype/agent-state.js` / `work-model.js`: atomic presentation state, explicit classification, read-only endpoint probes and completion/delivery separation.
 - `prototype/review.js`, `inbox.js`, `revision.js`, `previews.js`, `preview-lifecycle.js`: exact identity, origin, receipt/intake and pre-provisioned runtime contracts.
 - `prototype/public/`: hash routing, safe rendering, independently refreshing views, filters, source selection, pagination and accessibility.
