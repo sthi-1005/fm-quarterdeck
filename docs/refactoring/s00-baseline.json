@@ -1,0 +1,91 @@
+{
+  "schema": "fm-quarterdeck-s00-baseline.v1",
+  "slice": "S00",
+  "requirements": ["R02", "R03", "R07", "P04", "P05", "P09"],
+  "trackingIssue": "https://github.com/sthi-1005/fm-quarterdeck/issues/121",
+  "targetBranch": "auto-refactor",
+  "startingSource": {
+    "branch": "auto-refactor",
+    "commit": "9409586bbfbdb418d85e4e663a9ed7307377775f",
+    "sharedAncestor": "4b74b897a76ba581c0a44d92dd062b796428bdd3"
+  },
+  "acceptedPublicSource": {
+    "branch": "main",
+    "commit": "4ca01d1cf916f40d3d7a916a15637aa414233603",
+    "receiptCandidate": "93428bfe24245d4e677247a921c4130deb5ce22c",
+    "receiptCandidateParents": [
+      "a46b6bd150203a1b6bcb980bf3952317c9bdf21f",
+      "4b74b897a76ba581c0a44d92dd062b796428bdd3"
+    ]
+  },
+  "composition": {
+    "method": "genuine merge of accepted public main into the auto-refactor-based feature branch",
+    "commit": "f127bc1192fec49f83b5f82d313bbbcc2eda0eac",
+    "parents": [
+      "9409586bbfbdb418d85e4e663a9ed7307377775f",
+      "4ca01d1cf916f40d3d7a916a15637aa414233603"
+    ],
+    "tree": "9757fe3655a1531f553632be5f74b45319c055de",
+    "conflicts": [],
+    "runtimeBuildAndCheckFiles": "byte-identical to accepted public main at the composition commit; subsequent test-only reviewed-baseline reconciliation is recorded separately",
+    "existingSpecificationAndProductDocuments": "preserved; this record and minimal S00 status prose are a separate documentation commit",
+    "finalDeliveryIdentity": "recorded in the tracking issue and slice pull request after the documentation commit"
+  },
+  "mappedDispositions": [
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/112",
+      "acceptedHead": "93428bfe24245d4e677247a921c4130deb5ce22c",
+      "mainMerge": "4ca01d1cf916f40d3d7a916a15637aa414233603",
+      "disposition": "already accepted on main; incorporated without reimplementing reconciliation",
+      "preserves": ["source-faithful recap", "holdVersion/current-cycle receipt classification", "individual versus combined provenance", "default-disabled authenticated historical admission"]
+    },
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/115",
+      "mainMerge": "5f573434fb1df927f8be9f36f8ecd7e3885e9c74",
+      "disposition": "already an ancestor of starting auto-refactor; unchanged",
+      "preserves": ["responsive Overview columns/tabs", "phone dock clearance", "same-node composer controls"]
+    },
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/117",
+      "mainMerge": "ce8d29939b000641194432c97f9fafdc1c211f69",
+      "disposition": "already an ancestor of starting auto-refactor; unchanged",
+      "preserves": ["occurrence-scoped public coordinate recognition", "independent disclosure gates"]
+    },
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/118",
+      "mainMerge": "4b74b897a76ba581c0a44d92dd062b796428bdd3",
+      "disposition": "already an ancestor of starting auto-refactor; preserved in accepted receipt reconciliation",
+      "preserves": ["same-assistant-part context", "canonical extraction/key/revision", "no context-population replay"]
+    },
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/119",
+      "mainMerge": "1bac69e3457400b6d6f9bf173663902f5da9c760",
+      "disposition": "already an ancestor of starting auto-refactor; preserved in accepted receipt reconciliation",
+      "preserves": ["fresh selected-home ledger-only closure", "no snapshot-disappearance closure", "open/stale/missing/omitted counterfactuals", "tombstones"]
+    },
+    {
+      "url": "https://github.com/sthi-1005/fm-quarterdeck/pull/95",
+      "lane": "v1",
+      "disposition": "parked; not imported or resumed",
+      "qualification": "incomplete native interaction acceptance; unpublished correction retained separately"
+    }
+  ],
+  "behaviorChange": "none beyond selecting already accepted main behavior",
+  "firstmateFacingChange": "none; primary intake, preferences, rules, installed pins/hooks and compatibility names unchanged",
+  "historicalAnswerSelectorEnabled": false,
+  "stateMigration": false,
+  "liveServingOrDeployment": false,
+  "validationOwner": "tracking issue and slice pull request; actual exact-head results only",
+  "latestBrowserPass": "CI-Q3 whole pass EXCLUDED by default / retained complete opt-in; not passed or repaired",
+  "inheritedDisclosureDisposition": {
+    "acceptedFindings": 11,
+    "requiredProof": "fixed test-only original path/blob/SHA256/finding manifest; full external-audit and candidate byte-equality proofs retained off-tree",
+    "testOnlyManifest": "test/fixtures/vauto-disclosure-baseline.json",
+    "testOnlyManifestSha256": "c21249e213834717feddcb8f3a3a7a94b0df0e490d2cb7bb954a97e3ff215092",
+    "reviewedBaselineTest": "runs normally; rejects altered/missing/renamed original bytes, unexpected findings and self-approved evidence; absent manifest retains zero-finding contract",
+    "newOrChangedFilesRequiredClean": true,
+    "scannerOrAuditChanged": false,
+    "zeroTotalClaim": false
+  },
+  "rollback": "reviewed source-selection PR revert on auto-refactor only; no private state mutation, replay, migration, live restart or main promotion"
+}

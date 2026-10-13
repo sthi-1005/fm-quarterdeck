@@ -4,6 +4,8 @@ Refactor by extracting a responsibility while preserving its observable behavior
 
 The [product requirements](PRODUCT.md), [architecture](ARCHITECTURE.md) and [intent map](INTENT-MAP.md) form the intake. The plan is a proposed sequence, not a request to implement every slice or an estimate of effort.
 
+[S00 source baseline](S00-BASELINE.md) records the accepted main composition for the separate `auto-refactor` lane and qualifies the historical specification snapshot. Its tracking issue owns actual validation/delivery status; later slices remain unstarted.
+
 Use the [reconciled answers](../product/DECISIONS.md#summary) to distinguish preservation from desired behavior changes. D04 intentionally changes raw-draft recovery; D01 requires neutral free-text semantics; D03 specifies corresponding mate/type controls. Implement those as explicit behavior slices with affected contracts reconciled, rather than letting a structural extraction silently change them. D02 protects composer history and does not settle chat-only call closure.
 
 ## Sequence and dependencies
