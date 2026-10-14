@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { parseCss, computed, element } from './helpers/css-model.mjs';
 
 const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
-const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
+const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-composition.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("opt-in compact headers preserve Quota markup and expose full descriptions", async () => {
@@ -130,35 +130,35 @@ test("Overview retains KPIs, replaces only the project tree with accessible live
   assert.match(overview, /id="call-status"[^>]*role="status"/);
   assert.doesNotMatch(overview, /id="projects"|overview-status|Repositories →/);
   const app = ui();
-  app.run('renderCallBadge({cards:[{},{}]})');
+  app.run('callsFeature.paintBadge({cards:[{},{}]})');
   assert.equal(app.node('#call-badge').textContent, '2');
   assert.equal(app.node('#call-mobile-badge').textContent, '2');
   assert.match(app.node('#sr-announcer').textContent, /2 Captain's Calls/);
   app.node('#sr-announcer').textContent = '';
-  app.run('renderCallBadge({cards:[{}]})');
+  app.run('callsFeature.paintBadge({cards:[{}]})');
   assert.equal(app.node('#sr-announcer').textContent, '');
-  app.run('renderCallBadge({cards:[]})');
+  app.run('callsFeature.paintBadge({cards:[]})');
   assert.equal(app.node('#call-badge').hidden, true);
 });
 
 test("Active view shows Send queued for the staged count and the click reuses the review sender", () => {
   const app = ui();
   const button = app.node("#call-send-queued");
-  app.run(`callPatcher.applied = { cards: [] };
-    callLifecycleFilter = "active";
-    callAnswers = { queued: () => [] };
-    renderCallLifecycle();`);
+  app.run(`showView('overview'); window.callTestPatcher.applied = { cards: [] };
+    window.callTestQueued = []; callsFeature.paint();`);
+  const choose = (state) => app.node('#call-lifecycle-filter').dispatchEvent({ type: 'click',
+    target: { closest: () => ({ getAttribute: () => state }) } });
+  choose('active');
   assert.equal(button.hidden, true, "nothing queued keeps the button hidden");
-  app.run(`callAnswers = { queued: () => [{ phase: "confirm" }, { phase: "failed" }] };
-    callLifecycleFilter = "queued";
-    renderCallLifecycle();`);
+  app.run(`window.callTestQueued = [{ phase: "confirm" }, { phase: "failed" }];`);
+  choose('queued');
   assert.equal(button.hidden, true, "other status views hide it even when answers are queued");
-  app.run(`callLifecycleFilter = "active"; renderCallLifecycle();`);
+  choose('active');
   assert.equal(button.hidden, false);
   assert.equal(button.disabled, false);
   assert.equal(button.textContent, "Send queued (2)");
   assert.equal(button.getAttribute("aria-label"), "Send 2 queued Captain's Call answers");
-  app.run(`callAnswers = { queued: () => [{ phase: "sending" }] }; renderCallLifecycle();`);
+  app.run(`window.callTestQueued = [{ phase: "sending" }]; callsFeature.paint();`);
   assert.equal(button.disabled, true);
   assert.equal(button.textContent, "Send queued (1)");
   assert.equal(button.getAttribute("aria-label"), "Sending 1 queued Captain's Call answer");
@@ -385,10 +385,24 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
   document.createElement = (tag) => quotaNodes.element(tag);
   const context = vm.createContext({
     document, URL,
-    window: { location: { hash: "#lanes" }, callHooks: null, callPatches: [], callObservations: [],
-      bearingsPatch: { createCallPatcher: () => ({ update: model => context.window.callPatches.push(model), observe: data => context.window.callObservations.push(data) }) },
-      bearingsLive: { createBearingsLive: hooks => { queueMicrotask(() => { context.window.callHooks = hooks; }); return { start() {}, refresh() {} }; } },
-      getSelection: () => document.selection, addEventListener(name, listener) { windowListeners.set(name, listener); }, matchMedia: (query) => ({ matches: query.includes("max-width") ? compact : false, addEventListener() {} }) },
+    window: { document, location: { hash: "#lanes" }, callHooks: null, callPatches: [], callObservations: [],
+      callTestQueued: [],
+      bearingsPatch: { createCallPatcher: () => (context.window.callTestPatcher = { update: model => context.window.callPatches.push(model), observe: data => context.window.callObservations.push(data) }) },
+      bearingsAnswerForm: { createAnswerController: () => ({ queued: () => context.window.callTestQueued, state: () => null }) },
+      bearingsLive: { createBearingsLive: hooks => { queueMicrotask(() => { context.window.callHooks = hooks; }); return { start() {}, stop() {}, refresh() {} }; } },
+      getSelection: () => document.selection,
+      addEventListener(name, listener, options = false) {
+        const capture = typeof options === 'boolean' ? options : Boolean(options?.capture);
+        const handlers = windowListeners.get(name) || [];
+        if (!handlers.some(entry => entry.listener === listener && entry.capture === capture)) handlers.push({ listener, capture });
+        windowListeners.set(name, handlers);
+      },
+      removeEventListener(name, listener, options = false) {
+        const capture = typeof options === 'boolean' ? options : Boolean(options?.capture);
+        const handlers = windowListeners.get(name) || [];
+        const index = handlers.findIndex(entry => entry.listener === listener && entry.capture === capture);
+        if (index !== -1) handlers.splice(index, 1);
+      }, matchMedia: (query) => ({ matches: query.includes("max-width") ? compact : false, addEventListener() {} }) },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem(key, value) { storage.set(key, value); } },
     // Leave initial network loading pending; tests inject only synthetic records.
     fetch: fetchImpl,
@@ -396,9 +410,14 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
     clearTimeout: (id) => clearTimeout(id),
   });
   vm.runInContext(script, context);
+  const dispatch = (name, event) => {
+    for (const entry of [...(windowListeners.get(name) || [])]) {
+      if (windowListeners.get(name)?.includes(entry)) entry.listener(event);
+    }
+  };
   return { run: (code) => vm.runInContext(code, context), node: (id) => document.querySelector(id),
-    hashchange: (hash) => windowListeners.get("hashchange")?.({ newURL: `http://localhost/${hash}` }),
-    windowEvent: (name) => windowListeners.get(name)?.() };
+    hashchange: (hash) => dispatch('hashchange', { type: 'hashchange', newURL: `http://localhost/${hash}` }),
+    windowEvent: (name) => dispatch(name, { type: name, persisted: false }) };
 }
 
 const expenseFixture = () => ({ source: "private overlay (selected FM_HOME)", demo: false, entryCount: 4,
