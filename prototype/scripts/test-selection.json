@@ -15,6 +15,7 @@
     "test/chat-asks-hold-lifecycle.test.js",
     "test/chat-asks-source.test.js",
     "test/cost-view-model.test.js",
+    "test/composer-layout.test.js",
     "test/edge-handle.test.js",
     "test/enumerated-options.test.js",
     "test/fetch-fixture.test.mjs",

@@ -9,7 +9,8 @@ import test from "node:test";
 import { createServer } from "../server.js";
 import { deliverReview, deliverLocalReview, reconcileLocalReview, reviewStatusLine, reviewVersion, awaitingReviewCount, localReviewStatus } from "../review.js";
 
-const reviewClientScript = await readFile(new URL("../public/review-target.js", import.meta.url), "utf8") + "\n" + await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
+const layoutScript = (await readFile(new URL("../public/composer-layout.js", import.meta.url), "utf8")).replace("export function", "function");
+const reviewClientScript = await readFile(new URL("../public/review-target.js", import.meta.url), "utf8") + "\n" + layoutScript + "\n" + (await readFile(new URL("../public/review-client.js", import.meta.url), "utf8")).replace(/^import .*;\n/m, "");
 const entry = { kind: "annotation", text: "Improve this card", route: "#overview", version: reviewVersion, region: { id: "project:abc/header:0", label: "Project" } };
 const payload = { schema: "fm-agentos-review.v1", batchId: "123e4567-e89b-12d3-a456-426614174000", sessionId: "review-1", version: reviewVersion, route: "#overview", end: false, entries: [entry, { kind: "message", text: "And the menu", region: null, route: "#preferences", version: reviewVersion }] };
 const wirePayload = ({ provenance, ...wire }) => wire;

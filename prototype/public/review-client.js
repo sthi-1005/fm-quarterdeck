@@ -1,3 +1,5 @@
+import { createComposerLayout } from "./composer-layout.js";
+
 // Native review overlay. Annotation is always available; the toggle swaps click precedence.
 const el = (id) => document.getElementById(id);
 const capture = window.QuarterdeckReviewTarget;
@@ -47,41 +49,9 @@ document.body.append(noticeStack);
 function reviewHistoryTab() { return Boolean(phoneReview?.matches) && activeReviewTab === "review"; }
 function setReviewTab(tab) {
   activeReviewTab = tab;
-  const annotation = tab === "annotation";
-  const phone = Boolean(phoneReview?.matches);
-  for (const [id, value] of [["review-conversation-tab", "conversation"], ["review-annotation-tab", "annotation"], ["review-history-tab", "review"]]) {
-    const selectedTab = tab === value && !(phone && value === "annotation");
-    el(id)?.setAttribute("aria-selected", String(selectedTab));
-    el(id)?.setAttribute("tabindex", selectedTab ? "0" : "-1");
-  }
-  el("review-select-location")?.setAttribute("aria-pressed", String(annotation && phone));
-  el("review-panel").setAttribute("data-review-tab", phone ? tab : annotation ? "annotation" : sentOpen ? "review" : "conversation");
-  syncReviewScrollLock();
-  el("review-phone-thread").hidden = !phone || tab !== "review";
-  el("review-history-actions").hidden = phone && tab !== "review";
-  placeReviewActions();
+  composerLayout.syncTab();
 }
-// Relocate the existing controls; Queue keeps its explicit composer form owner.
-// Closing Review or returning to Message restores the original composer order.
-function placeReviewActions() {
-  const actions = document.querySelector("#review-form .review-actions");
-  const history = el("review-history-actions");
-  if (!actions?.insertBefore || !history?.append) return;
-  const phone = Boolean(phoneReview?.matches);
-  const reviewing = !el("review-panel").hidden && (!phone || activeReviewTab === "review");
-  const queueButton = el("review-queue");
-  const sendButton = el("review-send");
-  const focused = document.activeElement;
-  const destination = reviewing ? history : actions;
-  if (reviewing && !phone) {
-    if (queueButton.parentElement !== history) history.append(queueButton);
-  } else if (queueButton.parentElement !== actions) actions.insertBefore(queueButton, actions.firstChild);
-  if (sendButton.parentElement !== destination) {
-    if (reviewing) history.append(sendButton);
-    else actions.insertBefore(sendButton, queueButton.nextSibling);
-  }
-  if ((focused === sendButton || (focused === queueButton && !phone)) && document.activeElement !== focused) focused.focus();
-}
+const placeReviewActions = () => composerLayout.placeReviewActions();
 function endPicking() {
   pickingRegion = false;
   pickNotice.hidden = true;
@@ -221,63 +191,25 @@ function regionFor(node) {
   return { id: `${anchorId}${path.length ? `/${path.join("/")}` : ""}`.slice(0, 300), ...precise, label: label(actual), route: route(), version: config.version };
 }
 
-const highlight = document.createElement("div");
-highlight.className = "review-highlight";
-highlight.hidden = true;
-document.body.append(highlight);
-let selectedNode = null;
-function positionHighlight() {
-  highlight.hidden = !selectedNode || el("review-panel").hidden || !selectedNode.isConnected;
-  if (highlight.hidden) return;
-  const rect = selectedNode.getBoundingClientRect();
-  Object.assign(highlight.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
-}
-window.addEventListener("resize", positionHighlight);
-document.addEventListener("scroll", positionHighlight, true);
-const phoneReview = window.matchMedia?.("(max-width: 720px)");
-let bodyOverflowBeforeReview = null;
-function syncReviewViewport() {
-  const viewport = window.visualViewport;
-  const root = document.documentElement;
-  if (!root?.style?.setProperty) return;
-  const height = viewport?.height || window.innerHeight;
-  root.style.setProperty("--review-vv-height", `${height}px`);
-  root.style.setProperty("--review-vv-top", `${Math.max(0, viewport?.offsetTop || 0)}px`);
-  // When the keyboard is visible the fixed phone navigation is below the visual viewport.
-  root.style.setProperty("--review-nav-space", window.innerHeight - height - (viewport?.offsetTop || 0) > 120 ? "0px" : "calc(72px + env(safe-area-inset-bottom, 0px))");
-}
-function syncReviewScrollLock() {
-  const lock = Boolean(phoneReview?.matches && !el("review-panel").hidden && activeReviewTab === "review");
-  if (lock && bodyOverflowBeforeReview === null) {
-    bodyOverflowBeforeReview = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-  } else if (!lock && bodyOverflowBeforeReview !== null) {
-    document.body.style.overflow = bodyOverflowBeforeReview;
-    bodyOverflowBeforeReview = null;
-  }
-}
-phoneReview?.addEventListener?.("change", () => { setReviewTab(activeReviewTab); updateReviewControl(); });
-window.visualViewport?.addEventListener?.("resize", syncReviewViewport);
-window.visualViewport?.addEventListener?.("scroll", syncReviewViewport);
-window.addEventListener("resize", syncReviewViewport);
-syncReviewViewport();
+let selectedNode = null; // Capture lifetime stays with the delivery client.
+const composerLayout = createComposerLayout({ window, document,
+  state: () => ({ tab: activeReviewTab, sentOpen, selectedNode }),
+  changed: () => { updateSelectionAction(); updateReviewControl(); }, closeAnnotation });
+const { phoneReview, desktopComposer } = composerLayout;
+const positionHighlight = () => composerLayout.positionHighlight();
+const syncReviewViewport = () => composerLayout.syncViewport();
+const syncReviewScrollLock = () => composerLayout.syncScrollLock();
 
 function panel(open) {
   if (open) closeAnnotation();
   el("review-panel").hidden = !open;
-  placeReviewActions();
   if (!open) {
     selectedNode = null;
     el("review-form").classList?.remove("review-form-anchored");
     if (el("review-form").style) el("review-form").style.left = el("review-form").style.top = "";
     selectedNode = null;
   }
-  syncReviewViewport();
-  syncReviewScrollLock();
-  el("review-panel-toggle").setAttribute("aria-expanded", String(open));
-  // Click's default focus may return to the opener after its handler; focus after it completes.
-  if (open && !(phoneReview?.matches && activeReviewTab === "annotation")) setTimeout(() => { if (!el("review-panel").hidden) el("review-message").focus(); }, 0);
-  positionHighlight();
+  composerLayout.panelChanged(open);
   saveDraft();
 }
 const statusLabels = {
@@ -712,25 +644,7 @@ function selectRegion(node, point) {
   }
   panel(false);
   selectedNode = targetFor(node);
-  const dialog = el("review-annotation");
-  const composer = el("review-form");
-  dialog.append(composer);
-  dialog.hidden = false;
-  const rect = selectedNode.getBoundingClientRect();
-  const x = point?.x ?? rect.left + rect.width / 2;
-  const y = point?.y ?? rect.top + rect.height / 2;
-  composer.classList?.add("review-form-anchored");
-  resizeMessage();
-  update();
-  if (desktopComposer?.matches) {
-    if (window.paneBounds?.controller) window.paneBounds.controller.place(dialog, { left: x, top: y + 12 });
-    else {
-      dialog.style.left = `${Math.max(8, Math.min(x, innerWidth - dialog.offsetWidth - 8))}px`;
-      dialog.style.top = `${Math.max(8, Math.min(y + 12, innerHeight - dialog.offsetHeight - 8))}px`;
-    }
-  }
-  positionHighlight();
-  setTimeout(() => { if (!dialog.hidden) el("review-message").focus(); }, 0);
+  composerLayout.showAnnotation(point, update);
   el("review-state").textContent = `Selected ${selected.label}. Describe it, then queue annotation.`;
 }
 
@@ -783,13 +697,7 @@ if (typeof setInterval === "function") setInterval(() => {
   else if (config.ready && sent.some((batch) => !["completed", "failed", "replied"].includes(batch.state))) void refreshStatuses();
 }, 5000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "hidden") recheckConfig(); });
-// Keep one composer and its draft across layout switches. Phones retain the in-pane row.
-const desktopComposer = window.matchMedia?.("(min-width: 721px)");
-function resizeMessage() {
-  const message = el("review-message");
-  message.style.height = "0px";
-  message.style.height = `${Math.min(message.scrollHeight, Math.max(80, window.innerHeight * .3))}px`;
-}
+const resizeMessage = () => composerLayout.resizeMessage();
 function closeAnnotation() {
   const dialog = el("review-annotation");
   if (dialog.hidden) return;
@@ -797,37 +705,8 @@ function closeAnnotation() {
   dialog.style.left = dialog.style.top = "";
   placeComposer();
 }
-function placeComposer() {
-  const form = el("review-form");
-  const footer = el("desktop-review-footer");
-  const banner = document.querySelector(".uat-deployment-label");
-  // Standalone UAT's compact phone identity stays in the workspace; desktop
-  // version identity belongs solely to the dark sidebar, not the composer footer.
-  if (banner && banner.parentElement !== el("lanes")) el("lanes").append(banner);
-  const destination = desktopComposer?.matches ? footer : el("review-panel");
-  if (!destination?.insertBefore || (form.parentElement === destination && el("review-annotation").hidden)) return;
-  if (desktopComposer?.matches) {
-    // Restore the shared trigger before placing the composer during a phone-to-desktop resize.
-    if (el("review-panel-toggle").parentElement !== destination) destination.append(el("review-panel-toggle"));
-    destination.insertBefore(form, el("review-panel-toggle"));
-  }
-  else destination.insertBefore(form, el("review-state"));
-  form.classList.remove("review-form-anchored");
-  form.style.left = form.style.top = "";
-  resizeMessage();
-}
-function placeSelectionAction() {
-  const action = el("review-select-location");
-  const destination = phoneReview?.matches ? document.querySelector(".review-header-actions") : document.querySelector("#review-form .review-actions");
-  if (action && destination?.insertBefore && action.parentElement !== destination) {
-    if (phoneReview?.matches) destination.insertBefore(action, destination.firstChild); else destination.append(action);
-  }
-  setReviewTab(activeReviewTab);
-  updateSelectionAction();
-}
-desktopComposer?.addEventListener?.("change", () => { closeAnnotation(); placeComposer(); placeSelectionAction(); });
-placeComposer();
-placeSelectionAction();
+const placeComposer = () => composerLayout.placeComposer();
+composerLayout.mount();
 el("review-toggle").addEventListener("change", (event) => {
   annotateByDefault = event.target.checked;
   update();
@@ -863,17 +742,7 @@ el("review-conversation-tab")?.addEventListener("click", () => {
 });
 el("review-annotation-tab")?.addEventListener("click", () => { if (phoneReview?.matches) document.activeElement?.blur?.(); setReviewTab("annotation"); update(); });
 el("review-history-tab")?.addEventListener("click", () => { setReviewTab("review"); update(); void refreshStatuses(); });
-const reviewTabIds = ["review-conversation-tab", "review-annotation-tab", "review-history-tab"];
-for (const id of reviewTabIds) {
-  el(id)?.addEventListener("keydown", (event) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const tabs = reviewTabIds.filter((tabId) => tabId !== "review-annotation-tab");
-    const next = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs.at(-1)
-      : tabs[(tabs.indexOf(id) + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
-    el(next).click(); el(next).focus();
-  });
-}
+
 el("review-sent")?.addEventListener("toggle", () => {
   sentOpen = el("review-sent").open;
   setReviewTab(activeReviewTab);
@@ -917,24 +786,6 @@ window.addEventListener("hashchange", () => {
   if (!selected && !pickingRegion) return;
   selected = null; selectedNode = null; returnToArmed = false; endPicking(); positionHighlight(); update();
 });
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && el("review-gesture-popover")?.matches(":popover-open")) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    el("review-gesture-popover").hidePopover();
-    return;
-  }
-  if (event.key !== "Tab" || !phoneReview?.matches || el("review-panel").hidden || activeReviewTab !== "annotation") return;
-  const panelNode = el("review-panel");
-  const controlsInSheet = [...(panelNode.querySelectorAll?.('button:not([hidden]):not([disabled]), textarea:not([hidden])') || [])]
-    .filter((node) => node.getClientRects().length);
-  if (!controlsInSheet.length) return;
-  const first = controlsInSheet[0], last = controlsInSheet.at(-1);
-  if (!panelNode.contains(document.activeElement) || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-  }
-}, true);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
   if (pickingRegion) { event.preventDefault(); endPicking(); update(); return; }
@@ -1130,5 +981,5 @@ el("review-clear-messages").addEventListener("click", () => {
   update();
 });
 window.addEventListener("quarterdeck-inbox-pending", () => update());
-window.quarterdeckReviewQueue = { refresh: () => update(), sendCallAnswers, sending: () => sendingCalls };
+window.quarterdeckReviewQueue = { refresh: () => update(), sendCallAnswers, sending: () => sendingCalls, layout: composerLayout };
 update();

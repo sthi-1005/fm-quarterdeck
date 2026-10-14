@@ -330,58 +330,18 @@ function syncMobileRoute() {
 }
 new MutationObserver(syncMobileRoute).observe(workspace, { attributes: true, attributeFilter: ["data-view"] });
 
-// Only Review is modal; Message and Annotation leave the page interactive.
-const reviewPanel = document.querySelector("#review-panel");
-const reviewSheet = document.createElement("dialog");
-reviewSheet.className = "mobile-sheet mobile-review-sheet";
-reviewSheet.setAttribute("aria-label", "Review conversation");
-document.body.append(reviewSheet);
-reviewSheet.addEventListener("cancel", (event) => {
-  event.preventDefault();
-  document.querySelector("#review-close").click();
-});
-reviewSheet.addEventListener("click", (event) => {
-  if (event.target === reviewSheet) document.querySelector("#review-close").click();
-});
-// Closing a native dialog restores its previous focus after review-client's synchronous
-// close handler. Re-focus the visible dock opener only once that restoration has run.
-reviewSheet.addEventListener("close", () => {
-  if (desktop.matches || !reviewPanel.hidden) return;
-  const pickNotice = document.querySelector(".review-pick-notice:not([hidden])");
-  if (pickNotice) pickNotice.querySelector("button")?.focus();
-  else document.querySelector("#review-panel-toggle").focus();
-});
-function syncReviewSheet() {
-  if (!desktop.matches && !reviewPanel.hidden) {
-    if (toolsSheet.open) toolsSheet.close();
-    if (chatSheet.open) chatSheet.close();
-    const reviewing = reviewPanel.dataset.reviewTab === "review";
-    if (reviewSheet.open && (reviewSheet.matches(":modal") !== reviewing)) reviewSheet.close();
-    if (!reviewSheet.open) {
-      if (reviewing) reviewSheet.showModal(); else reviewSheet.show();
-    }
-  } else if (reviewSheet.open) reviewSheet.close();
-}
-new MutationObserver(syncReviewSheet).observe(reviewPanel, { attributes: true, attributeFilter: ["hidden", "data-review-tab"] });
-const annotation = document.querySelector("#review-annotation");
-const annotationSheet = document.createElement("dialog");
-annotationSheet.className = "mobile-sheet mobile-annotation-sheet";
-annotationSheet.setAttribute("aria-label", "Annotate selected content");
-document.body.append(annotationSheet);
-function syncAnnotationSheet() {
-  if (!desktop.matches && !annotation.hidden) {
-    if (!annotationSheet.open) annotationSheet.showModal();
-  } else if (annotationSheet.open) annotationSheet.close();
-}
-annotationSheet.addEventListener("cancel", (event) => { event.preventDefault(); document.querySelector("#review-form-close").click(); });
-annotationSheet.addEventListener("click", (event) => { if (event.target === annotationSheet) document.querySelector("#review-form-close").click(); });
-new MutationObserver(syncAnnotationSheet).observe(annotation, { attributes: true, attributeFilter: ["hidden"] });
+// Composer owns its dialogs, placement, focus and attribute subscriptions.
+// The shell supplies only the existing surrounding-sheet coordination.
+const composerLayout = window.quarterdeckReviewQueue.layout;
+composerLayout.attachShell({ closeMobileTools() {
+  if (toolsSheet.open) toolsSheet.close();
+  if (chatSheet.open) chatSheet.close();
+} });
 function syncMobileControls() {
   if (desktop.matches) {
     toolsSheet.close();
     chatSheet.close();
-    reviewSheet.close();
-    annotationSheet.close();
+    composerLayout.sync();
     workspace.dataset.searchOpen = "false";
     document.querySelector("#header-search-toggle")?.setAttribute("aria-expanded", "false");
     for (const [node, anchor] of placements) { anchor.replaceWith(node); }
@@ -404,8 +364,6 @@ function syncMobileControls() {
   moveControl(document.querySelector("#review-panel-toggle"), mobileDock, mobileDock.querySelector(".mobile-dock-quota"));
   moveControl(document.querySelector(".preview-control"), toolsBody);
   moveControl(document.querySelector(".uat-deployment-label"), toolsBody);
-  moveControl(reviewPanel, reviewSheet);
-  moveControl(annotation, annotationSheet);
   moveControl(document.querySelector("#conversation-filter-shortcut"), document.querySelector(".product-identity > div"), document.querySelector(".product-identity-subtext"));
   document.querySelector("#review-send").textContent = "Send";
   moveControl(document.querySelector(".conversation-head-actions"), chatTools);
@@ -417,8 +375,7 @@ function syncMobileControls() {
   toggle.setAttribute("aria-label", "Open workspace tools");
   toggle.setAttribute("aria-expanded", String(toolsSheet.open));
   syncMobileRoute();
-  syncReviewSheet();
-  syncAnnotationSheet();
+  composerLayout.sync();
 }
 function closeHeaderSearch({ focusToggle = false } = {}) {
   if (workspace.dataset.searchOpen !== "true") return;

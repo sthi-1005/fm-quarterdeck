@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 
-const script = await readFile(new URL("../public/review-target.js", import.meta.url), "utf8") + "\n" + await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
+const layoutScript = (await readFile(new URL("../public/composer-layout.js", import.meta.url), "utf8")).replace("export function", "function");
+const script = await readFile(new URL("../public/review-target.js", import.meta.url), "utf8") + "\n" + layoutScript + "\n" + (await readFile(new URL("../public/review-client.js", import.meta.url), "utf8")).replace(/^import .*;\n/m, "");
 const openSent = (page, open) => { const sent = page.element("review-sent"); sent.open = open; sent.listeners.toggle(); };
 const tick = () => new Promise(setImmediate);
 function harness() {
@@ -788,7 +789,7 @@ test("Annotate follows the composer at tablet widths and uses the same draft acr
   const before = p.state();
   for (const width of [600, 768, 1024, 600, 1024]) {
     p.setDesktop(width > 720);
-    vm.runInContext("placeSelectionAction()", p.context);
+    vm.runInContext("composerLayout.placeSelectionAction()", p.context);
     assert.equal(action.parentElement, width > 720 ? actions : header, `${width}px places the existing control with the active composer`);
     assert.deepEqual(p.state(), before, "placement leaves queue, captures and drafts intact");
     action.click();

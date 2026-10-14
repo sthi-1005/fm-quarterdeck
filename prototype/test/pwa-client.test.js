@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 
+const layoutScript = (await readFile(new URL("../public/composer-layout.js", import.meta.url), "utf8")).replace("export function", "function");
 const script = await readFile(new URL("../public/review-target.js", import.meta.url), "utf8")
-  + "\n" + await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
+  + "\n" + layoutScript + "\n" + (await readFile(new URL("../public/review-client.js", import.meta.url), "utf8")).replace(/^import .*;\n/m, "");
 const boot = "a".repeat(40), next = "b".repeat(40);
 const ready = (version) => ({ ready: true, version, delivery: "local", sessionId: "", awaitingReview: 0 });
 const tick = () => new Promise(setImmediate);

@@ -224,13 +224,15 @@ test("desktop control and persistent review footer keep gesture and action order
   assert.match(css, /\.review-gesture:has\(input:checked\) \{ border-color: #9ff0e0; background: #0a6f60; color: white; \}/);
   assert.match(css, /@media \(min-width: 721px\) \{[\s\S]*#review-pick \{ display: none !important; \}/);
   assert.match(html, /<footer id="desktop-review-footer"[\s\S]*id="review-panel-toggle"[\s\S]*<\/footer>/);
-  assert.match(review, /destination\.insertBefore\(form, el\("review-panel-toggle"\)\)/);
-  assert.match(review, /destination\.insertBefore\(form, el\("review-state"\)\)/);
+  const layout = await readFile(new URL("../public/composer-layout.js", import.meta.url), "utf8");
+  assert.match(layout, /destination\.insertBefore\(form, el\("review-panel-toggle"\)\)/);
+  assert.match(layout, /destination\.insertBefore\(form, el\("review-state"\)\)/);
   assert.match(html, /id="review-message"[\s\S]*id="review-queue"[\s\S]*id="review-send"[\s\S]*id="review-panel-toggle"/);
   assert.match(css, /\.lane-list \{ grid-column: 1; grid-row: 1 \/ 3; \}/);
   assert.match(css, /#desktop-review-footer \{ grid-column: 2 \/ -1; grid-row: 2;/);
   assert.match(html, /id="review-message"[^>]*placeholder="Message firstmate"/);
-  assert.match(review, /el\("lanes"\)\.append\(banner\)/);
+  assert.match(layout, /el\("lanes"\)\.append\(banner\)/);
+  assert.match(review, /composerLayout\.mount\(\)/);
   const preview = await readFile(new URL("../public/preview-selector.js", import.meta.url), "utf8");
   assert.match(preview, /destination\.insertBefore\(box, destination\.firstChild\)/);
   assert.match(css, /#desktop-review-footer \{ display: contents; \}/);
@@ -242,7 +244,9 @@ test("composer uses one Send and places the existing Annotate action beside desk
   assert.match(css, /\.review-actions \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /\.review-actions button \{ min-width: 0;/);
   const review = await readFile(new URL("../public/review-client.js", import.meta.url), "utf8");
-  assert.match(review, /phoneReview\?\.matches \? document\.querySelector\("\.review-header-actions"\) : document\.querySelector\("#review-form \.review-actions"\)/);
+  const layout = await readFile(new URL("../public/composer-layout.js", import.meta.url), "utf8");
+  assert.match(layout, /phoneReview\?\.matches \? document\.querySelector\("\.review-header-actions"\) : document\.querySelector\("#review-form \.review-actions"\)/);
+  assert.match(review, /composerLayout\.syncTab\(\)/);
 });
 
 test("mobile icons preserve desktop text and accessible names", async () => {
