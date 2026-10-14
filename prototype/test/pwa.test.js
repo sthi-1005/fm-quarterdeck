@@ -99,6 +99,7 @@ test("all public root assets and HTML are no-store outside dev mode", async (t) 
     const response = await fetch(base + route);
     assert.equal(response.status, file.name === "notifications-worker.js" ? 403 : 200, route);
     assert.equal(response.headers.get("cache-control"), "no-store", route);
+    if (file.name === "composer-layout.js") assert.equal(response.headers.get("content-type"), "text/javascript; charset=utf-8");
     await response.arrayBuffer();
   }
   assert.equal((await fetch(`${base}/dev-reload.js`)).status, 404);

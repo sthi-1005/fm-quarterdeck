@@ -69,6 +69,14 @@ test("selector lists exact stopped revisions without internals; write accepts on
   assert.equal((await post({ id: "main" })).status, 200);
   assert.equal((await post({ id: entry.id })).status, 409);
   assert.equal((await fetch(`${base}/preview/main/api/health`)).status, 200);
+  const composer = await fetch(`${base}/preview/main/composer-layout.js`);
+  assert.equal(composer.status, 200);
+  assert.equal(composer.headers.get("content-type"), "text/javascript; charset=utf-8");
+  assert.equal(composer.headers.get("cache-control"), "no-store");
+  assert.match(await composer.text(), /export function createComposerLayout/);
+  for (const route of ["/composer-layout.js/extra", "/composer-layout-private.js", "/preview/main/composer-layout.js/extra", "/preview/main/composer-layout-private.js"]) {
+    assert.equal((await fetch(base + route)).status, 404, route);
+  }
 }));
 
 test("mismatched Main refuses its identity without silently substituting its remote checkpoint", async () => {
