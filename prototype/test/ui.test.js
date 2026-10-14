@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { parseCss, computed, element } from './helpers/css-model.mjs';
 
 const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
-const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-composition.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
+const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-composition.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("opt-in compact headers preserve Quota markup and expose full descriptions", async () => {
@@ -418,6 +418,15 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
   return { run: (code) => vm.runInContext(code, context), node: (id) => document.querySelector(id),
     hashchange: (hash) => dispatch('hashchange', { type: 'hashchange', newURL: `http://localhost/${hash}` }),
     windowEvent: (name) => dispatch(name, { type: name, persisted: false }) };
+}
+
+function setWorkPhase(app, value) {
+  app.run('showView("work")');
+  app.node("#work-phase").dispatchEvent({ type: "change", target: { value } });
+}
+function setWorkDisclosure(app, key, open) {
+  app.run('showView("work")');
+  app.node("#tight-work").dispatchEvent({ type: "toggle", target: { dataset: { treeKey: key }, open } });
 }
 
 const expenseFixture = () => ({ source: "private overlay (selected FM_HOME)", demo: false, entryCount: 4,
@@ -996,6 +1005,7 @@ test("work split renders separate escaped counts and explicit project waits", ()
 
 test("work grouping keeps tight and large separate, composes filters, and never invents themes", () => {
   const app = ui();
+  app.run('showView("work")');
   const item = (id, repository, workGroup = null) => ({ id, name: id, repository, workGroup });
   const split = { tight: {
     backlog: { count: 4, items: [item("a", "Alpha", { kind: "epic", name: "Checkout <safe>" }), item("b", "Beta", { kind: "theme", name: "Reliability" }), item("c", "Alpha"), item("d", null)] },
@@ -1032,6 +1042,127 @@ test("work grouping keeps tight and large separate, composes filters, and never 
   app.run(`renderWorkSplit(${JSON.stringify(split)})`);
   assert.equal(app.node("#work-repository").value, "repo:Alpha");
   assert.equal(app.node("#work-phase").value, "justLanded");
+});
+
+const workFixture = () => ({ items: [
+  { id: "same-task", name: "Same task", taskFingerprint: "a".repeat(64), repositoryId: "repo-a", repository: "Same name", lane: { id: "ui", name: "Interface" }, theme: { id: "review", name: "Review", kind: "iteration" }, status: "cleanup", sourceState: "done", endpointEvidence: "liveness unknown", retained: true, completionAttention: "newly-done", completionFingerprint: "b".repeat(64), completionSourceFingerprint: "c".repeat(64), delivery: "Ready for review · deployment unknown", evidence: [], taxonomyOptions: [{ id: "ui", name: "Interface", themes: [{ id: "review", name: "Review" }] }], chatLaneId: "fixture lane" },
+  { id: "same-task", name: "Same task", taskFingerprint: "d".repeat(64), repositoryId: "repo-b", repository: "Same name", lane: { id: "unclassified", name: "Lane unclassified" }, theme: { id: "unclassified", name: "Theme / iteration unclassified" }, status: "unknown", sourceState: "working", endpointEvidence: "liveness unknown", evidence: [], taxonomyOptions: [], chatLaneId: "other lane" },
+  { id: "unknown-task", name: "Unknown task", taskFingerprint: "e".repeat(64), repositoryId: "unknown", repository: "Repository unknown", lane: { id: "unclassified", name: "Lane unclassified" }, theme: { id: "unclassified", name: "Theme / iteration unclassified" }, status: "backlog", evidence: [], taxonomyOptions: [] },
+] });
+const flushWork = async () => { for (let n = 0; n < 3; n++) await new Promise(resolve => setImmediate(resolve)); };
+function workControl(app, dataset) {
+  const summary = app.node("#work-fixture-summary"), view = app.node("#work-view"), row = app.node("#work-fixture-row");
+  view.querySelector = selector => { view.focusSelector = selector; return summary; };
+  const control = { dataset, disabled: false, closest: selector => selector === ".feature-view" ? view : selector === ".work-slice" ? row : selector === "[data-ack-task]" ? control : null };
+  return { control, view, row, summary };
+}
+
+test("Work route owns exactly seven callbacks: repeated departure/reentry preserves local memory and outside focus/selection", () => {
+  const app = ui();
+  const targets = ["#work-group-by", "#work-repository", "#work-phase", "#work-phase-buttons", "#tight-work"];
+  const registrations = [], removals = [];
+  for (const selector of targets) {
+    const node = app.node(selector), add = node.addEventListener, remove = node.removeEventListener;
+    node.addEventListener = (type, fn, capture) => { registrations.push({ node, type, fn, capture }); add(type, fn); };
+    node.removeEventListener = (type, fn, capture) => { removals.push({ node, type, fn, capture }); remove(type, fn); };
+  }
+  app.run(`renderWorkSplit(${JSON.stringify(workFixture())}); showView('work'); showView('work')`);
+  assert.equal(registrations.length, 7);
+  setWorkPhase(app, "newly-done");
+  setWorkDisclosure(app, "work:repo-a", false);
+  const draft = app.node("#review-message"); draft.value = "Unsubmitted original text"; draft.focus();
+  const selectionSurface = app.node("#quota-providers"); selectionSurface.innerHTML = "<p>Original selected text</p>";
+  const selectedText = selectionSurface.querySelector("p").childNodes[0];
+  const selection = app.run("window.getSelection()"); selection.setBaseAndExtent(selectedText, 0, selectedText, 5);
+  for (let n = 0; n < 4; n++) {
+    app.run("showView('expenses')");
+    assert.deepEqual(removals.slice(n * 7, (n + 1) * 7), registrations.slice(n * 7, (n + 1) * 7), "exact target/callback/capture removed");
+    const html = app.node("#tight-work").innerHTML;
+    app.node("#work-phase").dispatchEvent({ type: "change", target: { value: "all" } });
+    app.node("#tight-work").dispatchEvent({ type: "toggle", target: { dataset: { treeKey: "work:repo-a" }, open: true } });
+    assert.equal(app.node("#tight-work").innerHTML, html, "departed controls have no callback");
+    assert.equal(app.run('new Map(JSON.parse(localStorage.getItem("fm-agentos-hierarchy-open.v1"))).get("work:repo-a")'), false);
+    app.run("showView('work'); showView('work'); renderWorkSplit()");
+    assert.equal(registrations.length, (n + 2) * 7, "one rebind, no duplicate entry");
+    assert.equal(app.node("#work-phase").value, "newly-done");
+    assert.equal(app.run("document.activeElement"), draft); assert.equal(draft.value, "Unsubmitted original text");
+    assert.equal(selection.anchorNode, selectedText); assert.equal(selection.focusNode, selectedText); assert.equal(selection.focusOffset, 5);
+  }
+});
+
+test("Work save survives route disposal with exact occurrence, original host refresh and scroll/focus sequence", async () => {
+  const posts = []; let finish;
+  const app = ui({ fetchImpl: (url, options) => {
+    if (url !== "/api/work-state") return new Promise(() => {});
+    posts.push({ url, options }); return new Promise(resolve => { finish = resolve; });
+  } });
+  app.run("let workRefreshes=0; refreshEndpoint=async key=>{if(key!=='dashboard')throw Error('wrong owner');workRefreshes++}; showView('work')");
+  const t = workControl(app, { ackTask: "a".repeat(64), ackCompletion: "b".repeat(64) }); t.view.scrollTop = 321;
+  app.node("#tight-work").dispatchEvent({ type: "click", target: t.control });
+  assert.equal(posts.length, 1); assert.equal(t.control.disabled, true);
+  assert.deepEqual(JSON.parse(posts[0].options.body), { action: "acknowledge", taskFingerprint: "a".repeat(64), completionFingerprint: "b".repeat(64) });
+  app.run("showView('quota'); showView('work'); showView('quota')");
+  app.node("#tight-work").dispatchEvent({ type: "click", target: t.control });
+  assert.equal(posts.length, 1, "departure neither sends nor replays");
+  finish({ ok: true, json: async () => ({}) }); await flushWork();
+  assert.equal(app.run("workRefreshes"), 1);
+  assert.equal(app.run("pendingLanesRefresh"), true, "the injected original lane owner retains its existing pending-read guard");
+  assert.equal(t.view.scrollTop, 321); assert.equal(app.run("document.activeElement"), t.summary);
+  assert.equal(t.view.focusSelector, `[data-task-fingerprint="${"a".repeat(64)}"] .work-inspection summary`);
+  assert.equal(app.node("#sr-announcer").textContent, "Completion understood. Task and delivery status unchanged.");
+  const renewed = workFixture(); renewed.items[0].completionFingerprint = "f".repeat(64);
+  app.run(`renderWorkSplit(${JSON.stringify(renewed)})`);
+  assert.match(app.node("#tight-work").innerHTML, new RegExp(`data-ack-completion="${"f".repeat(64)}"`));
+  assert.match(app.node("#tight-work").innerHTML, /deployment unknown|Preserved \/ cleanup pending/);
+});
+
+test("Work local classification keeps exact explicit IDs and trims only existing names; no task or recipient mutation", async () => {
+  const posts = [];
+  const app = ui({ fetchImpl: (url, options) => {
+    if (url !== "/api/work-state") return new Promise(() => {});
+    posts.push({ url, body: JSON.parse(options.body) }); return Promise.resolve({ ok: true, json: async () => ({}) });
+  } });
+  app.run("refreshEndpoint=async()=>{}; requestLanes=()=>{}; globalThis.FormData=class {constructor(form){this.fields=form.fields} get(key){return this.fields[key]}}; showView('work')");
+  const t = workControl(app, {}), form = { dataset: { classifyTask: "d".repeat(64) }, fields: { classification: '["unclassified","unclassified"]' }, querySelector: () => t.control };
+  let prevented = 0;
+  const submit = () => app.node("#tight-work").dispatchEvent({ type: "submit", target: { closest: () => form }, preventDefault() { prevented++; } });
+  submit(); await flushWork();
+  form.dataset = { createTaxonomy: "a".repeat(64) }; form.fields = { laneName: "  Interface  ", themeName: "  Review  ", kind: "iteration" };
+  submit(); await flushWork();
+  assert.equal(prevented, 2);
+  assert.deepEqual(posts, [{ url: "/api/work-state", body: { action: "classify", taskFingerprint: "d".repeat(64), laneId: "unclassified", themeId: "unclassified" } }, { url: "/api/work-state", body: { action: "create-taxonomy", taskFingerprint: "a".repeat(64), laneName: "Interface", themeName: "Review", kind: "iteration" } }]);
+  assert.equal(app.node("#sr-announcer").textContent, "Quarterdeck classification saved.");
+});
+
+test("Work refusal after departure retains visible error and retry control without refresh or success acknowledgement", async () => {
+  let finish; const app = ui({ fetchImpl: (url) => url === "/api/work-state" ? new Promise(resolve => { finish = resolve; }) : new Promise(() => {}) });
+  app.run("let workRefreshes=0; refreshEndpoint=async()=>{workRefreshes++}; requestLanes=()=>{throw Error('unexpected lanes read')}; showView('work')");
+  const t = workControl(app, { ackTask: "a".repeat(64), ackCompletion: "b".repeat(64) });
+  const messages = []; t.row.append = message => messages.push(message);
+  app.node("#tight-work").dispatchEvent({ type: "click", target: t.control }); app.run("showView('overview')");
+  finish({ ok: false, json: async () => ({ error: "Exact completion unavailable" }) }); await flushWork();
+  assert.equal(app.run("workRefreshes"), 0); assert.equal(t.control.disabled, false);
+  assert.equal(messages.length, 1); assert.equal(messages[0].getAttribute("role"), "status");
+  assert.equal(messages[0].textContent, "Exact completion unavailable");
+  assert.equal(app.node("#sr-announcer").textContent, "Exact completion unavailable");
+});
+
+test("Work exact same-basename identity, unknown evidence and original document refresh remain independent of route callbacks", async () => {
+  const reads = [];
+  const app = ui({ fetchImpl: url => { reads.push(url); return new Promise(() => {}); } });
+  app.run(`renderWorkSplit(${JSON.stringify(workFixture())}); showView('work')`);
+  const html = app.node("#tight-work").innerHTML;
+  assert.equal((html.match(/taxonomy-repository panel/g) || []).length, 3);
+  assert.match(html, /data-tree-key="work:repo-a"/); assert.match(html, /data-tree-key="work:repo-b"/);
+  assert.match(html, /#lanes\/fixture%20lane\/session\/same-task/); assert.match(html, /#lanes\/other%20lane\/session\/same-task/);
+  assert.match(html, /Repository unknown; classification needs authoritative repository identity first/);
+  assert.match(html, /Lane unclassified|liveness unknown/);
+  setWorkPhase(app, "unknown"); assert.match(app.node("#tight-work").innerHTML, new RegExp(`data-task-fingerprint="${"d".repeat(64)}"`));
+  assert.doesNotMatch(app.node("#tight-work").innerHTML, new RegExp(`data-task-fingerprint="${"a".repeat(64)}"`));
+  const dashboardReads = reads.filter(url => url === "/api/dashboard").length;
+  app.run("showView('expenses'); loadDashboard(); showView('work'); loadDashboard(); showView('overview'); loadDashboard()");
+  assert.equal(reads.filter(url => url === "/api/dashboard").length, dashboardReads, "original pending dashboard guard, no feature demand owner");
+  assert.equal(reads.filter(url => url === "/api/work-state").length, 0, "navigation/filtering sends no local or primary intent");
 });
 
 test("unchanged refresh skips feed replacement and a newly full page follows latest", () => {
@@ -2702,11 +2833,13 @@ test("Work Split omits singleton taxonomy wrappers, preserves filters, completio
     assert.match(html, /remote Main/); assert.match(html, /deployment unknown/);
     assert.match(html, /data-review-id="(?:work|overview):task:/);
   }
-  app.run("workPhase='active'; renderWorkSplit()");
+  setWorkPhase(app, "active");
   assert.equal((app.node("#tight-work").innerHTML.match(/data-task-fingerprint=/g) || []).length, 1);
-  app.run("workPhase='newly-done'; renderWorkSplit()");
+  setWorkPhase(app, "newly-done");
   assert.equal((app.node("#tight-work").innerHTML.match(/data-task-fingerprint=/g) || []).length, 2);
-  app.run("workPhase='all'; hierarchyOpen.set('work:repo', false); renderWorkSplit()");
+  setWorkPhase(app, "all");
+  setWorkDisclosure(app, "work:repo", false);
+  app.run("renderWorkSplit()");
   assert.match(app.node("#tight-work").innerHTML, /data-tree-key="work:repo"[^>]*>\s*<summary>/);
   assert.doesNotMatch(app.node("#tight-work").innerHTML.split("<summary>")[0], / open/);
   app.run(`renderSummary({activeAgents:1,workCounts:{active:9,'captain-action':2,'newly-done':3,'previously-done':4}})`);
@@ -2718,27 +2851,29 @@ test("visible taxonomy siblings independently control lane and theme wrappers wi
   const app = ui();
   const item = (id, laneId, themeId, status = "active", repositoryId = "repo") => ({ id, name: id, taskFingerprint: id, repositoryId, repository: repositoryId, lane: { id: laneId, name: laneId }, theme: { id: themeId, name: themeId, kind: "theme" }, status, evidence: [], taxonomyOptions: [], chatLaneId: "linked-lane" });
   const a = item("a", "one", "first"), b = item("b", "two", "first", "waiting"), c = item("c", "one", "second", "waiting");
-  const render = (items) => app.run(`hierarchyHtml(${JSON.stringify(items)}, 'work')`);
+  const render = (items) => { app.run(`renderWorkSplit(${JSON.stringify({ items })})`); return app.node("#tight-work").innerHTML; };
   const counts = (html) => ["lane", "theme"].map((level) => (html.match(new RegExp(`taxonomy-${level} panel`, "g")) || []).length);
   assert.deepEqual(counts(render([a])), [0, 0], "one lane / one theme");
   assert.deepEqual(counts(render([a, b])), [2, 0], "many lanes, one theme per effective parent");
   assert.deepEqual(counts(render([a, c])), [0, 2], "one lane, many themes");
   assert.deepEqual(counts(render([a, b, c])), [2, 2], "multiple siblings at both levels");
   assert.deepEqual(counts(render([a, item("d", "other", "other", "active", "second-repo")])), [0, 0], "count lanes within each repository, not globally");
-  const groups = app.run(`groupHierarchy(${JSON.stringify([a, b, c])})`);
+  const groups = app.run(`window.workHierarchy.groupHierarchy(${JSON.stringify([a, b, c])})`);
   assert.equal(groups[0].lanes.size, 2);
   assert.equal(groups[0].lanes.get("one").themes.size, 2, "data hierarchy remains intact");
   for (const scope of ["work"]) {
-    app.run(`hierarchyOpen.set('${scope}:repo:one', false); hierarchyOpen.set('${scope}:repo:one:first', false); renderWorkSplit(${JSON.stringify({ items: [a, b, c] })})`);
+    setWorkDisclosure(app, `${scope}:repo:one`, false);
+    setWorkDisclosure(app, `${scope}:repo:one:first`, false);
+    app.run(`renderWorkSplit(${JSON.stringify({ items: [a, b, c] })})`);
     const selector = "#tight-work";
-    app.run("workPhase='active'; renderWorkSplit()");
+    setWorkPhase(app, "active");
     const filtered = app.node(selector).innerHTML;
     assert.deepEqual(counts(filtered), [0, 0]);
     assert.match(filtered, /data-task-fingerprint="a"/);
     assert.match(filtered, /#lanes\/linked-lane\/session\/a/);
     assert.doesNotMatch(filtered, /data-task-fingerprint="[bc]"/);
-    assert.equal(app.run(`hierarchyOpen.get('${scope}:repo:one')`), false);
-    app.run("workPhase='all'; renderWorkSplit()");
+    assert.equal(app.run(`new Map(JSON.parse(localStorage.getItem("fm-agentos-hierarchy-open.v1"))).get('${scope}:repo:one')`), false);
+    setWorkPhase(app, "all");
     const restored = app.node(selector).innerHTML;
     assert.deepEqual(counts(restored), [2, 2]);
     for (const key of [`${scope}:repo:one`, `${scope}:repo:one:first`]) {
@@ -2842,7 +2977,7 @@ test("Visible status button filters: replace dropdown reliance with accessible b
     { taskFingerprint: "t1", id: "t-1", name: "Task 1", repositoryId: "r1", repository: "Repo 1", lane: { id: "l1", name: "Lane 1" }, theme: { id: "th1", name: "Theme 1", kind: "theme" }, status: "active", evidence: [], taxonomyOptions: [] },
     { taskFingerprint: "t2", id: "t-2", name: "Task 2", repositoryId: "r1", repository: "Repo 1", lane: { id: "l1", name: "Lane 1" }, theme: { id: "th1", name: "Theme 1", kind: "theme" }, status: "waiting", evidence: [], taxonomyOptions: [] },
   ];
-  app.run(`workSplitData = { items: ${JSON.stringify(sampleItems)} }; renderWorkSplit();`);
+  app.run(`renderWorkSplit({ items: ${JSON.stringify(sampleItems)} });`);
 
   // Work Split status buttons rendered (Overview has Captain's Call instead).
   const overviewBtnsHtml = app.node("#work-phase-buttons").innerHTML;
@@ -2896,12 +3031,12 @@ test("Visible status button filters: replace dropdown reliance with accessible b
   }
 
   // Synchronized update from Work Split phase change
-  app.run(`workPhase = "active"; renderWorkSplit();`);
+  setWorkPhase(app, "active");
   assert.equal(app.node("#work-phase").value, "active");
   assert.match(app.node("#work-phase-buttons").innerHTML, /class="status-filter-btn active"[^>]*data-status-value="active"[^>]*aria-pressed="true"/);
 
   // Synchronized update from workPhase change
-  app.run(`workPhase = "waiting"; renderWorkSplit();`);
+  setWorkPhase(app, "waiting");
   assert.equal(app.node("#work-phase").value, "waiting");
   assert.match(app.node("#work-phase-buttons").innerHTML, /class="status-filter-btn active"[^>]*data-status-value="waiting"[^>]*aria-pressed="true"/);
 });
