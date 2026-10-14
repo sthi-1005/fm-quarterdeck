@@ -1071,7 +1071,9 @@ test("Work route owns exactly seven callbacks: repeated departure/reentry preser
   setWorkPhase(app, "newly-done");
   setWorkDisclosure(app, "work:repo-a", false);
   const draft = app.node("#review-message"); draft.value = "Unsubmitted original text"; draft.focus();
-  const selection = app.run("window.getSelection()"); selection.setBaseAndExtent(draft, 0, draft, 5);
+  const selectionSurface = app.node("#quota-providers"); selectionSurface.innerHTML = "<p>Original selected text</p>";
+  const selectedText = selectionSurface.querySelector("p").childNodes[0];
+  const selection = app.run("window.getSelection()"); selection.setBaseAndExtent(selectedText, 0, selectedText, 5);
   for (let n = 0; n < 4; n++) {
     app.run("showView('expenses')");
     assert.deepEqual(removals.slice(n * 7, (n + 1) * 7), registrations.slice(n * 7, (n + 1) * 7), "exact target/callback/capture removed");
@@ -1084,7 +1086,7 @@ test("Work route owns exactly seven callbacks: repeated departure/reentry preser
     assert.equal(registrations.length, (n + 2) * 7, "one rebind, no duplicate entry");
     assert.equal(app.node("#work-phase").value, "newly-done");
     assert.equal(app.run("document.activeElement"), draft); assert.equal(draft.value, "Unsubmitted original text");
-    assert.equal(selection.anchorNode, draft); assert.equal(selection.focusNode, draft); assert.equal(selection.focusOffset, 5);
+    assert.equal(selection.anchorNode, selectedText); assert.equal(selection.focusNode, selectedText); assert.equal(selection.focusOffset, 5);
   }
 });
 
@@ -1094,7 +1096,7 @@ test("Work save survives route disposal with exact occurrence, original host ref
     if (url !== "/api/work-state") return new Promise(() => {});
     posts.push({ url, options }); return new Promise(resolve => { finish = resolve; });
   } });
-  app.run("let workRefreshes=0, workLaneReads=0; refreshEndpoint=async key=>{if(key!=='dashboard')throw Error('wrong owner');workRefreshes++}; requestLanes=()=>{workLaneReads++}; showView('work')");
+  app.run("let workRefreshes=0; refreshEndpoint=async key=>{if(key!=='dashboard')throw Error('wrong owner');workRefreshes++}; showView('work')");
   const t = workControl(app, { ackTask: "a".repeat(64), ackCompletion: "b".repeat(64) }); t.view.scrollTop = 321;
   app.node("#tight-work").dispatchEvent({ type: "click", target: t.control });
   assert.equal(posts.length, 1); assert.equal(t.control.disabled, true);
@@ -1103,7 +1105,8 @@ test("Work save survives route disposal with exact occurrence, original host ref
   app.node("#tight-work").dispatchEvent({ type: "click", target: t.control });
   assert.equal(posts.length, 1, "departure neither sends nor replays");
   finish({ ok: true, json: async () => ({}) }); await flushWork();
-  assert.equal(app.run("workRefreshes"), 1); assert.equal(app.run("workLaneReads"), 1);
+  assert.equal(app.run("workRefreshes"), 1);
+  assert.equal(app.run("pendingLanesRefresh"), true, "the injected original lane owner retains its existing pending-read guard");
   assert.equal(t.view.scrollTop, 321); assert.equal(app.run("document.activeElement"), t.summary);
   assert.equal(t.view.focusSelector, `[data-task-fingerprint="${"a".repeat(64)}"] .work-inspection summary`);
   assert.equal(app.node("#sr-announcer").textContent, "Completion understood. Task and delivery status unchanged.");

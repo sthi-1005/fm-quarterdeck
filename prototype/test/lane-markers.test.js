@@ -52,7 +52,9 @@ test("canonical fmqd-lanes examples survive transcript ingestion and safe render
   const expenseController = await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8");
   // Render preparation never enters a view or requests billing; dependencies
   // exist for construction only, and any unexpected read refuses the fixture.
-  const context = vm.createContext({ document: {}, fetchJson() { throw new Error("Unexpected fixture read"); }, window: {}, localStorage: { getItem: () => null, setItem() {} } });
+  const context = vm.createContext({ document: {}, fetchJson() { throw new Error("Unexpected fixture read"); },
+    conversationRoute() { throw new Error("Unexpected fixture navigation"); }, requestLanes() { throw new Error("Unexpected fixture read"); },
+    window: {}, localStorage: { getItem: () => null, setItem() {} } });
   vm.runInContext(fontPrefs, context);
   vm.runInContext(messageKinds, context);
   vm.runInContext(extraction, context);
