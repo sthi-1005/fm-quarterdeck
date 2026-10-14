@@ -6,7 +6,7 @@ Pending product reconciliation: [D01](../docs/product/DECISIONS.md#d01-answer-or
 
 Overview shows the calls Firstmate is holding for the captain and updates them in place as Firstmate decides, without a page reload or a `/bearings` run. A card can be answered in place; the answer is relayed to Firstmate only after the captain reviews and confirms it, and Firstmate alone resolves filed holds. Chat-only asks have the mechanical Quarterdeck resolution paths below.
 
-Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases), `public/call-lifecycle.js` (one lifecycle state per card), `public/bearings-overflow.js` (retained; cards no longer clamp) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
+Code: `bearings.js` (server), `bearings-answer.js` (answer relay), `public/bearings-live.js` (transport), `public/bearings-patch.js` (keyed patcher and engagement hold), `public/bearings-answer-form.js` (answer phases), `public/call-lifecycle.js` (one lifecycle state per card), `public/call-composition.js` (browser wiring and resource lifetime), `public/bearings-overflow.js` (retained; cards no longer clamp) and `public/bearings-dismiss.js` (chat dismissal phases). Product rendering (`public/bearings-view.js`) supplies `cardHtml`, `emptyHtml`, `coverageText`, `heldText` and `stubHtml`; the patcher has a minimal fallback for each.
 
 ## Source and authority
 
@@ -89,6 +89,20 @@ After a card's signals clear, its own 600 ms grace period (so moving between two
 - the engaged visible card keeps its viewport position when neighbours are inserted or removed; engaged nodes are never detached to reorder them. Sort-control changes wait during engagement. Otherwise, once the list has scrolled, the first visible card stays at the same viewport position.
 
 Drafts: every `input` on a `[data-call-draft="<field>"]` inside a card is kept per card key in memory and in `sessionStorage` under `fm-quarterdeck-call-draft.v1:<card key>`; every render restores it. Storage failures are ignored.
+
+## Browser composition lifetime
+
+`public/call-composition.js` wires the existing patch, answer, thread, text, parking,
+dismissal, overflow and live controllers. It delegates classification to
+`call-lifecycle.js` and delivery to the existing answer/review sender. The shell
+retains landing/work sections, Overview tabs, freshness and dashboard scheduling.
+Only the filter and Send queued coordination listeners attach on Overview entry
+and detach on departure; domain controller instances, hidden-route polling,
+badges, thread disclosures and in-flight captures retain their document lifetime.
+Document hiding and bfcache pagehide/pageshow retain the existing live suspension
+and catch-up. Terminal disposal stops the live owner, invokes existing controller
+teardown, detaches coordination and removes only its own queue bridge. It never
+clears stored drafts/retries, cancels accepted remote work or replays an operation.
 
 ## Rendering hooks
 
@@ -207,7 +221,7 @@ Quarterdeck relays the captain's explicit answer; it adds no authority. The answ
 Queue, Send and Edit sit beside the one text box on desktop and on a phone, in the same row as that box.
 Only the buttons for the current phase are shown (Queue in *compose*; Send and Edit in *confirm*/*failed*).
 
-**Queue integration.** `app.js` registers `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`.
+**Queue integration.** The call composition registers the compatible `window.quarterdeckCallQueue` (`list`, `send`, `remove`) over the answer controller's `queued()`, `sendQueued()` and `unqueue(key)`.
 The review panel (`review-client.js`) lists queued items above its queued notes (desktop) or as a "Queued Captain's Call answers" batch (phone), counts them in its queued badge, and offers **Remove**, which returns the item to its card for editing (keeping its request id once a send was attempted).
 **Send** and Ctrl+Enter send queued items first, each with its own request id: an answer through `POST /api/bearings/answer` and a thread note through `POST /api/bearings/thread`, then the review notes through review delivery.
 On the Active status view, **Send queued (N)** calls that same `sendCallAnswers` sender when N staged items exist.

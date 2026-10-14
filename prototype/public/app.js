@@ -1690,24 +1690,6 @@ const freshness = Object.fromEntries(["dashboard", "quota", "lanes", "bearings"]
   lastSuccess: null, refreshing: false, duration: null, error: null, stale: false, started: null,
 }]));
 const freshLabels = { dashboard: "Fleet", quota: "Quota", lanes: "Fleet Chats", bearings: "Captain's Call" };
-let callCount = 0;
-function renderCallBadge(model) {
-  const count = (model?.cards || []).filter((card) => (window.callLifecycle?.cardState({
-    card,
-    answer: callAnswers?.state?.(card.key) || null,
-    thread: callThreads?.state?.(card.key) || null,
-    procrastinated: Boolean(callProcrastinate?.parked?.(card.key)),
-  }) || "active") === "active").length;
-  for (const id of ["#call-badge", "#call-mobile-badge"]) {
-    const badge = $(id);
-    if (!badge) continue;
-    badge.textContent = String(count);
-    badge.hidden = count === 0;
-    badge.setAttribute("aria-label", `${count} Captain's Calls`);
-  }
-  if (count > callCount) $("#sr-announcer").textContent = `${count} Captain's Calls need your attention`;
-  callCount = count;
-}
 function observeBearings(data) {
   if (data.firstmateActivity) {
     firstmateActivity = data.firstmateActivity;
@@ -1723,117 +1705,12 @@ function observeBearings(data) {
   item.error = data.error || null;
   renderFreshness();
 }
-// Answer and overflow controllers re-apply their per-card state after every patcher fill.
-let callAnswers = null, callOverflow = null, callDismiss = null, callThreads = null, callProcrastinate = null, callText = null;
-let callLifecycleFilter = window.callLifecycle?.readFilter(localStorage) || "active";
-function renderCallLifecycle() {
-  const model = callPatcher?.applied;
-  const api = window.callLifecycle;
-  if (!model || !callPatcher || !api) return;
-  const list = $("#call-cards");
-  const filter = $("#call-lifecycle-filter");
-  list?.querySelector("[data-call-answered-heading]")?.remove();
-  list?.querySelector("[data-call-procrastinated-heading]")?.remove();
-  const states = [];
-  for (const card of model.cards) {
-    const node = [...list.querySelectorAll("[data-call-key]")].find((item) => item.dataset.callKey === card.key);
-    if (!node) continue;
-    const answer = callAnswers?.state(card.key) || null;
-    const facts = {
-      card,
-      answer,
-      thread: callThreads?.state(card.key) || null,
-      procrastinated: Boolean(callProcrastinate?.parked(card.key)),
-    };
-    const posture = api.delivery?.(facts) || { posture: null, reply: "" };
-    const state = api.cardState(facts);
-    states.push(state);
-    node.setAttribute("data-call-lifecycle", state);
-    node.toggleAttribute("data-call-answered", Boolean(card.answered || answer?.phase === "sent"));
-    node.toggleAttribute("data-call-procrastinated", state === "procrastinated");
-    const badge = node.querySelector("[data-call-lifecycle-badge]");
-    if (badge) {
-      badge.setAttribute("data-call-lifecycle", state);
-      const label = api.LABELS[state];
-      badge.setAttribute("aria-label", label);
-      badge.setAttribute("title", label);
-      if (badge.textContent) badge.textContent = "";
-    }
-    const underway = node.querySelector("[data-call-sent-label]");
-    if (underway) {
-      underway.hidden = state !== "sent";
-      if (state === "sent" && api.sentLabel) {
-        const text = api.sentLabel(posture.posture);
-        if (underway.textContent !== text) underway.textContent = text;
-      }
-    }
-    const banner = node.querySelector("[data-fm-reply]");
-    if (banner) {
-      const showReply = state === "active" && posture.posture === "replied";
-      banner.hidden = !showReply;
-      if (showReply && api.replyBanner) {
-        const text = api.replyBanner(posture.reply, posture.replyScope);
-        if (banner.textContent !== text) window.bearingsView.messageText(banner, text);
-      }
-    }
-    callProcrastinate?.render(node);
-    const focused = node.contains(document.activeElement);
-    const selected = callPatcher.tracker.state().selected === card.key;
-    node.hidden = !api.visible(state, callLifecycleFilter);
-    if (node.hidden && (focused || selected)) {
-      callPatcher.tracker.deselect();
-      if (focused) filter?.querySelector(`[data-call-lifecycle="${state}"]`)?.focus();
-    }
-  }
-  const tally = api.counts(states);
-  api.paintToggle(filter, tally, callLifecycleFilter);
-  const queuedItems = callAnswers?.queued?.() || [];
-  api.paintSendQueued?.($("#call-send-queued"), {
-    filter: callLifecycleFilter,
-    count: queuedItems.length,
-    sending: queuedItems.some((entry) => entry.phase === "sending") || window.quarterdeckReviewQueue?.sending?.() === true,
-  });
-  const empty = $("#call-lifecycle-empty");
-  if (empty) {
-    const text = api.emptyText(callLifecycleFilter, tally);
-    empty.hidden = !text;
-    if (empty.textContent !== text) empty.textContent = text;
-  }
-  renderCallBadge(model);
-  overviewTabs?.paint();
-}
-$("#call-lifecycle-filter")?.addEventListener("click", (event) => {
-  const button = event.target?.closest?.("[data-call-lifecycle]");
-  const api = window.callLifecycle;
-  if (!button || !api) return;
-  callLifecycleFilter = api.writeFilter(localStorage, button.getAttribute("data-call-lifecycle"));
-  renderCallLifecycle();
-});
-$("#call-send-queued")?.addEventListener("click", () => {
-  const button = $("#call-send-queued");
-  const sendCalls = window.quarterdeckReviewQueue?.sendCallAnswers;
-  if (!button || button.hidden || button.disabled || typeof sendCalls !== "function") return;
-  button.disabled = true;
-  void Promise.resolve(sendCalls()).finally(() => renderCallLifecycle());
-});
-const callPatcher = window.bearingsPatch?.createCallPatcher({
-  section: $("#captain-call"), list: $("#call-cards"), status: $("#call-status"), coverage: $("#call-coverage"),
-  view: window.bearingsView, scroller: $("#overview-view"), sortControl: $("#call-sort"),
-  onRender(node, card) { callAnswers?.render(node, card); callOverflow?.render(node, card); callDismiss?.render(node); callThreads?.render(node, card); callText?.render(node); callProcrastinate?.render(node); },
-  onApply(model) { const keys = model.cards.map((card) => card.key); callAnswers?.prune(keys); callOverflow?.prune(keys); callDismiss?.prune(keys); callThreads?.prune(keys); callText?.prune(keys); renderCallLifecycle(); window.quarterdeckReviewQueue?.refresh(); },
-});
-// Queued answers join the review panel's queue; its Send sends them with the notes.
-callAnswers = callPatcher && window.bearingsAnswerForm?.createAnswerController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => { renderCallLifecycle(); callPatcher.refreshPending(); window.quarterdeckReviewQueue?.refresh(); }, onAsked: (key, holdVersion) => { callThreads?.noteSent(key, holdVersion); renderCallLifecycle(); } });
-if (callAnswers) window.quarterdeckCallQueue = { list: () => callAnswers.queued(), send: (options) => callAnswers.sendQueued(options), remove: (key) => callAnswers.unqueue(key), refresh: () => renderCallLifecycle() };
-callThreads = callPatcher && window.bearingsThread?.createThreadController({ list: $("#call-cards"), drafts: callPatcher.drafts, onChange: () => renderCallLifecycle() });
-callText = callPatcher && window.bearingsView?.createTextController?.({ list: $("#call-cards") });
-callProcrastinate = callPatcher && window.bearingsProcrastinate?.createController?.({ list: $("#call-cards"), onChange: () => renderCallLifecycle() });
-callOverflow = window.bearingsOverflow?.createOverflowController({ list: $("#call-cards") });
-// Focus leaves the card only after a confirmed dismissal; drafts remain protected.
-callDismiss = callPatcher && window.bearingsDismiss?.createDismissController({
-  list: $("#call-cards"),
-  focusTarget: () => [...document.querySelectorAll('.primary-tab[data-view="overview"], [data-mobile-view="overview"]')].find((node) => node.getClientRects().length),
-  onDismiss(key) { if (callPatcher.tracker.state().selected === key) callPatcher.tracker.deselect(); },
+const callsFeature = window.callComposition.createController({
+  storage: localStorage,
+  onPaint: () => overviewTabs?.paint(),
+  onModel(model) { landedBoard?.update(model); workBoard?.update(model); observeBearings(model); },
+  onObserved(data) { workBoard?.observe(data); observeBearings(data); },
+  onConnection({ state }) { freshness.bearings.connection = state; renderFreshness(); },
 });
 const landedBoard = window.bearingsLanded?.createController?.({ list: $("#landed-cards"), toggle: $("#landed-ack-toggle"), badge: $("#landed-new-count"), onChange: () => overviewTabs?.paint() });
 const workBoard = window.bearingsWork?.createController?.({ sections: { underway: $("#underway"), charted: $("#charted-next") } });
@@ -1842,18 +1719,10 @@ const overviewTabs = window.overviewTabs?.createController?.({
   tabs: $("#overview-section-tabs"),
   panels: { calls: $("#overview-primary"), landed: $("#just-landed"), underway: $("#underway"), charted: $("#charted-next") },
   secondary: $("#overview-secondary"),
-  counts: { calls: () => callPatcher?.applied?.cards?.length || 0, landed: () => landedBoard?.newCount?.() ?? 0, underway: () => workBoard?.count("underway") || 0, charted: () => workBoard?.count("charted") || 0 },
+  counts: { calls: () => callsFeature.count(), landed: () => landedBoard?.newCount?.() ?? 0, underway: () => workBoard?.count("underway") || 0, charted: () => workBoard?.count("charted") || 0 },
   storage: localStorage,
   // Phone and tablet share one column and the section tabs. Two columns start at 1100px.
   media: window.matchMedia?.("(max-width: 1099.98px)"),
-});
-const callLive = window.bearingsLive?.createBearingsLive({
-  onModel(model) { callPatcher.update(model); landedBoard?.update(model); workBoard?.update(model); renderCallBadge(model); observeBearings(model); },
-  onObserved(data) { callPatcher.observe(data); workBoard?.observe(data); observeBearings(data); },
-  onConnection({ state }) {
-    freshness.bearings.connection = state;
-    renderFreshness();
-  },
 });
 let refreshMs = 0;
 function activeFreshnessKey() {
@@ -2087,6 +1956,8 @@ function setContextDrawer(open) {
 }
 
 function showView(view, closedLaneId = null, { updateRoute = true } = {}) {
+  if (view === "overview") callsFeature.enter();
+  else callsFeature.leave();
   if (view === "expenses") expensesFeature.enter();
   else expensesFeature.dispose();
   if (view !== "conversations") { captureLastViewed(); pendingKindJump = null; clearExpandedMessageTarget(); }
@@ -2658,7 +2529,7 @@ document.querySelector(".primary-nav").addEventListener("click", (event) => {
   showView(tab.dataset.view);
   if (tab.dataset.view === "conversations") renderFeed();
 });
-$("#refresh").addEventListener("click", () => { loadDashboard(); void callLive?.refresh(); });
+$("#refresh").addEventListener("click", () => { loadDashboard(); void callsFeature.refresh(); });
 $("#quota-providers").addEventListener("toggle", (event) => {
   if (event.target.dataset?.provider && event.target.tagName === "DETAILS") {
     quotaOpen.set(event.target.dataset.provider, event.target.open);
@@ -2781,5 +2652,5 @@ window.addEventListener("hashchange", (event) => {
 });
 renderMessageTypeFilters();
 applyRoute();
-callLive?.start();
+callsFeature.start();
 loadDashboard();

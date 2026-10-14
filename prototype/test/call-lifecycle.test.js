@@ -184,7 +184,7 @@ test("Send queued is only on Active, counts staged answers, and disables while s
 test("a Sent card shows the underway label and hatch, and only that state does", async () => {
   const view = await readFile(new URL("../public/bearings-view.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
-  const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const app = await readFile(new URL("../public/call-composition.js", import.meta.url), "utf8");
   assert.equal(view.match(/data-call-sent-label hidden>Sent - waiting for Firstmate to read/g).length, 1);
   assert.equal(view.match(/data-fm-reply hidden>/g).length, 1);
   assert.match(css, /\.call-card\[data-call-lifecycle="sent"\] \{[^}]*repeating-linear-gradient\(-45deg/);
