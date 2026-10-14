@@ -57,6 +57,8 @@ test("canonical fmqd-lanes examples survive transcript ingestion and safe render
   vm.runInContext(messageKinds, context);
   vm.runInContext(extraction, context);
   vm.runInContext(expenseController, context);
+  vm.runInContext(await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8"), context);
+  vm.runInContext(await readFile(new URL("../public/work-controller.js", import.meta.url), "utf8"), context);
   vm.runInContext(renderCode, context);
   for (const block of [generalBlock, databaseBlock, hostile]) {
     context.block = block;

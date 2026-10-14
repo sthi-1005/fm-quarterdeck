@@ -84,6 +84,10 @@ Completion/commit association is explicit Quarterdeck state: `completionRecords[
 
 A ready candidate is **Ready for review · deployment unknown**, even after acknowledgement or a merge. Live UAT can remain ready for review. Live production is separate verified delivery truth. Acknowledgement changes only freshness, never the delivery label. External reads are capped per snapshot; unavailable/unverified evidence stays unknown/reviewable rather than being inferred from prose.
 
+## Browser composition ownership
+
+`public/work-controller.js` owns the current Work Split templates, tab-memory filters and existing `fm-agentos-hierarchy-open.v1` disclosure preference. Its seven DOM callbacks attach once on Work route entry and detach by exact target/callback/capture on departure. Re-entry retains filter/disclosure memory; no timer or refresh source is created. `public/app.js` keeps the document-owned dashboard refresh/render bridge, lane refresh and canonical exact task-route constructor. A classification or acknowledgement already started continues its original API/refresh/focus/error sequence after departure; disposal does not cancel, replay or replace durable work. The server's atomic taxonomy/completion state owner, fingerprints and wire schema remain unchanged. Task navigation remains context for primary Firstmate, never recipient selection.
+
 ## Layout and acceptance contract
 
 Measure shell, filter, context and message widths independently with synthetic long-content fixtures. Crowded feed geometry is not evidence of a network failure; completed or preserved metadata is not an active-worker count.
