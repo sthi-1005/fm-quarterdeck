@@ -48,7 +48,7 @@ test("canonical fmqd-lanes examples survive transcript ingestion and safe render
   const fontPrefs = await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8");
   const messageKinds = await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8");
   const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
-  const renderCode = script.slice(0, script.indexOf("function orderedProjectLanes()")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "");
+  const renderCode = script.slice(0, script.indexOf("function savePreference(")).replace(/^import \{ createFleetChatsController \} from "\.\/fleet-chats-controller\.js";\n/m, "");
   const expenseController = await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8");
   // Render preparation never enters a view or requests billing; dependencies
   // exist for construction only, and any unexpected read refuses the fixture.
@@ -185,7 +185,7 @@ test("explicit transcript lane wins over text, file name and General; lane filte
   assert.ok(includes("general", "[fm-lane Example Store]\nAlpha malformed closing\n[end Alpha]"), "malformed envelopes retain legacy routing");
 
   // Exercise the real selection and merge functions with the actual API lane arrays.
-  const script = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const script = await readFile(new URL("../public/fleet-chats-controller.js", import.meta.url), "utf8");
   const bulkControls = await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8");
   const messageKinds = await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8");
   const filterView = await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8");
@@ -199,7 +199,7 @@ test("explicit transcript lane wins over text, file name and General; lane filte
   vm.runInContext(bulkControls, context);
   vm.runInContext(messageKinds, context);
   vm.runInContext(filterView, context);
-  // messageTypeId is destructured at app.js top-level, outside this selection slice.
+  // messageTypeId is destructured by the controller, outside this selection slice.
   vm.runInContext("var messageTypeId = window.messageKinds.typeId; var MESSAGE_TYPES = window.messageKinds.TYPES;", context);
   vm.runInContext(selectionCode, context);
   const selection = () => vm.runInContext("messagesForSelection()", context);

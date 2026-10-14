@@ -200,7 +200,7 @@ test("JSON API honors gzip negotiation while preserving uncompressed clients", a
 });
 
 test("lane filters document and implement All as an override", async () => {
-  const script = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const script = await readFile(new URL("../public/app.js", import.meta.url), "utf8") + await readFile(new URL("../public/fleet-chats-controller.js", import.meta.url), "utf8");
 
   assert.match(script, /const checked = live\.filter\(\(lane\) => allLanesSelected \|\| selectedLaneIds\.has\(lane\.id\)\)/);
   assert.match(script, /checked\.filter\(\(lane\) => laneStatusFilter === "all" \|\| lane\.status === laneStatusFilter\)/);
@@ -224,7 +224,7 @@ test("lane filters document and implement All as an override", async () => {
 });
 
 test("message kinds are independent, persisted feed filters with crew off by default", async () => {
-  const script = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const script = await readFile(new URL("../public/fleet-chats-controller.js", import.meta.url), "utf8");
   const kinds = await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8");
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
 

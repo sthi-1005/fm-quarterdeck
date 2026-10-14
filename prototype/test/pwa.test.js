@@ -80,7 +80,12 @@ test("Fleet app's shared ask dependency is served at root and the registered hos
   for (const prefix of ["", "/preview/main"]) {
     const app = await fetch(`${base}${prefix}/app.js`);
     assert.equal(app.status, 200);
-    assert.match(await app.text(), /import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js"/);
+    assert.match(await app.text(), /import \{ createFleetChatsController \} from "\.\/fleet-chats-controller\.js"/);
+    const controller = await fetch(`${base}${prefix}/fleet-chats-controller.js`);
+    assert.equal(controller.status, 200);
+    assert.match(controller.headers.get("content-type"), /^text\/javascript/);
+    assert.equal(controller.headers.get("cache-control"), "no-store");
+    assert.match(await controller.text(), /import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js"/);
     const dependency = await fetch(`${base}${prefix}/chat-ask-extraction.js`);
     assert.equal(dependency.status, 200, `${prefix}/chat-ask-extraction.js`);
     assert.match(dependency.headers.get("content-type"), /^text\/javascript/);

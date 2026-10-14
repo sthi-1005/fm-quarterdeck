@@ -7,7 +7,12 @@ import { createHash } from "node:crypto";
 import { parseCss, computed, element } from './helpers/css-model.mjs';
 
 const extraction = (await readFile(new URL("../public/chat-ask-extraction.js", import.meta.url), "utf8")).replace(/^export /gm, "");
-const script = `${extraction}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ extractAskSections \} from "\.\/chat-ask-extraction\.js";\n/m, "")}`;
+// Only the VM fixture exposes a lexical evaluator; production exposes named operations,
+// not mutable feature state. Existing behavior assertions keep exercising the moved owner.
+const chatController = (await readFile(new URL("../public/fleet-chats-controller.js", import.meta.url), "utf8"))
+  .replace(/^import .*;\n/gm, "").replace(/^export /gm, "")
+  .replace("return { enter, dispose,", "return { evaluate: (source) => eval(source), enter, dispose,");
+const script = `${extraction}\n${chatController}\n${await readFile(new URL("../public/cost-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/expense-controller.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/work-hierarchy.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/bulk-controls.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-kinds.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/filter-view.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/message-font-size.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/quota-view-model.js", import.meta.url), "utf8")}\n${await readFile(new URL("../public/call-lifecycle.js", import.meta.url), "utf8")}\n${(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).replace(/^import \{ createFleetChatsController \} from "\.\/fleet-chats-controller\.js";\n/m, "")}`;
 const css = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
 
 test("opt-in compact headers preserve Quota markup and expose full descriptions", async () => {
@@ -297,6 +302,11 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
   const windowListeners = new Map();
   const document = {
     activeElement: null,
+    removeEventListener(event, fn) {
+      const handlers = documentListeners.get(event) || [];
+      const index = handlers.indexOf(fn);
+      if (index >= 0) handlers.splice(index, 1);
+    },
     addEventListener(event, fn) {
       if (!documentListeners.has(event)) documentListeners.set(event, []);
       documentListeners.get(event).push(fn);
@@ -384,11 +394,16 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
   const quotaNodes = quotaDom(document);
   document.createElement = (tag) => quotaNodes.element(tag);
   const context = vm.createContext({
-    document, URL,
+    document, URL, AbortController,
     window: { location: { hash: "#lanes" }, callHooks: null, callPatches: [], callObservations: [],
       bearingsPatch: { createCallPatcher: () => ({ update: model => context.window.callPatches.push(model), observe: data => context.window.callObservations.push(data) }) },
       bearingsLive: { createBearingsLive: hooks => { queueMicrotask(() => { context.window.callHooks = hooks; }); return { start() {}, refresh() {} }; } },
-      getSelection: () => document.selection, addEventListener(name, listener) { windowListeners.set(name, listener); }, matchMedia: (query) => ({ matches: query.includes("max-width") ? compact : false, addEventListener() {} }) },
+      getSelection: () => document.selection,
+      addEventListener(name, listener) {
+        if (!windowListeners.has(name)) windowListeners.set(name, new Set());
+        windowListeners.get(name).add(listener);
+      },
+      removeEventListener(name, listener) { windowListeners.get(name)?.delete(listener); }, matchMedia: (query) => ({ matches: query.includes("max-width") ? compact : false, addEventListener() {} }) },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem(key, value) { storage.set(key, value); } },
     // Leave initial network loading pending; tests inject only synthetic records.
     fetch: fetchImpl,
@@ -396,9 +411,13 @@ function ui({ fetchImpl = () => new Promise(() => {}), compact = true, storage =
     clearTimeout: (id) => clearTimeout(id),
   });
   vm.runInContext(script, context);
-  return { run: (code) => vm.runInContext(code, context), node: (id) => document.querySelector(id),
-    hashchange: (hash) => windowListeners.get("hashchange")?.({ newURL: `http://localhost/${hash}` }),
-    windowEvent: (name) => windowListeners.get(name)?.() };
+  return { run: (code) => {
+    // Unchanged quota fixtures declare persistent clocks in the host VM scope.
+    if (/\b(?:quotaNow|fleetSelection)\b/.test(code)) return vm.runInContext(code, context);
+    context.__fixtureCode = code; return vm.runInContext('chatsFeature.evaluate(__fixtureCode)', context);
+  }, node: (id) => document.querySelector(id),
+    hashchange: (hash) => { for (const fn of windowListeners.get("hashchange") || []) fn({ newURL: `http://localhost/${hash}` }); },
+    windowEvent: (name) => { for (const fn of windowListeners.get(name) || []) fn(); } };
 }
 
 const expenseFixture = () => ({ source: "private overlay (selected FM_HOME)", demo: false, entryCount: 4,
@@ -514,6 +533,75 @@ test("cost demand has one in-flight owner across leave/reentry, and failed reads
   await new Promise(resolve => setImmediate(resolve));
   assert.match(app.node("#cost-panels").innerHTML, /Billing source unavailable/);
   assert.doesNotMatch(app.node("#cost-panels").innerHTML, /last-known snapshot|0 CAD/);
+});
+
+test("Fleet Chats detaches actual callbacks and reentry attaches each exactly once", () => {
+  const app = ui();
+  app.run("showView('conversations'); chatsFeature.enter(); chatsFeature.enter();");
+  const more = app.node('#transcript-load-more');
+  more.dispatchEvent({ type: 'click' });
+  assert.equal(app.run('transcriptWindowBytes'), 2 * 1024 * 1024, 'one expansion, not duplicate callbacks');
+  app.run("showView('work'); chatsFeature.dispose();");
+  more.dispatchEvent({ type: 'click' });
+  assert.equal(app.run('transcriptWindowBytes'), 2 * 1024 * 1024, 'disposed control cannot mutate the window');
+  app.node('#transcript-search').dispatchEvent({ type: 'input', target: { value: 'hidden synthetic edit' } });
+  assert.equal(app.run('transcriptQuery'), '', 'actual search callback was removed');
+  app.run("showView('conversations'); chatsFeature.enter();");
+  more.dispatchEvent({ type: 'click' });
+  assert.equal(app.run('transcriptWindowBytes'), 4 * 1024 * 1024);
+});
+
+test("Fleet Chats aborts its actual read on departure; an ignored abort cannot publish or settle a newer read", async () => {
+  const reads = [];
+  const app = ui({ fetchImpl: (url, options) => {
+    if (url.startsWith('/api/lanes')) return new Promise(resolve => reads.push({ url, signal: options.signal, resolve }));
+    return new Promise(() => {});
+  } });
+  assert.equal(reads.length, 1);
+  app.run("selectedSessionId = 'old-task'; selectedTranscriptSession = 'old-disk'; showView('work');");
+  assert.equal(reads[0].signal.aborted, true);
+  app.run("showView('conversations'); chatsFeature.enter(); loadDashboard();");
+  assert.equal(reads.length, 2, 'one current read across repeated host demand');
+  assert.match(reads[1].url, /session=old-task/);
+  assert.match(reads[1].url, /disk=old-disk/);
+  reads[0].resolve({ ok: true, json: async () => ({ lanes: [lane('superseded', [record({ text: 'obsolete' })])] }) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.run('lanes.length'), 0);
+  assert.equal(app.run('freshness.lanes.refreshing'), true, 'obsolete completion cannot release the current guard');
+  assert.equal(reads[1].signal.aborted, false);
+  app.run("showView('work');");
+  assert.equal(reads[1].signal.aborted, true);
+});
+
+test("Fleet Chats owns and cancels the actual debounce without a refresh timer, preserving drafts and selection", () => {
+  const app = ui();
+  app.run("window.pendingTimers = new Map(); window.clearedTimers = []; clock.setTimeout = (fn, ms) => { const id = {}; window.pendingTimers.set(id, { fn, ms }); return id; }; clock.clearTimeout = id => { if (window.pendingTimers.delete(id)) window.clearedTimers.push(id); };");
+  const draft = app.node('#review-message'); draft.value = 'Unsubmitted neutral text'; draft.focus();
+  app.run("selectedSessionId = 'selected-old-task'; selectedLaneIds = new Set(['example']);");
+  app.node('#transcript-search').dispatchEvent({ type: 'input', target: { value: 'needle' } });
+  assert.equal(app.run('window.pendingTimers.size'), 1);
+  assert.equal(app.run('[...window.pendingTimers.values()][0].ms'), 200);
+  app.run("showView('work');");
+  assert.equal(app.run('window.pendingTimers.size'), 0);
+  assert.equal(app.run('window.clearedTimers.length'), 1);
+  assert.equal(app.run('selectedSessionId'), 'selected-old-task');
+  assert.equal(app.run("selectedLaneIds.has('example')"), true);
+  assert.equal(draft.value, 'Unsubmitted neutral text');
+  assert.equal(app.run("document.activeElement === document.querySelector('#review-message')"), true);
+});
+
+test("Fleet Chats loading and unavailable replacement retire exact old record targets", () => {
+  const app = ui();
+  seed(app, [lane('example', [record({ recordId: 'source@42', text: 'Original neutral record' })])]);
+  app.run('renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageTargets[0].recordId'), 'source@42');
+  app.run('renderLanesLoading()');
+  assert.equal(app.run('window.quarterdeckMessageTargets.length'), 0);
+  app.run('renderFeed()');
+  assert.equal(app.run('window.quarterdeckMessageTargets[0].recordId'), 'source@42');
+  app.run("renderLanesError('Synthetic source unavailable')");
+  assert.equal(app.run('window.quarterdeckMessageTargets.length'), 0);
+  assert.match(app.node('#transcript-note').textContent, /unavailable/);
 });
 
 test("selected unloaded task and disk displace retained IDs at the sixty-ID cap; automatic retries stop", () => {
@@ -1054,9 +1142,10 @@ test("older session request supersedes an in-flight refresh without erasing sele
 
 test("slow large lane response cannot block Overview or Quota, and refreshes do not overlap", async () => {
   const calls = { dashboard: [], lanes: [], quota: [], preferences: [] };
-  const app = ui({ fetchImpl(url) {
+  const app = ui({ fetchImpl(url, options) {
     const name = new URL(url, "http://localhost").pathname.split("/").at(-1);
     return new Promise((resolve, reject) => calls[name].push({
+      signal: options.signal,
       resolve: (value) => resolve({ ok: true, json: async () => value }), reject,
     }));
   } });
@@ -1075,10 +1164,16 @@ test("slow large lane response cannot block Overview or Quota, and refreshes do 
   assert.equal(app.run("freshness.lanes.refreshing"), true);
   app.run('showView("quota"); renderFreshness()');
   assert.match(app.node("#view-freshness").title, /^Quota · fresh · Last success/);
-  app.run('showView("conversations"); loadDashboard();');
-  assert.equal(calls.lanes.length, 1, "manual and automatic refresh must skip in-flight history");
+  assert.equal(calls.lanes[0].signal.aborted, true, "departure disposes the original slow history request");
+  app.run('showView("conversations"); loadDashboard(); loadDashboard();');
+  assert.equal(calls.lanes.length, 2, "reentry starts one current read; manual and automatic demand cannot overlap it");
+  assert.equal(calls.lanes[1].signal.aborted, false);
   assert.equal(calls.dashboard.length, 2, "Overview can update while lanes are slow");
-  calls.lanes[0].resolve({ lanes: [lane("general", Array.from({ length: 1000 }, (_, i) => record({ text: `History ${i}` })))], source: "synthetic", transcript: { sessions: [], warnings: [], note: "" } });
+  calls.lanes[0].resolve({ lanes: [lane("superseded", [record({ text: "Superseded history" })])], transcript: { sessions: [], warnings: [], note: "" } });
+  await flush();
+  assert.equal(app.run("lanes.length"), 0, "disposed completion cannot publish");
+  assert.equal(app.run("freshness.lanes.refreshing"), true, "disposed completion cannot release the active guard");
+  calls.lanes[1].resolve({ lanes: [lane("general", Array.from({ length: 1000 }, (_, i) => record({ text: `History ${i}` })))], source: "synthetic", transcript: { sessions: [], warnings: [], note: "" } });
   await flush();
   assert.match(app.node("#view-freshness").title, /^Fleet Chats · fresh · Last success/);
   assert.equal(app.run("messagesForSelection().length"), 1000);
