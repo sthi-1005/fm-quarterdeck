@@ -59,7 +59,7 @@ test("primary Claude and Pi transcript clocks exclude unrelated newer sessions",
 
 test("Overview compact activity ticks and warns without visible status or fabricated clocks", async () => {
   const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
-  const code = source.slice(source.indexOf("let firstmateActivity ="), source.indexOf("function lanesQuery()"));
+  const code = source.slice(source.indexOf("let firstmateActivity ="), source.indexOf("// Each endpoint owns"));
   const node = { dataset: {}, replaceChildren(...children) { this.children = children; this.textContent = children.map((child) => child.textContent).join(" "); } };
   const context = vm.createContext({ $: () => node, Date, document: { createElement: () => ({ textContent: "" }) } });
   vm.runInContext(code, context);

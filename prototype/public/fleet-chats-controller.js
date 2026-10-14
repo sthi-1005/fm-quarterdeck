@@ -614,6 +614,7 @@ function renderSessionHistory(visibleLanes) {
 }
 
 function renderLanesLoading() {
+  lastFeedFingerprint = "";
   publishTargets([]);
   $("#message-compact-toggle").disabled = true;
   $("#conversation-title").textContent = "Loading Fleet Chats…";
@@ -887,6 +888,7 @@ function renderLanes(data) {
 }
 
 function renderLanesError(message) {
+  lastFeedFingerprint = "";
   publishTargets([]);
   clearExpandedMessageTarget();
   lanes = [];
