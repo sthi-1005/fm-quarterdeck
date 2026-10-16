@@ -15,7 +15,10 @@ window.bearingsPatch = (() => {
   const INTERACTIVE = "a, button, input, textarea, select, label, summary, [contenteditable]";
   const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   const keyOf = (node) => node?.getAttribute?.("data-call-key") || null;
-  const patchRevision = (card) => card ? JSON.stringify([card.rev, card.holdAt ?? null]) : null;
+  // A card's update identity: its presentation rev plus its optional hold cycle (#174) and hold
+  // timestamp (#172), which rev omits. A cycle-only or clock-only re-hold must still reach the
+  // card's controllers.
+  const patchRevision = (card) => card ? JSON.stringify([card.rev, card.holdVersion ?? null, card.holdAt ?? null]) : null;
 
   // Minimal fallback presentation; bearings-view.js supplies the product rendering.
   const fallbackView = {
@@ -247,6 +250,7 @@ window.bearingsPatch = (() => {
       node.innerHTML = render.cardHtml(card);
       node.setAttribute("data-call-rev", card.rev);
       node.setAttribute("data-call-patch-rev", patchRevision(card));
+      if (card.holdVersion) node.setAttribute("data-call-hold", card.holdVersion); else node.removeAttribute("data-call-hold");
       node.setAttribute("data-call-type", card.type);
       restoreDrafts(node, card.key);
       // Per-card controllers (answer form, overflow) re-apply their own state to fresh markup.
