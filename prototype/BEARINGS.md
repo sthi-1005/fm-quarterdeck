@@ -509,3 +509,16 @@ Keep this state owner across restarts. Concurrent gateway writers serialize usin
 exclusive adjacent `.lock` file. A crash during a locked write can leave that lock;
 submissions fail visibly and retain their pending records until an operator verifies the
 writer is stopped and repairs the abandoned lock. Never delete an active writer's lock.
+
+
+## Full current decision material
+
+An existing selected child decision may display a **Full current decision material** disclosure inside its card. It contains literal current hold reason and task body, with source paragraphs retained, markup escaped and the existing absolute-path reduction. The useful synopsis remains visible. This is display context, not options, a generated recommendation, thread history or approval.
+
+The bounded companion registry must prove a unique fresh registered local structured owner and current generation. Only exact selected owner/task membership with complete uncontradicted current provenance is eligible. Existing confined-file guards reject links, unsupported files, changed registration, duplicate identities and records newer than the observation. Fixed existing `fm-captain-hold.sh open <id> --identity` reads surround `fm-tasks-axi.sh show <id> --full`; an unchanged current identity and matching hold-set record are required. No shell/payload-supplied command, home discovery, sibling chat or whole-owner task sweep is used. Acquisition is limited to eight selected records and a ten-second overall budget; each existing reader has a two-second ceiling. Unsupported, remote, stale, partial/invalid, gated, absent, changed or not-current sources remain explicitly unavailable. Missing words are never reconstructed.
+
+Context cannot change source key/revision, answer options or selected-option/free-text behavior, cycle identity/clocks, reconciliation, receipts/history or bucket membership. Its separate display fingerprint uses the existing engaged-card update hold: focus, selection and drafts stay protected until the update is shown. Disclosure state uses the existing per-card text controller. Opening it only displays text and does not submit an answer. Revert the optional projection/presentation to roll back; no stored data migration, replay or service activation is involved.
+
+Offline fixtures establish guarded source/display behavior, not live served parity, real intake, native/device acceptance or qualification. Maintainer-owned integration and actual availability remain separate.
+
+Optional isolated acceptance from a clean committed candidate: `node scripts/captain-call-context-browser-pass.mjs` in `prototype`, with `SCREENSHOT_DIR` set to private proof storage and Chromium/chrome-devtools-axi available. It uses only its own registered synthetic fixture and desktop/narrow emulation.

@@ -123,6 +123,9 @@ window.bearingsPatch = (() => {
     };
   }
 
+  // Additive display material never changes the opaque source/answer revision.
+  const displayRev = card => card.contextRev ? `${card.rev}:${card.contextRev}` : card.rev;
+
   // Counts against what is on screen, so the held message names what will change.
   function diffCards(appliedRevs, cards) {
     let added = 0, changed = 0;
@@ -130,7 +133,7 @@ window.bearingsPatch = (() => {
     for (const card of cards || []) {
       seen.add(card.key);
       if (!appliedRevs.has(card.key)) added += 1;
-      else if (appliedRevs.get(card.key) !== card.rev) changed += 1;
+      else if (appliedRevs.get(card.key) !== displayRev(card)) changed += 1;
     }
     const removed = [...appliedRevs.keys()].filter((key) => !seen.has(key)).length;
     return { added, changed, removed, total: added + changed + removed };
@@ -188,7 +191,7 @@ window.bearingsPatch = (() => {
     // Source resolution can precede the POST response. Keep the form until that
     // response is consumed so accepted words are cleared before removing it.
     const sendingKeys = () => new Set([...list.querySelectorAll('[data-call-answer-phase="sending"]')].map(form => keyOf(form.closest("[data-call-key]"))).filter(Boolean));
-    const updateToken = (model, key) => model.cards.find(card => card.key === key)?.rev ?? null;
+    const updateToken = (model, key) => { const card = model.cards.find(card => card.key === key); return card ? displayRev(card) : null; };
     function releaseDraftUpdate(model, key) { releasedDraftUpdates.set(key, updateToken(model, key)); }
     const heldKeys = (model = pending || applied) => {
       const keys = new Set([...tracker.keys(), ...releaseTimers.keys(), ...sendingKeys()]);
@@ -209,7 +212,7 @@ window.bearingsPatch = (() => {
       let count = 0;
       for (const node of list.querySelectorAll("[data-call-key]")) {
         const card = next.get(keyOf(node));
-        const change = !card ? "resolved" : card.rev !== node.getAttribute("data-call-rev") ? "updated" : null;
+        const change = !card ? "resolved" : displayRev(card) !== (node.getAttribute("data-call-display-rev") || node.getAttribute("data-call-rev")) ? "updated" : null;
         let notice = node.querySelector("[data-call-held]");
         if (!change || node.classList.contains("call-card-leaving")) {
           notice?.remove(); node.removeAttribute("data-held"); node.removeAttribute("aria-busy"); continue;
@@ -245,6 +248,7 @@ window.bearingsPatch = (() => {
     function fill(node, card) {
       node.innerHTML = render.cardHtml(card);
       node.setAttribute("data-call-rev", card.rev);
+      node.setAttribute("data-call-display-rev", displayRev(card));
       node.setAttribute("data-call-type", card.type);
       restoreDrafts(node, card.key);
       // Per-card controllers (answer form, overflow) re-apply their own state to fresh markup.
@@ -352,7 +356,7 @@ window.bearingsPatch = (() => {
             node.classList.remove("call-card-leaving");
             node.removeAttribute("aria-hidden");
           }
-          if (node.getAttribute("data-call-rev") !== card.rev) fill(node, card);
+          if ((node.getAttribute("data-call-display-rev") || node.getAttribute("data-call-rev")) !== displayRev(card)) fill(node, card);
         } else {
           node = createCard(card);
           stubs.get(card.key)?.remove();
@@ -390,7 +394,7 @@ window.bearingsPatch = (() => {
       }
       renderChrome(model);
       appliedRevs.clear();
-      for (const card of cards) appliedRevs.set(card.key, card.rev);
+      for (const card of cards) appliedRevs.set(card.key, displayRev(card));
       appliedRev = model.rev;
       applied = model;
       appliedSort = order;

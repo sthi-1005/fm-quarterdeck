@@ -647,7 +647,8 @@ export function composeCallModel(base, asks, chatView) {
     // Missing choices stay text-only. The view already offers explicit linked replies;
     // a decision/approval marker alone cannot establish a boolean question.
     if (modified) {
-      const identity = { ...rest, chatAsks: rest.chatAsks.map(({ sourceContext, ...entry }) => entry) };
+      const { callContext, contextRev, ...sourceIdentity } = rest;
+      const identity = { ...sourceIdentity, chatAsks: rest.chatAsks.map(({ sourceContext, ...entry }) => entry) };
       return { ...rest, rev: shortHash(identity) };
     }
     return card;

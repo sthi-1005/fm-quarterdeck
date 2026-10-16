@@ -2,6 +2,7 @@ import { parseBacklogTask } from "./firstmate-records.js";
 import { enumeratedLetterOptions, publishOptions } from "./enumerated-options.js";
 import { projectUnderwayRecords } from "./underway-records.js";
 import { readUnreadableChildren } from "./unreadable-child-records.js";
+import { readCaptainCallContexts } from "./captain-call-context.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, watch as fsWatch } from "node:fs";
@@ -548,7 +549,12 @@ function callSection(raw) {
     // Optional source title/reason retain quoted replies for chat-ask deduplication.
     const title = publicText(row.title, Infinity), reason = publicText(row.reason, Infinity);
     const backlogTitle = publicText(row.backlogTitle, Infinity), backlogReason = publicText(row.backlogReason, Infinity);
-    cards.push(withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), ...(backlogTitle ? { backlogTitle } : {}), ...(backlogReason ? { backlogReason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) || repoName(row.repo) || null, clock: decisionClock(row), holdVersion: shortHash([row.backlogReason || row.reason || row.summary, decisionClock(row).at]), answer: decisionAnswer(row, id),
+    const context = raw.quarterdeckCallContexts?.[id];
+    const text = value => typeof value === "string" ? value.split(/\r?\n/).map(line => publicText(line, Infinity) || "").join("\n") : null;
+    const callContext = context?.available === true && typeof context.reason === "string" && typeof context.body === "string"
+      ? { available: true, reason: text(context.reason), body: text(context.body) } : context ? { available: false } : null;
+    const contextFields = callContext ? { callContext, contextRev: shortHash(callContext) } : {};
+    const card = withRev({ key: `decision:${id}`, type: "decision", task: id, verb: token(row.verb), summary, ...(title ? { title } : {}), ...(reason ? { reason } : {}), ...(backlogTitle ? { backlogTitle } : {}), ...(backlogReason ? { backlogReason } : {}), url: httpsUrl(contribution?.url), owner: token(row.owner), repo: repos.get(id) || repoName(row.repo) || null, clock: decisionClock(row), holdVersion: shortHash([row.backlogReason || row.reason || row.summary, decisionClock(row).at]), answer: decisionAnswer(row, id),
       boardTitle: row.board_title || null,
       boardAbout: row.board_about || null,
       boardDecide: row.board_decide || null,
@@ -557,7 +563,8 @@ function callSection(raw) {
       boardFreeformHint: row.board_freeform_hint || null,
       boardAllowFreeform: row.board_allow_freeform === true,
       boardClose: row.board_close || null
-    }));
+    });
+    cards.push({ ...card, ...contextFields });
   }
   const merges = new Set();
   const mainHolds = new Set((Array.isArray(raw.quarterdeck_holds) ? raw.quarterdeck_holds : [])
@@ -736,10 +743,13 @@ export function createSnapshotRunner(home, { spawnImpl = spawn, accessImpl = acc
   };
   const addWorkRecords = async output => {
     const raw = JSON.parse(output);
+    // Context is owned by this projection, never accepted from an upstream field.
+    delete raw.quarterdeckCallContexts;
     try {
       // This stock reader owns registry selection and permitted home-ledger reads.
       // Its Underway observation stands alone; never join two task generations.
       const snapshot = JSON.parse(await once("fm-fleet-snapshot.sh", ["--json"]));
+      raw.quarterdeckCallContexts = Object.fromEntries(await readCaptainCallContexts(raw, snapshot, { selectedHome: home }));
       const work = projectUnderwayRecords(snapshot, await readUnreadableChildren(snapshot));
       raw.in_flight = work.rows.map(({ stage, ...row }) => ({ ...row, quarterdeckStage: stage }));
       raw.quarterdeckWorkDisclosures = work.disclosures;

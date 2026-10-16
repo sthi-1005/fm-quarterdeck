@@ -226,6 +226,13 @@ window.bearingsView = (() => {
   }
   const linkedAsksHtml = (card) => Array.isArray(card.chatAsks) && card.chatAsks.length
     ? `<div class="call-context-row call-context-ask"><dt>Also asked in chat · source-linked</dt><dd>${card.chatAsks.map((ask) => `<p>${escape(visibleChatText(ask.summary) || "Asked in chat")} · reply ${escape(repliesText(ask.replies))}</p>${sourceContextHtml(ask.sourceContext)}`).join("")}</dd></div>` : "";
+  // Literal display material is not the answer source, a semantic recap or a thread.
+  function currentContextHtml(card, id) {
+    const context = card.callContext;
+    if (!context) return "";
+    if (!context.available) return '<p class="call-source-gap" data-call-current-context>Full current hold context unavailable: current identity, source or freshness could not be verified.</p>';
+    return `<section data-call-current-context><button type="button" class="call-thread-expand" data-call-text-toggle aria-expanded="false" aria-controls="call-context-full-${id}">Full current decision material</button><div class="call-full" id="call-context-full-${id}" data-call-full hidden><p class="call-meta">Current owner record · display only. Source paragraphs are retained; absolute paths are reduced. Missing questions, alternatives or response guidance are not inferred. This text does not change available answer options or grant approval.</p><p><span class="call-meta">Current hold reason</span><br>${escape(context.reason)}</p><p><span class="call-meta">Recorded task context</span><br>${escape(context.body)}</p></div></section>`;
+  }
   function cardHtml(card) {
     if (card.type === "chat") return chatCardHtml(card);
     const merge = card.type === "merge";
@@ -247,7 +254,7 @@ window.bearingsView = (() => {
       ? `<div class="call-context-row call-context-ask"><dt>Recorded hold reason</dt><dd>${escape(recordedReason)}</dd></div>` : "";
     const detailHtml = reasonContext + (card.boardDetail ? `<div class="call-context-row call-context-ask"><dt>Recorded context</dt><dd>${escape(card.boardDetail)}</dd></div>` : "");
     const sourceLabel = card.boardDecide ? "Source question / action" : decisionText(card) ? "Recorded hold reason" : merge ? "Recorded merge reason" : "Recorded description";
-    const completeContext = [card.boardDecide, decisionText(card)].some(text => typeof text === "string" && text.trim() && !sourceShortened(text));
+    const completeContext = card.callContext?.available === true || [card.boardDecide, decisionText(card)].some(text => typeof text === "string" && text.trim() && !sourceShortened(text));
     const contextGap = !merge && !completeContext
       ? `<p class="call-source-gap">${sourceShortened(ask) ? "The source did not provide a complete question or response context. This description does not establish whether action is needed now." : "No separate question or response guidance was supplied with this description. Ask Firstmate to clarify; do not infer approval or that no action is needed."}</p>` : "";
     const responseGuidance = card.boardFreeformHint ? `<div class="call-context-row call-context-ask"><dt>Response guidance from source</dt><dd>${escape(card.boardFreeformHint)}</dd></div>` : "";
@@ -263,8 +270,9 @@ window.bearingsView = (() => {
       ${decideToShow}
       ${contextGap}
       <dl class="call-context">${detailHtml}${responseGuidance}${row("About", about)}${linkedAsksHtml(card)}${merge && !card.boardAbout ? row("Risk", "Not provided by the snapshot; see the full reason above.") : ""}</dl>
+      ${currentContextHtml(card, id)}
       <p class="call-id">Task <code>${escape(card.task || "unknown")}</code></p>
-      ${shortened ? `<p class="call-shortened">Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.</p>` : ""}
+      ${shortened ? `<p class="call-shortened">${card.callContext?.available ? "The snapshot synopsis is shortened; full current owner material is available in this card." : `Firstmate's snapshot shortened this ${merge ? "reason" : "ask"}; Quarterdeck shows everything it received. Ask Firstmate in chat for the full text of task <code>${escape(card.task || "unknown")}</code>.`}</p>` : ""}
       ${url ? `<a class="call-link" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(url)}</a>` : merge ? '<p class="call-meta">Merge link unavailable</p>' : ""}
       ${card.answer && card.answer.options && card.answer.options.length ? "" : `<p class="call-source-gap">Options, hints and recommendation are not structured in the snapshot; any recorded choices remain in the full ${merge ? "reason" : "ask"} above.</p>`}</div>
       ${answerHtml(card, `${label} ${card.task || ""}`.trim(), threadHistoryHtml(id))}`;
